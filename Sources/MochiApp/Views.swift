@@ -17,7 +17,7 @@ struct WorkspaceView: View {
         }, set: { destination in
             switch destination {
             case .conversation(let id): app.select(id)
-            case .expressions: app.stop(); app.turn.resume(); app.showExpressions = true
+            case .expressions: app.openExpressions()
             case .collection(let scope): app.showHistory(scope)
             case nil: break
             }
@@ -91,6 +91,15 @@ struct WorkspaceView: View {
                     }
                 }
             }
+            .safeAreaInset(edge:.bottom,spacing:0) {
+                if let notice = app.notice, !app.practice {
+                    HStack {
+                        Text(notice).font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button { app.notice = nil } label: { Label("Dismiss notice",systemImage:"xmark") }.labelStyle(.iconOnly).buttonStyle(.borderless)
+                    }.padding(.horizontal,16).padding(.vertical,10).background(.bar)
+                }
+            }
             .navigationTitle("")
             .toolbar {
                 if #available(macOS 26.0, *) {
@@ -118,7 +127,7 @@ struct WorkspaceView: View {
         .sheet(isPresented:Binding(get:{app.renameID != nil && !app.managerOpen},set:{if !$0 && !app.managerOpen {app.renameID = nil}})) { if let id = app.renameID { RenameChatView(app:app,id:id) } }
         .sheet(isPresented:Binding(get:{!app.permanentDeleteIDs.isEmpty && !app.managerOpen},set:{if !$0 && !app.managerOpen {app.permanentDeleteIDs = []}})) { DeleteHistoryConfirmation(app:app) }
         .sheet(isPresented:Binding(get:{ app.practice },set:{ if !$0 && app.practice { app.resume() } })) {
-            PracticePane(app:app).frame(width:620,height:540)
+            PracticePane(app:app).frame(width:640,height:app.helpStage == .practice ? 580 : 480)
         }
         .onChange(of:app.searchFocusRequest) { _,_ in if !app.managerOpen { searchFocused = true } }
         .onChange(of:app.settingsOpen) { _,show in
@@ -214,25 +223,35 @@ struct WorkspaceView: View {
             if isUser { Spacer(minLength:60) }
             VStack(alignment:isUser ? .trailing : .leading,spacing:5) {
                 Text(isUser ? "You" : "Mochi").font(.caption).foregroundStyle(.secondary)
-                Text(message.text)
-                    .font(.system(size:15))
-                    .foregroundStyle(isUser ? Color.white : Color.primary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal:false,vertical:true)
-                    .padding(.horizontal,12).padding(.vertical,9)
-                    .contextMenu {
-                        Button("Copy Message") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.text,forType:.string) }
-                        Text(message.date.formatted(date:.abbreviated,time:.shortened))
-                        if let name = message.audio { Button("Show Recording in Finder") { NSWorkspace.shared.activateFileViewerSelecting([app.store.root.appendingPathComponent(name)]) } }
+                VStack(alignment:.leading,spacing:8) {
+                    Text(message.displayText)
+                        .font(.system(size:15))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal:false,vertical:true)
+                    if isUser && message.audio != nil && message.contextText == nil {
+                        Text(app.transcribingMessageIDs.contains(message.id) ? "Transcribing…" : "Transcript unavailable · use the message menu to retry or add text")
+                            .font(.caption).opacity(0.8).frame(maxWidth:310,alignment:.leading)
                     }
-                    .overlay(alignment:.leading) {
-                        if app.conversation?.matchingMessage(app.search)?.id == message.id { RoundedRectangle(cornerRadius:18).stroke(Color.accentColor,lineWidth:2).padding(-3) }
+                    if let file = message.audio {
+                        HStack(alignment:.center,spacing:4) {
+                            MessagePlayback(app:app,audio:app.audio,file:file,isUser:isUser)
+                            if isUser { VoiceTranscriptControls(app:app,message:message) }
+                        }
                     }
-                    .background(isUser ? Color.accentColor : Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:18))
-                if let audio = message.audio {
-                    Button { app.play(audio,mochi:!isUser) } label: { Label("Play",systemImage:"play.fill") }
-                        .controlSize(.small).disabled(app.busy)
                 }
+                .foregroundStyle(isUser ? Color.white : Color.primary)
+                .tint(isUser ? Color.white : Color.accentColor)
+                .padding(.horizontal,12).padding(.vertical,9)
+                .contextMenu {
+                    Button("Copy Message") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.text,forType:.string) }
+                    Text(message.date.formatted(date:.abbreviated,time:.shortened))
+                    if let name = message.audio { Button("Show Recording in Finder") { NSWorkspace.shared.activateFileViewerSelecting([app.store.root.appendingPathComponent(name)]) } }
+                }
+                .overlay(alignment:.leading) {
+                    if app.conversation?.matchingMessage(app.search)?.id == message.id { RoundedRectangle(cornerRadius:18).stroke(Color.accentColor,lineWidth:2).padding(-3) }
+                }
+                .background(isUser ? Color.accentColor : Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:18))
+
             }
             if !isUser { Spacer(minLength:60) }
         }
@@ -258,6 +277,7 @@ struct WorkspaceView: View {
             .padding(12)
             .background(Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:24))
             .overlay(RoundedRectangle(cornerRadius:24).strokeBorder(.quaternary,lineWidth:1))
+            if app.turn.activity == .recording { RecordingFeedback(app:app) }
             HStack(spacing:5) {
                 if app.turn.activity == .generating || app.turn.activity == .requestingPermission {
                     ProgressView().controlSize(.mini)
@@ -304,142 +324,6 @@ struct WorkspaceView: View {
     }
 }
 
-struct PracticePane: View {
-    @ObservedObject var app: AppModel
-    @State private var normalized = false
-    @State private var directEnglish = ""
-    @State private var voiceOptionsOpen = false
-    var body: some View {
-        VStack(spacing:0) {
-            HStack {
-                Text(app.english.isEmpty ? "Help Me Say This" : "Practise Your Expression").font(.title2).fontWeight(.semibold)
-                Spacer()
-                Text("Conversation paused").font(.caption).foregroundStyle(.secondary)
-            }.padding(24)
-            ScrollView {
-                VStack(alignment:.leading,spacing:16) {
-                    if app.english.isEmpty { meaningInput }
-                    else { sentencePractice }
-                }.padding(.horizontal,24).padding(.bottom,20).frame(maxWidth:.infinity)
-            }
-            if let error = app.error { Text(error).font(.callout).foregroundStyle(.red).padding(.horizontal,24) }
-            Divider()
-            HStack {
-                if app.english.isEmpty {
-                    Spacer()
-                    Button("Back to Conversation",action:app.resume).keyboardShortcut(.cancelAction)
-                } else { PracticeActions(app:app) }
-            }.padding(20)
-        }.background(Color(nsColor:.windowBackgroundColor))
-        .sheet(isPresented:$app.practiceVoiceSetupOpen) { VoiceSetupView(app:app) }
-    }
-
-    private var meaningInput: some View {
-        VStack(alignment:.leading,spacing:12) {
-            Text("What would you like to say?").font(.headline)
-            TextField("Describe your thought in Chinese or English",text:$app.meaning,axis:.vertical)
-                .textFieldStyle(.roundedBorder).lineLimit(2...4).disabled(app.busy)
-            HStack {
-                Button("Find the English",action:app.translate).buttonStyle(.borderedProminent)
-                    .disabled(app.busy || app.meaning.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
-                Button(action:app.recordMeaning) {
-                    Label(app.turn.activity == .recording ? "Finish & Translate" : "Record Thought",systemImage:app.turn.activity == .recording ? "stop.fill" : "mic")
-                }.disabled(app.busy && app.turn.activity != .recording)
-            }
-            Text("Recorded thoughts are sent for translation. Practice attempts stay on your Mac.").font(.caption).foregroundStyle(.secondary)
-            Divider()
-            Text("Or practise an English sentence").font(.subheadline)
-            HStack {
-                TextField("English sentence",text:$directEnglish).textFieldStyle(.roundedBorder).disabled(app.busy)
-                Button("Practise") { app.editEnglish(directEnglish.trimmingCharacters(in:.whitespacesAndNewlines)) }
-                    .disabled(app.busy || directEnglish.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
-            }
-        }
-    }
-
-    private var sentencePractice: some View {
-        VStack(alignment:.leading,spacing:12) {
-            TextField("English sentence",text:Binding(get:{app.english},set:app.editEnglish),axis:.vertical)
-                .font(.system(size:22,weight:.medium)).textFieldStyle(.plain).lineLimit(2...4).disabled(app.busy)
-            HStack {
-                Picker("Practice voice",selection:$app.practiceVoiceMode) {
-                    Text("Built-in Voice").tag(PracticeVoiceMode.builtIn)
-                    Text("My Voice").tag(PracticeVoiceMode.personal)
-                }.fixedSize().disabled(app.busy)
-                if app.practiceVoiceMode == .builtIn {
-                    Picker("Voice",selection:$app.builtInPracticeVoice) {
-                        ForEach(RealtimeVoice.allCases) { voice in Text(voice.name).tag(voice.rawValue) }
-                    }.labelsHidden().fixedSize().disabled(app.busy)
-                } else {
-                    Picker("Pronunciation",selection:$app.performer) {
-                        ForEach(PronunciationTarget.allCases) { target in Text(target.name).tag(target.rawValue) }
-                    }.labelsHidden().fixedSize().disabled(app.busy)
-                }
-                Spacer()
-                Button { voiceOptionsOpen = true } label: { Image(systemName:"slider.horizontal.3") }
-                    .help("Voice options").disabled(app.busy)
-                    .popover(isPresented:$voiceOptionsOpen) {
-                        Form {
-                            if app.practiceVoiceMode == .builtIn { OpenAIVoiceOptionsView(options:$app.practiceVoiceOptions,expanded:true) }
-                            else { PersonalVoiceOptionsView(options:$app.personalVoiceOptions,expanded:true) }
-                        }.formStyle(.grouped).frame(width:460,height:app.practiceVoiceMode == .builtIn ? 190 : 530)
-                    }
-                Button("Set Up My Voice…") { app.practiceVoiceSetupOpen = true }.disabled(app.busy || !app.voiceProfilesReadable)
-            }
-            Text(app.expression?.reference == nil ? app.practiceVoiceLabel : "Saved example: \(app.expression?.referenceKind ?? "Reference")")
-                .font(.caption).foregroundStyle(.secondary)
-            HStack {
-                Button {
-                    if let file = app.expression?.reference { app.play(file) } else { app.render() }
-                } label: {
-                    Label(app.expression?.reference == nil ? "Create Example" : "Play Example",systemImage:app.expression?.reference == nil ? "waveform" : "play.fill")
-                }.disabled(app.busy)
-                Picker("Speed",selection:$app.slow) {
-                    Text("1×").tag(false)
-                    Text("0.8×").tag(true)
-                }.pickerStyle(.segmented).labelsHidden().frame(width:100).disabled(app.busy).help("Playback speed")
-                Spacer()
-                Menu {
-                    Button("Import Reference…",action:app.importReference)
-                    if app.expression?.reference != nil { Button("Regenerate Example") { app.render(force:true) } }
-                } label: { Label("Reference Options",systemImage:"ellipsis") }.menuStyle(.borderlessButton).fixedSize().disabled(app.busy)
-            }
-            if app.practiceVoiceMode == .personal && app.selectedVoiceProfile?.ready != true {
-                HStack {
-                    Text("Set up or verify your voice to generate a personal example.").font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Use Marin") { app.practiceVoiceMode = .builtIn; app.builtInPracticeVoice = "marin" }.disabled(app.busy)
-                }
-            } else if app.error != nil && app.practiceVoiceMode == .personal {
-                Button("Use Marin for This Example") { app.render(force:true,usingBuiltIn:"marin") }.disabled(app.busy)
-            }
-            GroupBox {
-                VStack(alignment:.leading,spacing:10) {
-                    HStack(spacing:14) {
-                        Label("Reference",systemImage:"minus").foregroundStyle(Color.accentColor)
-                        Label("Your attempt",systemImage:"minus").foregroundStyle(.orange)
-                        Spacer()
-                        Text(app.demo ? "Illustrative preview" : "Unscored").foregroundStyle(.secondary)
-                    }.font(.caption)
-                    if !app.referencePitch.isEmpty || !app.attemptPitch.isEmpty {
-                        PitchChart(reference:app.referencePitch,attempt:app.attemptPitch,normalized:normalized).frame(height:150)
-                    } else {
-                        Text("Add a reference and record an attempt to compare pitch.")
-                            .foregroundStyle(.secondary).frame(maxWidth:.infinity,minHeight:85)
-                    }
-                    HStack {
-                        Text("Semitones · seconds").foregroundStyle(.secondary)
-                        Spacer()
-                        Toggle("Center each voice",isOn:$normalized).toggleStyle(.checkbox)
-                    }.font(.caption)
-                }.padding(6)
-            }
-            Text(app.notice ?? "Contours are not word-aligned. Gaps represent unvoiced sound.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-    }
-}
-
 struct PracticeActions: View {
     @ObservedObject var app: AppModel
     var body: some View {
@@ -454,7 +338,7 @@ struct PracticeActions: View {
             Button { app.saveExpression(); app.notice = "Saved to My Expressions." } label: { Label("Save Expression",systemImage:"bookmark") }
                 .labelStyle(.iconOnly).help("Save Expression").disabled(app.busy)
             Spacer(minLength:2)
-            Button("Resume Conversation",action:app.resume).buttonStyle(.borderedProminent)
+            Button("Resume Conversation",action:app.resume).buttonStyle(.borderedProminent).keyboardShortcut(.cancelAction)
         }
     }
 }

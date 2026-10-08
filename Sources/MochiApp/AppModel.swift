@@ -2,6 +2,11 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import MochiCore
+enum HelpStage { case thought, english, practice }
+struct ReplyCallbacks {
+    let response: @MainActor (RealtimeAccumulator) throws -> Void
+    let transcription: @MainActor (RealtimeAccumulator) -> Void
+}
 
 @MainActor final class AppModel: ObservableObject {
     @Published var library = Library()
@@ -22,14 +27,46 @@ import MochiCore
             save()
         }
     }
-    @Published var meaning = ""
-    @Published var english = ""
+    @Published var meaning = "" { didSet { persistHelpDraft() } }
+    @Published var english = "" { didSet { persistHelpDraft() } }
+    @Published var helpStage: HelpStage = .thought
+    @Published var thoughtRecording: String? { didSet {
+        guard !restoringHelp else { return }
+        if isSavedPractice {
+            if oldValue != thoughtRecording { removeUnreferencedRecording(oldValue) }
+            return
+        }
+        if oldValue != thoughtRecording { recognizedThought = nil }
+        if persistHelpDraft(), oldValue != thoughtRecording { removeUnreferencedRecording(oldValue) }
+    } }
+    @Published var recognizedThought: String? { didSet { persistHelpDraft() } }
+    private(set) var isSavedPractice = false
+    @Published var helpProgress: String?
+    @Published var helpClarification: String?
+    @Published var recordingLevel: Float = -80
+    @Published var recordingWarning: String?
+    @Published var transcribingMessageIDs: Set<UUID> = []
+    var transcribeRecording: (URL,String,String) async throws -> String = { url,auth,model in
+        try await RealtimeService(auth:auth,model:model).transcribe(AudioFile.pcm(url))
+    }
+    var findEnglishSuggestion: ((ConversationRequest) async throws -> String)?
+    var conversationReply: ((ConversationRequest,ReplyCallbacks) async throws -> Void)?
+    var playReply: ((String) -> Void)?
+    lazy var endRecording: () -> URL? = { [weak self] in self?.audio.stopRecording() }
+    var recordingNow: () -> Date = Date.init
+    var recordingSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds:$0) }
+    var recordingMeter: (() -> Float)?
+    private var restoringHelp = false
+    private var transcriptTokens: [UUID:UUID] = [:]
+    private(set) var transcriptTasks: [UUID:Task<Void,Never>] = [:]
+    private(set) var voiceRequests: [UUID:Task<Void,Never>] = [:]
     @Published var expression: PracticeExpression?
     @Published var turn = TurnMachine()
     @Published var error: String?
     @Published var notice: String?
     @Published var referencePitch: [PitchPoint] = []
     @Published var attemptPitch: [PitchPoint] = []
+    @Published private(set) var playbackFile: String?
     @Published var speaking = false
     @Published var slow = false
     @Published var settingsOpen = false
@@ -64,7 +101,7 @@ import MochiCore
     let defaults: UserDefaults
     let demo: Bool
     private var task: Task<Void,Never>?
-    private var recordingClock: Task<Void,Never>?
+    private(set) var recordingClock: Task<Void,Never>?
     private var libraryReadable = true
     private(set) var voiceProfilesReadable = true
     var conversation: Conversation? { library.conversations.first { $0.id == selectedID } }
@@ -74,10 +111,10 @@ import MochiCore
     var practice: Bool { turn.mode == .practice }
     var status: String {
         switch turn.activity {
-        case .recording: if recordingMeaning { return "Recording your thought · finish to send for translation" }; return practice ? "Recording your attempt · stays on this Mac" : "Recording · finish to send to Mochi"
+        case .recording: if recordingMeaning { return "Recording your thought · finish to review" }; return practice ? "Recording your attempt · stays on this Mac" : "Recording · finish to send to Mochi"
         case .requestingPermission: return "Waiting for microphone permission"
         case .generating: return practice ? "Preparing your expression…" : "Mochi is thinking…"
-        case .playing: return speaking ? "Mochi is speaking" : "Playing your recording"
+        case .playing: if audio.paused { return "Playback paused" }; return speaking ? "Mochi is speaking" : "Playing your recording"
         case .idle: return practice ? "Conversation paused · microphone off" : "Ready when you are · microphone off"
         }
     }
@@ -132,19 +169,50 @@ import MochiCore
             draft = chat.draft
         }
     }
-    func save() {
-        guard libraryReadable, !demo else { return }
+    @discardableResult func save() -> Bool {
+        guard libraryReadable else { return false }; if demo { return true }
         library.selectedConversationID = selectedID
-        do { try store.save(library) } catch { self.error = "Could not save your conversation. Check available disk space; keep this window open." }
+        do { try store.save(library); return true } catch { self.error = "Could not save your conversation. Check available disk space; keep this window open."; return false }
     }
     func stop() {
+        let unfinishedRecording = endRecording()
         task?.cancel(); task = nil; recordingClock?.cancel(); recordingClock = nil
-        audio.stop(); speaking = false; recordingMeaning = false; turn.stop()
+        for job in transcriptTasks.values { job.cancel() }; transcriptTasks.removeAll()
+        for job in voiceRequests.values { job.cancel() }; voiceRequests.removeAll()
+        transcriptTokens.removeAll(); transcribingMessageIDs.removeAll()
+        for ci in library.conversations.indices {
+            for mi in library.conversations[ci].messages.indices where library.conversations[ci].messages[mi].transcriptionState == .pending {
+                library.conversations[ci].messages[mi].transcriptionState = .interrupted
+            }
+        }
+        helpProgress = nil; recordingLevel = -80
+        audio.stop(); playbackFile = nil; speaking = false; recordingMeaning = false; turn.stop()
+        persistHelpDraft(); save()
+        removeUnreferencedRecording(unfinishedRecording?.lastPathComponent)
+    }
+    func cancelHelpWork() {
+        let recording = endRecording()
+        if !practice && task != nil && turn.activity == .generating { notice = "Your pending reply was cancelled. You can retry it when you return." }
+        task?.cancel()
+        task = nil; recordingClock?.cancel(); recordingClock = nil
+        audio.stop(); playbackFile = nil; speaking = false; recordingMeaning = false; helpProgress = nil; recordingLevel = -80; turn.stop()
+        persistHelpDraft(); removeUnreferencedRecording(recording?.lastPathComponent)
+    }
+    func leavePractice() {
+        if isSavedPractice {
+            let temporary = thoughtRecording
+            restoringHelp = true; thoughtRecording = nil; recognizedThought = nil; restoringHelp = false
+            removeUnreferencedRecording(temporary)
+        }
+        isSavedPractice = false; turn.resume()
+    }
+    func openExpressions() {
+        cancelHelpWork(); leavePractice(); expression = nil; showExpressions = true
     }
     func newChat() {
         guard libraryReadable else { return }
         if let chat = conversation, writableConversation, chat.messages.isEmpty, !chat.customTitle {
-            stop(); turn.resume(); expression = nil; showExpressions = false; historyScope = .active; search = ""; return
+            stop(); leavePractice(); expression = nil; showExpressions = false; historyScope = .active; search = ""; return
         }
         var candidate = library
         let chat = Conversation(); candidate.conversations.insert(chat,at:0); candidate.selectedConversationID = chat.id
@@ -153,10 +221,10 @@ import MochiCore
     }
     func select(_ id: UUID) {
         guard let chat = library.conversations.first(where:{ $0.id == id }) else { return }
-        stop(); turn.resume(); expression = nil; selectedID = id; showExpressions = false; draft = chat.draft; notice = nil; save()
+        stop(); leavePractice(); expression = nil; selectedID = id; showExpressions = false; draft = chat.draft; notice = nil; save()
     }
     func showHistory(_ scope: HistoryScope) {
-        stop(); turn.resume(); expression = nil; showExpressions = false; historyScope = scope; search = ""
+        stop(); leavePractice(); expression = nil; showExpressions = false; historyScope = scope; search = ""
         selectedID = library.history(in:scope).first?.id
         draft = conversation?.draft ?? ""; save()
     }
@@ -206,7 +274,7 @@ import MochiCore
         if selectedAffected { next.selectedConversationID = next.history(in:historyScope,query:search).first?.id }
         guard commitHistory(next) else { return false }
         if selectedAffected {
-            stop(); turn.resume(); expression = nil; selectedID = next.selectedConversationID; draft = conversation?.draft ?? ""
+            stop(); leavePractice(); expression = nil; selectedID = next.selectedConversationID; draft = conversation?.draft ?? ""
         }
         historyFeedback = nil
         return true
@@ -273,58 +341,219 @@ import MochiCore
         append(Message(role:"user",text:text),to:id)
         requestReply(history:history,text:text,pcm:nil,audioFile:nil,conversationID:id)
     }
-    var canRetry: Bool { writableConversation && !busy && !practice && conversation?.messages.last?.role == "user" }
+    var canRetry: Bool {
+        guard writableConversation, !busy, !practice, let last = conversation?.messages.last, last.role == "user" else { return false }
+        return !transcribingMessageIDs.contains(last.id)
+    }
     func retryReply() {
         guard canRetry, let chat = conversation, let last = chat.messages.last else { return }
         do {
-            let pcm = try last.audio.map { try AudioFile.pcm(store.root.appendingPathComponent($0)) }
+            let pcm = try last.contextText == nil ? last.audio.map { try AudioFile.pcm(store.root.appendingPathComponent($0)) } : nil
             requestReply(history:Array(chat.messages.dropLast()),text:last.text,pcm:pcm,audioFile:last.audio,conversationID:chat.id,existingUserID:last.id)
         } catch { self.error = "The saved recording could not be read. Record a new message to continue." }
     }
-    private func requestReply(history: [Message], text: String, pcm: Data?, audioFile: String?, conversationID: UUID, existingUserID: UUID? = nil) {
+    func requestReply(history: [Message], text: String, pcm: Data?, audioFile: String?, conversationID: UUID, existingUserID: UUID? = nil) {
+        if let existingUserID, transcribingMessageIDs.contains(existingUserID) { return }
         var userID = existingUserID
         if pcm != nil && userID == nil {
-            let message = Message(role:"user",text:"Voice message · awaiting transcript",audio:audioFile)
-            userID = message.id
+            var message = Message(role:"user",text:"",audio:audioFile)
+            message.transcriptionState = .pending; userID = message.id
             append(message,to:conversationID)
+        }
+        let requestID = UUID()
+        if let userID, pcm != nil {
+            transcriptTokens[userID] = requestID; transcribingMessageIDs.insert(userID)
+            updateTranscript(userID,chatID:conversationID,text:nil,state:.pending,error:nil)
         }
         let token = turn.begin(.generating); error = nil
         let service = RealtimeService(auth:auth,model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
-        task = Task {
-            do {
-                let reply = try await service.reply(ConversationRequest(history:history,text:text,pcm:pcm,spoken:pcm != nil))
-                guard !Task.isCancelled, turn.epoch == token else { return }
-                if pcm != nil, let userID,
-                   let ci = library.conversations.firstIndex(where: { $0.id == conversationID }),
-                   let mi = library.conversations[ci].messages.firstIndex(where: { $0.id == userID }) {
-                    library.conversations[ci].messages[mi].text = reply.inputTranscript.isEmpty ? "Voice message (transcript unavailable)" : reply.inputTranscript
-                    if !library.conversations[ci].customTitle && library.conversations[ci].messages.count == 1 && !reply.inputTranscript.isEmpty { library.conversations[ci].title = String(reply.inputTranscript.prefix(42)) }
-                    save()
+        let voiceID = pcm == nil ? nil : userID
+        let operation = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if turn.epoch == token { task = nil }
+                if let voiceID, transcriptTokens[voiceID] == requestID {
+                    if library.conversations.first(where: { $0.id == conversationID })?.messages.first(where: { $0.id == voiceID })?.transcriptionState == .pending {
+                        updateTranscript(voiceID,chatID:conversationID,text:nil,state:.interrupted,error:"Transcription was interrupted. Your recording is saved.")
+                    }
+                    transcriptTokens.removeValue(forKey:voiceID); transcribingMessageIDs.remove(voiceID)
+                    voiceRequests.removeValue(forKey:voiceID)
                 }
-                var filename: String?
-                if !reply.audio.isEmpty { filename = "reply-\(UUID().uuidString).wav"; try PCM.wav(reply.audio).write(to:store.root.appendingPathComponent(filename!)) }
-                append(Message(role:"assistant",text:reply.text,audio:filename),to:conversationID)
-                _ = turn.finish(token)
-                if let filename { play(filename,mochi:true) }
-            } catch { fail(error,token:token) }
+            }
+            do {
+                let callbacks = ReplyCallbacks(response: { [weak self] reply in
+                    guard let self, !Task.isCancelled, turn.epoch == token else { return }
+                    task = nil
+                    var filename: String?
+                    if !reply.audio.isEmpty {
+                        filename = "reply-\(UUID().uuidString).wav"
+                        try PCM.wav(reply.audio).write(to:store.root.appendingPathComponent(filename!))
+                    }
+                    append(Message(role:"assistant",text:reply.text,audio:filename),to:conversationID)
+                    _ = turn.finish(token)
+                    if let filename { if let playReply { playReply(filename) } else { play(filename,mochi:true) } }
+                },transcription: { [weak self] reply in
+                    guard let self, !Task.isCancelled, let voiceID, transcriptTokens[voiceID] == requestID else { return }
+                    updateTranscript(voiceID,chatID:conversationID,text:reply.inputTranscript.isEmpty ? nil : reply.inputTranscript,state:reply.transcriptionState,error:reply.transcriptionError)
+                })
+                let request = ConversationRequest(history:history,text:text,pcm:pcm,spoken:audioFile != nil)
+                if let conversationReply { try await conversationReply(request,callbacks) }
+                else { _ = try await service.reply(request,onResponse:callbacks.response,onTranscription:callbacks.transcription) }
+            } catch {
+                if let voiceID, transcriptTokens[voiceID] == requestID,
+                   library.conversations.first(where: { $0.id == conversationID })?.messages.first(where: { $0.id == voiceID })?.transcriptionState == .pending {
+                    updateTranscript(voiceID,chatID:conversationID,text:nil,state:.interrupted,error:"Transcription was interrupted. Your recording is saved.")
+                }
+                fail(error,token:token)
+            }
         }
+        task = operation
+        if let voiceID { voiceRequests[voiceID] = operation }
+    }
+    private func updateTranscript(_ messageID: UUID, chatID: UUID, text: String?, state: TranscriptionState, error: String?) {
+        guard let ci = library.conversations.firstIndex(where: { $0.id == chatID && !$0.isDeleted && !$0.archived }),
+              let mi = library.conversations[ci].messages.firstIndex(where: { $0.id == messageID }) else { return }
+        if let text { library.conversations[ci].messages[mi].text = text }
+        library.conversations[ci].messages[mi].transcriptionState = state
+        library.conversations[ci].messages[mi].transcriptionError = error
+        if let text, !text.isEmpty, !library.conversations[ci].customTitle,
+           library.conversations[ci].messages.first?.id == messageID {
+            library.conversations[ci].title = String(text.prefix(42))
+        }
+        save()
+    }
+    func retryTranscription(_ messageID: UUID) {
+        guard writableConversation, !busy,
+              let chat = conversation, let message = chat.messages.first(where: { $0.id == messageID && $0.role == "user" }), let file = message.audio,
+              !transcribingMessageIDs.contains(messageID) else { return }
+        let jobID = UUID(), chatID = chat.id
+        transcriptTokens[messageID] = jobID; transcribingMessageIDs.insert(messageID)
+        updateTranscript(messageID,chatID:chatID,text:nil,state:.pending,error:nil)
+        let operation = transcribeRecording, connection = auth, model = modelName, url = store.root.appendingPathComponent(file)
+        transcriptTasks[messageID] = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if transcriptTokens[messageID] == jobID {
+                    transcriptTokens.removeValue(forKey:messageID); transcribingMessageIDs.remove(messageID)
+                    transcriptTasks.removeValue(forKey:messageID)
+                }
+            }
+            do {
+                let text = try await operation(url,connection,model)
+                guard !Task.isCancelled, transcriptTokens[messageID] == jobID else { return }
+                let clean = text.trimmingCharacters(in:.whitespacesAndNewlines)
+                guard !clean.isEmpty else { throw AppFailure("No clear speech was recognized. Your recording is saved; add text or record again.") }
+                updateTranscript(messageID,chatID:chatID,text:clean,state:.completed,error:nil)
+            } catch {
+                guard !Task.isCancelled, transcriptTokens[messageID] == jobID else { return }
+                updateTranscript(messageID,chatID:chatID,text:nil,state:.failed,error:(error as? AppFailure)?.message ?? "Transcription could not finish. Your recording is saved; retry or add text.")
+            }
+        }
+    }
+    func cancelTranscription(_ messageID: UUID) {
+        transcriptTasks.removeValue(forKey:messageID)?.cancel()
+        voiceRequests.removeValue(forKey:messageID)?.cancel()
+        transcriptTokens.removeValue(forKey:messageID); transcribingMessageIDs.remove(messageID)
+        if let chatID = conversation?.id { updateTranscript(messageID,chatID:chatID,text:nil,state:.interrupted,error:nil) }
+    }
+    func editTranscript(_ messageID: UUID, text: String) {
+        guard writableConversation, let chatID = conversation?.id else { return }
+        cancelTranscription(messageID)
+        let clean = text.trimmingCharacters(in:.whitespacesAndNewlines)
+        updateTranscript(messageID,chatID:chatID,text:clean,state:clean.isEmpty ? .failed : .completed,error:nil)
     }
     func startHelp() {
         guard writableConversation else { return }
-        stop(); error = nil; turn.pause(); showExpressions = false; meaning = ""; english = ""; expression = nil; referencePitch = []; attemptPitch = []; notice = nil
+        let cancelledReply = !practice && task != nil && turn.activity == .generating
+        cancelHelpWork(); error = nil; turn.pause(); showExpressions = false
+        isSavedPractice = false
+        let saved = conversation?.helpDraft
+        restoringHelp = true
+        meaning = saved?.meaning ?? draft; english = saved?.english ?? ""; thoughtRecording = saved?.recording
+        helpClarification = saved?.clarification; recognizedThought = saved?.transcriptReview
+        expression = saved?.expressionID.flatMap { id in library.expressions.first(where: { $0.id == id }) }
+        restoringHelp = false
+        helpStage = english.isEmpty || recognizedThought != nil ? .thought : .english
+        referencePitch = []; attemptPitch = []; notice = cancelledReply ? "Your pending reply was cancelled. You can retry it when you return." : nil; recordingWarning = nil
+        if let thoughtRecording, let samples = try? AudioFile.samples(store.root.appendingPathComponent(thoughtRecording)).samples {
+            recordingWarning = RecordingSignal(samples:samples).isQuiet ? "This recording is very quiet. Listen before transcribing, or record it again." : nil
+        }
+        persistHelpDraft()
     }
-    func translate() {
+    @discardableResult private func persistHelpDraft() -> Bool {
+        guard !restoringHelp, !isSavedPractice, practice, writableConversation, let ci = library.conversations.firstIndex(where: { $0.id == selectedID }) else { return false }
+        library.conversations[ci].helpDraft = HelpDraft(meaning:meaning,english:english,recording:thoughtRecording,expressionID:expression?.id)
+        library.conversations[ci].helpDraft?.clarification = helpClarification
+        library.conversations[ci].helpDraft?.transcriptReview = recognizedThought
+        return save()
+    }
+    func editThought() { helpStage = .thought; error = nil }
+    func beginPractice() {
+        guard !english.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { return }
+        ensureExpression(); helpStage = .practice; persistHelpDraft()
+    }
+    func reviewEnglish() { if !english.isEmpty { helpStage = .english } }
+    func transcribeThought() {
+        guard !busy, let thoughtRecording else { return }
+        let token = turn.begin(.generating); error = nil; helpProgress = "Transcribing your thought…"
+        let operation = transcribeRecording, connection = auth, model = modelName, url = store.root.appendingPathComponent(thoughtRecording)
+        task = Task {
+            do {
+                let text = try await operation(url,connection,model)
+                guard !Task.isCancelled, turn.epoch == token else { return }
+                let clean = text.trimmingCharacters(in:.whitespacesAndNewlines)
+                guard !clean.isEmpty else { throw AppFailure("No clear speech was recognized. Your thought is saved; listen or record again.") }
+                if meaning.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty { meaning = clean }
+                else { recognizedThought = clean }
+                helpProgress = nil; _ = turn.finish(token)
+                notice = "Check the recognized thought before finding the English."
+            } catch { fail(error,token:token) }
+        }
+    }
+    func useRecognizedThought(replace: Bool) {
+        guard !busy, let recognizedThought else { return }
+        meaning = replace || meaning.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? recognizedThought : meaning + "\n" + recognizedThought
+        self.recognizedThought = nil; notice = "Check your thought before finding the English."
+    }
+    private func removeUnreferencedRecording(_ name: String?) {
+        guard let name, !name.isEmpty, URL(fileURLWithPath:name).lastPathComponent == name,
+              !library.referencedAudio.contains(name) else { return }
+        let url = store.root.appendingPathComponent(name)
+        guard FileManager.default.fileExists(atPath:url.path) else { return }
+        do { try FileManager.default.removeItem(at:url) }
+        catch { self.error = "Could not remove the discarded recording. Reveal the data folder in Settings to review it." }
+    }
+    func discardThoughtRecording() { thoughtRecording = nil; recordingWarning = nil }
+    func cancelRecording() {
+        let url = endRecording()
+        cancelHelpWork()
+        removeUnreferencedRecording(url?.lastPathComponent)
+    }
+    func translate() { findEnglish(alternative:false) }
+    func tryAnotherWording() { findEnglish(alternative:true) }
+    private func findEnglish(alternative: Bool) {
         let input = meaning.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !input.isEmpty, !busy, let id = selectedID else { return }
         let history = conversation?.messages ?? []
-        let token = turn.begin(.generating); error = nil
+        let token = turn.begin(.generating); error = nil; helpProgress = "Finding the English…"
         let service = RealtimeService(auth:auth,model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
+        let requestText = alternative && !english.isEmpty ? "Intended thought: \(input)\nPrevious English wording: \(english)\nOffer a different natural wording with exactly the same meaning." : input
         task = Task {
             do {
-                let reply = try await service.reply(ConversationRequest(history:history,text:input,help:true))
+                let request = ConversationRequest(history:history,text:requestText,help:true)
+                let result: String
+                if let findEnglishSuggestion { result = try await findEnglishSuggestion(request) }
+                else { result = try await service.reply(request).text }
                 guard !Task.isCancelled, turn.epoch == token else { return }
-                english = reply.text.trimmingCharacters(in:.whitespacesAndNewlines)
-                expression = PracticeExpression(conversationID:id,meaning:input,english:english)
+                let suggestion = try HelpSuggestion.parse(result)
+                if suggestion.kind == .clarification {
+                    helpClarification = suggestion.text; helpStage = .thought
+                } else {
+                    english = suggestion.text.trimmingCharacters(in:.whitespacesAndNewlines)
+                    expression = PracticeExpression(conversationID:id,meaning:input,english:english)
+                    helpClarification = nil; helpStage = .english
+                }
+                helpProgress = nil; persistHelpDraft()
                 _ = turn.finish(token)
             } catch { fail(error,token:token) }
         }
@@ -332,17 +561,20 @@ import MochiCore
     func editEnglish(_ text: String) {
         english = text
         if expression?.english != text { expression = nil; referencePitch = []; attemptPitch = [] }
+        if !text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && helpStage == .thought { helpStage = .english }
+        persistHelpDraft()
     }
     func ensureExpression() {
         guard let id = selectedID else { return }
         if expression == nil { expression = PracticeExpression(conversationID:id,meaning:meaning,english:english.trimmingCharacters(in:.whitespacesAndNewlines)) }
     }
-    func saveExpression() {
+    @discardableResult func saveExpression() -> Bool {
         ensureExpression()
-        guard let expression, !expression.english.isEmpty else { return }
+        guard let expression, !expression.english.isEmpty else { return false }
         if let index = library.expressions.firstIndex(where: { $0.id == expression.id }) { library.expressions[index] = expression }
         else { library.expressions.insert(expression,at:0) }
-        save()
+        persistHelpDraft()
+        return save()
     }
     func render(force: Bool = false, usingBuiltIn voiceOverride: String? = nil) {
         guard !busy, !english.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { return }
@@ -354,7 +586,7 @@ import MochiCore
         let mode = voiceOverride == nil ? practiceVoiceMode : .builtIn
         let label = voiceOverride.map { "\(RealtimeVoice(rawValue:$0)?.name ?? $0) · Built-in voice" } ?? practiceVoiceLabel
         let service = RealtimeService(auth:auth,model:modelName,voice:voiceOverride ?? builtInPracticeVoice,options:practiceVoiceOptions)
-        let token = turn.begin(.generating); error = nil
+        let token = turn.begin(.generating); error = nil; helpProgress = "Creating your example…"
         task = Task {
             do {
                 let url = mode == .personal ? try await VoiceRenderer().render(identity,root:store.root,force:force) : try await service.referenceAudio(text:identity.text,root:store.root,force:force)
@@ -362,6 +594,7 @@ import MochiCore
                 guard !Task.isCancelled, turn.epoch == token else { return }
                 expression?.reference = url.lastPathComponent; expression?.referenceKind = label
                 referencePitch = pitch; saveExpression(); _ = turn.finish(token)
+                helpProgress = nil
                 notice = "Your reference is ready. Listen, then try saying it yourself."
             } catch { fail(error,token:token) }
         }
@@ -410,13 +643,34 @@ import MochiCore
             } catch { fail(error,token:token) }
         }
     }
-    func play(_ file: String, mochi: Bool = false) {
-        guard !busy else { return }
-        let token = turn.begin(.playing); speaking = mochi
-        do { try audio.play(url:store.root.appendingPathComponent(file),rate:slow && !mochi ? 0.8 : 1) { [weak self] in guard let self, self.turn.epoch == token else { return }; self.speaking = false; _ = self.turn.finish(token) } }
-        catch { fail(error,token:token) }
+    func togglePlayback(_ file: String, mochi: Bool = false) {
+        if playbackFile == file && turn.activity == .playing { audio.togglePause(); objectWillChange.send(); return }
+        play(file,mochi:mochi)
     }
-    func recordMeaning() { beginRecording(forMeaning:true) }
+    func seekPlayback(_ file: String, to seconds: Double, mochi: Bool = false) {
+        guard seconds.isFinite else { return }
+        if playbackFile != file { play(file,mochi:mochi) }
+        guard playbackFile == file else { return }
+        audio.seek(to:seconds)
+    }
+    func play(_ file: String, mochi: Bool = false) {
+        guard !busy || turn.activity == .playing else { return }
+        audio.stop(); playbackFile = nil
+        let token = turn.begin(.playing); speaking = mochi
+        let finished: () -> Void = { [weak self] in
+            guard let self, self.turn.epoch == token else { return }
+            self.playbackFile = nil; self.speaking = false; _ = self.turn.finish(token)
+        }
+        do {
+            try audio.play(url:store.root.appendingPathComponent(file),rate:slow && !mochi ? 0.8 : 1,
+                           failed: { [weak self] in finished(); self?.error = "This recording could not be played. Try another recording." },completed:finished)
+            playbackFile = file
+        } catch { playbackFile = nil; fail(error,token:token) }
+    }
+    func recordMeaning() {
+        guard !isSavedPractice else { notice = "Open Help Me Say This from the conversation to record a new thought."; return }
+        beginRecording(forMeaning:true)
+    }
     func toggleRecord() {
         guard practice || writableConversation else { return }; beginRecording(forMeaning:false) }
     private func beginRecording(forMeaning: Bool) {
@@ -431,39 +685,40 @@ import MochiCore
             guard allowed else { recordingMeaning = false; _ = turn.finish(token); error = "Microphone access is off. Enable Mochi in System Settings → Privacy & Security → Microphone."; return }
             do {
                 let file = store.root.appendingPathComponent("recording-\(UUID().uuidString).wav")
-                try audio.record(to:file); _ = turn.finish(token); _ = turn.startRecording(); recordingSeconds = 0
-                let recordingToken = turn.epoch
-                recordingClock = Task {
-                    while !Task.isCancelled {
-                        do { try await Task.sleep(nanoseconds:1_000_000_000) } catch { return }
-                        guard turn.epoch == recordingToken else { return }
-                        recordingSeconds += 1
-                        if recordingSeconds >= 60 { finishRecording(); return }
-                    }
-                }
+                try audio.record(to:file); _ = turn.finish(token); _ = turn.startRecording(); recordingSeconds = 0; recordingWarning = nil
+                startRecordingFeedback(token:turn.epoch)
             } catch { fail(error,token:token) }
         }
     }
+    func updateRecordingFeedback(elapsed: Double, level: Float) {
+        recordingSeconds = Int(max(0,min(60,elapsed.isFinite ? elapsed : 0)))
+        recordingLevel = level.isFinite ? min(0,max(-80,level)) : -80
+        recordingWarning = recordingSeconds >= 1 && recordingLevel < -48 ? "Input is very quiet. Check your microphone or speak closer." : nil
+    }
+    func startRecordingFeedback(token: UUID) {
+        recordingClock?.cancel()
+        let started = recordingNow()
+        recordingClock = Task {
+            while !Task.isCancelled {
+                do { try await recordingSleep(100_000_000) } catch { return }
+                guard !Task.isCancelled, turn.epoch == token else { return }
+                updateRecordingFeedback(elapsed:recordingNow().timeIntervalSince(started),level:recordingMeter?() ?? audio.meter)
+                if recordingSeconds >= 60 { finishRecording(); return }
+            }
+        }
+    }
     func finishRecording() {
-        guard let url = audio.stopRecording() else { stop(); return }
+        guard let url = endRecording() else { stop(); return }
         recordingClock?.cancel(); recordingClock = nil; turn.stop()
+        recordingLevel = -80
         if recordingMeaning {
             recordingMeaning = false
-            let token = turn.begin(.generating)
-            let service = RealtimeService(auth:auth,model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
-            let history = conversation?.messages ?? []
-            let id = selectedID
-            task = Task {
-                do {
-                    let pcm = try AudioFile.pcm(url)
-                    let reply = try await service.reply(ConversationRequest(history:history,text:"",pcm:pcm,help:true))
-                    guard !Task.isCancelled, turn.epoch == token else { return }
-                    meaning = reply.inputTranscript
-                    english = reply.text.trimmingCharacters(in:.whitespacesAndNewlines)
-                    if let id { expression = PracticeExpression(conversationID:id,meaning:meaning,english:english) }
-                    _ = turn.finish(token)
-                } catch { fail(error,token:token) }
+            thoughtRecording = url.lastPathComponent
+            if let samples = try? AudioFile.samples(url).samples {
+                recordingWarning = RecordingSignal(samples:samples).isQuiet ? "This recording is very quiet. Listen before transcribing, or record it again." : nil
             }
+            notice = "Your thought is recorded locally. Listen, then choose Transcribe."
+            persistHelpDraft()
         } else if practice {
             let token = turn.begin(.generating)
             task = Task {
@@ -479,7 +734,20 @@ import MochiCore
             catch { self.error = error.localizedDescription }
         }
     }
-    func resume() { stop(); saveExpression(); turn.resume(); expression = nil; notice = "You're back. Say the thought in your own words when you're ready." }
+    func resume() {
+        cancelHelpWork()
+        let completed = !english.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && saveExpression()
+        if completed, !isSavedPractice, let ci = library.conversations.firstIndex(where: { $0.id == selectedID }) {
+            let saved = library.conversations[ci].helpDraft
+            library.conversations[ci].helpDraft = nil
+            if save() {
+                restoringHelp = true; thoughtRecording = nil; recognizedThought = nil; restoringHelp = false
+                removeUnreferencedRecording(saved?.recording)
+            } else { library.conversations[ci].helpDraft = saved }
+        }
+        leavePractice(); expression = nil
+        notice = completed ? "Saved to My Expressions. Say the thought in your own words when you're ready." : "You're back. Your help draft is saved."
+    }
     func openExpression(_ item: PracticeExpression) {
         var sourceID = item.conversationID
         if !library.conversations.contains(where:{ $0.id == sourceID && !$0.isDeleted && !$0.archived }) {
@@ -487,7 +755,7 @@ import MochiCore
             candidate.conversations.insert(chat,at:0); candidate.selectedConversationID = chat.id
             guard commitHistory(candidate) else { return }; sourceID = chat.id
         }
-        stop(); selectedID = sourceID; historyScope = .active; search = ""; draft = conversation?.draft ?? ""; showExpressions = false; turn.pause(); expression = item; english = item.english; meaning = item.meaning; referencePitch = []; attemptPitch = []
+        if sourceID == selectedID { cancelHelpWork() } else { stop() }; leavePractice(); isSavedPractice = true; selectedID = sourceID; historyScope = .active; search = ""; draft = conversation?.draft ?? ""; showExpressions = false; turn.pause(); restoringHelp = true; expression = item; english = item.english; meaning = item.meaning; thoughtRecording = nil; recognizedThought = nil; restoringHelp = false; helpStage = .practice; referencePitch = []; attemptPitch = []
         let token = turn.begin(.generating)
         task = Task {
             do {
@@ -511,13 +779,14 @@ import MochiCore
     private func fail(_ failure: Error, token: UUID) {
         guard turn.epoch == token else { return }
         _ = turn.finish(token); speaking = false; recordingMeaning = false
+        helpProgress = nil; recordingLevel = -80
         if !(failure is CancellationError) { error = (failure as? AppFailure)?.message ?? "This operation could not finish. Check the selected audio file or your connection, then retry." }
     }
     private func seedPreview() {
         var chat = Conversation(title:"A thought I've been putting off")
         chat.messages = [Message(role:"assistant",text:"What's been on your mind today?"),Message(role:"user",text:"I have an idea for a small project, but I haven't started yet."),Message(role:"assistant",text:"What's making it hard to get started?")]
         library.conversations = [chat,Conversation(title:"An idea over coffee"),Conversation(title:"The book I’m reading")]
-        selectedID = chat.id; turn.pause(); meaning = "I know what I mean. I just need the words."
+        selectedID = chat.id; turn.pause(); helpStage = .practice; meaning = "I know what I mean. I just need the words."
         english = "I keep putting it off because I don't know where to start."
         var item = PracticeExpression(conversationID:chat.id,meaning:meaning,english:english)
         item.referenceKind = "Preview · illustrative contours"; expression = item

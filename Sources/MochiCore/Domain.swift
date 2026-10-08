@@ -24,7 +24,28 @@ public struct Message: Codable, Identifiable, Equatable {
     public var text: String
     public var audio: String?
     public var date = Date()
+    public var transcriptionState: TranscriptionState?
+    public var transcriptionError: String?
     public init(role: String, text: String, audio: String? = nil) { self.role = role; self.text = text; self.audio = audio }
+    public var contextText: String? {
+        guard !text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,
+              !(role == "user" && audio != nil && Self.legacyLabels.contains(text)) else { return nil }
+        return text
+    }
+    public var displayText: String { contextText ?? (role == "user" && audio != nil ? "Voice recording" : text) }
+    private static let legacyLabels = ["Voice message (transcript unavailable)","Voice message · awaiting transcript"]
+    private enum CodingKeys: String, CodingKey { case id,role,text,audio,date,transcriptionState,transcriptionError }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy:CodingKeys.self)
+        id = try c.decode(UUID.self,forKey:.id); role = try c.decode(String.self,forKey:.role)
+        text = try c.decode(String.self,forKey:.text); audio = try c.decodeIfPresent(String.self,forKey:.audio)
+        date = try c.decode(Date.self,forKey:.date)
+        transcriptionState = try c.decodeIfPresent(TranscriptionState.self,forKey:.transcriptionState)
+        transcriptionError = try c.decodeIfPresent(String.self,forKey:.transcriptionError)
+        if role == "user", audio != nil, Self.legacyLabels.contains(text) {
+            transcriptionState = text.contains("awaiting") ? .interrupted : .failed; text = ""
+        }
+    }
 }
 public struct Conversation: Codable, Identifiable {
     public var id = UUID()
@@ -37,10 +58,11 @@ public struct Conversation: Codable, Identifiable {
     public var wasArchivedBeforeDeletion = false
     public var customTitle = false
     public var draft = ""
+    public var helpDraft: HelpDraft?
     public var isDeleted: Bool { deletedAt != nil }
     public var updatedAt: Date { messages.last?.date ?? date }
     public init(title: String = "A new conversation") { self.title = title }
-    private enum CodingKeys: String, CodingKey { case id,title,messages,date,pinned,archived,deletedAt,wasArchivedBeforeDeletion,customTitle,draft }
+    private enum CodingKeys: String, CodingKey { case id,title,messages,date,pinned,archived,deletedAt,wasArchivedBeforeDeletion,customTitle,draft,helpDraft }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy:CodingKeys.self)
         id = try c.decode(UUID.self,forKey:.id); title = try c.decode(String.self,forKey:.title)
@@ -51,6 +73,7 @@ public struct Conversation: Codable, Identifiable {
         wasArchivedBeforeDeletion = try c.decodeIfPresent(Bool.self,forKey:.wasArchivedBeforeDeletion) ?? false
         customTitle = try c.decodeIfPresent(Bool.self,forKey:.customTitle) ?? (title != "A new conversation" && messages.isEmpty)
         draft = try c.decodeIfPresent(String.self,forKey:.draft) ?? ""
+        helpDraft = try c.decodeIfPresent(HelpDraft.self,forKey:.helpDraft)
     }
 }
 public struct Attempt: Codable, Identifiable {
@@ -88,6 +111,11 @@ public struct LibraryStore {
         var library = try JSONDecoder().decode(Library.self, from: data)
         guard (1...2).contains(library.version) else { throw AppFailure("This library was created by a newer app. Your data has not been changed.") }
         try library.validate()
+        for ci in library.conversations.indices {
+            for mi in library.conversations[ci].messages.indices where library.conversations[ci].messages[mi].transcriptionState == .pending {
+                library.conversations[ci].messages[mi].transcriptionState = .interrupted
+            }
+        }
         library.version = 2
         return library
     }
@@ -98,6 +126,11 @@ public struct LibraryStore {
             let original = try Data(contentsOf:file)
             let existing = try JSONDecoder().decode(Library.self,from:original)
             guard (1...2).contains(existing.version) else { throw AppFailure("Unsupported library version; existing data was not changed.") }
+            let featureBackup = root.appendingPathComponent("library-before-help-transcription.json")
+            if library.conversations.contains(where: { $0.helpDraft != nil || $0.messages.contains(where: { $0.transcriptionState != nil }) }), !FileManager.default.fileExists(atPath:featureBackup.path) {
+                try original.write(to:featureBackup,options:.atomic)
+                try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:featureBackup.path)
+            }
             let backup = root.appendingPathComponent("library-v1-backup.json")
             if existing.version == 1 && !FileManager.default.fileExists(atPath:backup.path) {
                 try original.write(to:backup,options:.atomic)

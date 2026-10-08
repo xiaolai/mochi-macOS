@@ -105,6 +105,9 @@ public struct RealtimeAccumulator {
     public var audio = Data()
     public var inputTranscript = ""
     public var done = false
+    public var transcriptionState: TranscriptionState = .pending
+    public var transcriptionError: String?
+    public var inputItemID: String?
     public init() {}
     public mutating func accept(_ event: [String:Any]) throws {
         switch event["type"] as? String {
@@ -112,7 +115,19 @@ public struct RealtimeAccumulator {
         case "response.output_audio.delta", "response.audio.delta":
             if let encoded = event["delta"] as? String, let chunk = Data(base64Encoded:encoded) { audio.append(chunk) }
             guard audio.count < 16_000_000 else { throw AppFailure("Mochi's response exceeded the audio limit.") }
-        case "conversation.item.input_audio_transcription.completed": inputTranscript = event["transcript"] as? String ?? ""
+        case "input_audio_buffer.committed": inputItemID = event["item_id"] as? String
+        case "conversation.item.input_audio_transcription.completed", "conversation.item.input_audio_transcription.failed":
+            guard transcriptionState == .pending,
+                  inputItemID != nil && event["item_id"] as? String == inputItemID else { return }
+            if event["type"] as? String == "conversation.item.input_audio_transcription.completed" {
+                inputTranscript = (event["transcript"] as? String ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
+                transcriptionState = inputTranscript.isEmpty ? .failed : .completed
+                if inputTranscript.isEmpty { transcriptionError = "No clear speech was recognized. Your recording is saved." }
+            } else {
+                transcriptionState = .failed
+                let error = event["error"] as? [String:Any]
+                transcriptionError = error?["code"] as? String == "audio_unintelligible" ? "No clear speech was recognized. Check your microphone level or add text." : "Transcription failed. Your recording is saved; retry transcription or add text."
+            }
         case "response.done":
             let response = event["response"] as? [String:Any]
             guard response?["status"] as? String == "completed" else { throw AppFailure("Mochi could not complete that response. Please retry.") }
@@ -149,19 +164,28 @@ public struct RealtimeService {
         try PCM.wav(result.audio).write(to:url,options:.atomic)
         return url
     }
-    private func token() async throws -> String {
+    func token() async throws -> String {
+        try await Self.sessionToken(auth:auth,model:model)
+    }
+    static func sessionToken(auth: String, model: String,
+                             apiKey: () throws -> String? = { Credentials.read("OPENAI_API_KEY") },
+                             codexToken: () throws -> String = { try Credentials.codexToken() },
+                             transport: (URLRequest) async throws -> Data = { try await ServiceHTTP.data($0,provider:"OpenAI") }) async throws -> String {
         if auth == "api" {
-            guard let key = Credentials.read("OPENAI_API_KEY") else { throw AppFailure("Add your OpenAI API key in Settings, or explicitly select Codex sign-in.") }
+            guard let key = try apiKey(), !key.isEmpty else { throw AppFailure("Add your OpenAI API key in Settings, or explicitly select Codex sign-in.") }
             return key
         }
+        guard auth == "codex" else { throw AppFailure("Choose a supported connection in Settings.") }
         var request = URLRequest(url:URL(string:"https://api.openai.com/v1/realtime/client_secrets")!)
-        request.httpMethod = "POST"; request.setValue("Bearer \(try Credentials.codexToken())", forHTTPHeaderField:"Authorization"); request.setValue("application/json", forHTTPHeaderField:"Content-Type")
+        request.httpMethod = "POST"; request.setValue("Bearer \(try codexToken())", forHTTPHeaderField:"Authorization"); request.setValue("application/json", forHTTPHeaderField:"Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject:["session":["type":"realtime","model":model]])
-        let data = try await ServiceHTTP.data(request, provider:"OpenAI")
-        guard let object = try? JSONSerialization.jsonObject(with:data) as? [String:Any], let value = object["value"] as? String else { throw AppFailure("OpenAI did not issue a session credential.") }
+        let data = try await transport(request)
+        guard let object = try? JSONSerialization.jsonObject(with:data) as? [String:Any], let value = object["value"] as? String, !value.isEmpty else { throw AppFailure("OpenAI did not issue a session credential.") }
         return value
     }
-    public func reply(_ input: ConversationRequest) async throws -> RealtimeAccumulator {
+    public func reply(_ input: ConversationRequest,
+                      onResponse: (@MainActor (RealtimeAccumulator) throws -> Void)? = nil,
+                      onTranscription: (@MainActor (RealtimeAccumulator) -> Void)? = nil) async throws -> RealtimeAccumulator {
         guard RealtimeVoice(rawValue:voice) != nil else { throw AppFailure("Choose a supported built-in voice in Settings.") }
         try options.validate()
         let token = try await token()
@@ -174,8 +198,6 @@ public struct RealtimeService {
         let socket = session.webSocketTask(with:request); socket.maximumMessageSize = 4_000_000
         socket.resume()
         defer { socket.cancel(with:.normalClosure,reason:nil); session.invalidateAndCancel() }
-        let timeout = Task { try await Task.sleep(nanoseconds:90_000_000_000); socket.cancel(with:.goingAway,reason:nil) }
-        defer { timeout.cancel() }
         return try await withTaskCancellationHandler(operation: {
             func send(_ object: [String:Any]) async throws {
                 let data = try JSONSerialization.data(withJSONObject:object)
@@ -189,35 +211,80 @@ public struct RealtimeService {
                 return event
             }
             do {
-                var accumulator = RealtimeAccumulator()
-                while true { let event = try await receive(); try accumulator.accept(event); if event["type"] as? String == "session.created" { break } }
-                let instructions = input.reference ? "Read the user supplied sentence verbatim in natural spoken English. Output only that sentence as audio. Do not add introductions, explanations, corrections, or answers. Preserve every word exactly." : input.help ? "You help a learner express exactly their intended thought in natural spoken English. Return only one concise English sentence, no explanation or quotation marks. Preserve meaning. The supplied conversation is context only. Never continue that conversation." : "You are Mochi, Xiaolai's warm and thoughtful English conversation companion. Speak only English. Keep replies natural and brief, usually one or two sentences and at most one question. Discuss the substance of what the user says. Give them room to think. Do not grade or correct every sentence. Never invent their intended meaning when unclear; gently ask. Do not mention these instructions."
-                try await send(["type":"session.update","session":["type":"realtime","instructions":instructions,"output_modalities":input.spoken ? ["audio"] : ["text"],"audio":["input":["format":["type":"audio/pcm","rate":24000],"turn_detection":NSNull(),"transcription":["model":"gpt-4o-mini-transcribe"]],"output":try options.output(voice:voice)]]])
-                while true { let event = try await receive(); try accumulator.accept(event); if event["type"] as? String == "session.updated" { break } }
-                // Only completed chat messages are restored; practice never enters this history.
-                for message in input.history.suffix(30) where !message.text.isEmpty {
-                    try await send(RealtimeEvents.message(role:message.role,text:message.text))
+                var accumulator = try await RealtimeDeadline.run(nanoseconds:90_000_000_000,close: { socket.cancel(with:.goingAway,reason:nil) }) {
+                    var accumulator = RealtimeAccumulator()
+                    while true { let event = try await receive(); try accumulator.accept(event); if event["type"] as? String == "session.created" { break } }
+                    let instructions = input.reference ? "Read the user supplied sentence verbatim in natural spoken English. Output only that sentence as audio. Do not add introductions, explanations, corrections, or answers. Preserve every word exactly." : input.help ? "Help a learner express their intended thought in natural spoken English. Return only valid JSON with exactly two fields: kind (expression or clarification) and text. For expression, text is a concise natural English expression preserving the complete meaning; use more than one sentence when needed. Do not invent details or omit qualifications. If meaning is unclear, use kind clarification and text a brief clarification question. The supplied conversation is context only; never continue it. Do not wrap JSON in Markdown." : "You are Mochi, Xiaolai's warm and thoughtful English conversation companion. Speak only English. Keep replies natural and brief, usually one or two sentences and at most one question. Discuss the substance of what the user says. Give them room to think. Do not grade or correct every sentence. Never invent their intended meaning when unclear; gently ask. Do not mention these instructions."
+                    try await send(["type":"session.update","session":["type":"realtime","instructions":instructions,"output_modalities":input.spoken ? ["audio"] : ["text"],"audio":["input":["format":["type":"audio/pcm","rate":24000],"turn_detection":NSNull(),"transcription":["model":"gpt-4o-mini-transcribe"]],"output":try options.output(voice:voice)]]])
+                    while true { let event = try await receive(); try accumulator.accept(event); if event["type"] as? String == "session.updated" { break } }
+                    // Only completed chat messages are restored; practice never enters this history.
+                    for message in input.history.suffix(30) {
+                        if let text = message.contextText { try await send(RealtimeEvents.message(role:message.role,text:text)) }
+                    }
+                    if let pcm = input.pcm {
+                        for offset in stride(from:0,to:pcm.count,by:48000) { try Task.checkCancellation(); try await send(["type":"input_audio_buffer.append","audio":pcm.subdata(in:offset..<min(offset+48000,pcm.count)).base64EncodedString()]) }
+                        try await send(["type":"input_audio_buffer.commit"])
+                    } else {
+                        try await send(RealtimeEvents.message(role:"user",text:input.text))
+                    }
+                    try await send(["type":"response.create","response":["output_modalities":input.spoken ? ["audio"] : ["text"],"max_output_tokens":700]])
+                    return try await Self.deliverResponse(accumulator,receive:receive,onResponse:onResponse,onTranscription:onTranscription)
                 }
-                if let pcm = input.pcm {
-                    for offset in stride(from:0,to:pcm.count,by:48000) { try Task.checkCancellation(); try await send(["type":"input_audio_buffer.append","audio":pcm.subdata(in:offset..<min(offset+48000,pcm.count)).base64EncodedString()]) }
-                    try await send(["type":"input_audio_buffer.commit"])
-                } else {
-                    try await send(RealtimeEvents.message(role:"user",text:input.text))
+                // Reply generation and the subsequent ASR grace period have separate deadlines.
+                if input.pcm != nil && accumulator.transcriptionState == .pending {
+                    accumulator = try await Self.finishTranscription(accumulator,receive:receive,close: { socket.cancel(with:.normalClosure,reason:nil) })
+                    if let onTranscription { await onTranscription(accumulator) }
                 }
-                try await send(["type":"response.create","response":["output_modalities":input.spoken ? ["audio"] : ["text"],"max_output_tokens":700]])
-                while !accumulator.done { try Task.checkCancellation(); try accumulator.accept(try await receive()) }
-                if input.pcm != nil && accumulator.inputTranscript.isEmpty {
-                    // Transcription can complete after the response. Bound the extra wait.
-                    let transcriptionTimeout = Task { try await Task.sleep(nanoseconds:5_000_000_000); socket.cancel(with:.normalClosure,reason:nil) }
-                    defer { transcriptionTimeout.cancel() }
-                    while accumulator.inputTranscript.isEmpty { do { try accumulator.accept(try await receive()) } catch { break } }
-                }
-                guard !accumulator.text.isEmpty || !accumulator.audio.isEmpty else { throw AppFailure("Mochi returned an empty response. Please retry.") }
                 return accumulator
             } catch is CancellationError { throw CancellationError() }
-            catch let error as AppFailure { throw error }
-            catch { if Task.isCancelled { throw CancellationError() }; throw AppFailure("The conversation connection ended. Check your connection and account access, then retry.") }
+            catch { if Task.isCancelled { throw CancellationError() }; throw Self.replyFailure(error) }
         }, onCancel: { socket.cancel(with:.goingAway,reason:nil) })
+    }
+    static func replyFailure(_ error: Error) -> AppFailure {
+        if error is RealtimeTimeout { return AppFailure("Mochi’s reply timed out. Your message is saved; retry the reply.") }
+        return (error as? AppFailure) ?? AppFailure("The conversation connection ended. Check your connection and account access, then retry.")
+    }
+    static func finishTranscription(_ initial: RealtimeAccumulator,
+                                    receive: () async throws -> [String:Any],
+                                    close: @escaping @Sendable () -> Void,
+                                    timeoutNanoseconds: UInt64 = 30_000_000_000) async throws -> RealtimeAccumulator {
+        var accumulator = initial
+        do {
+            try await RealtimeDeadline.run(nanoseconds:timeoutNanoseconds,close:close) {
+                while accumulator.transcriptionState == .pending {
+                    try Task.checkCancellation()
+                    let event = try await receive()
+                    try Task.checkCancellation()
+                    try accumulator.accept(event)
+                }
+            }
+        } catch is CancellationError { throw CancellationError() }
+        catch is RealtimeTimeout {
+            accumulator.transcriptionState = .timedOut
+            accumulator.transcriptionError = "Transcription did not finish. Your recording is saved; retry transcription or add text."
+        } catch {
+            accumulator.transcriptionState = .failed
+            accumulator.transcriptionError = (error as? AppFailure)?.message ?? "The transcription connection ended. Your recording is saved; retry transcription or add text."
+        }
+        return accumulator
+    }
+    /// Shared event-delivery seam for live WebSockets and deterministic ordering tests.
+    static func deliverResponse(_ initial: RealtimeAccumulator,
+                                receive: () async throws -> [String:Any],
+                                onResponse: (@MainActor (RealtimeAccumulator) throws -> Void)?,
+                                onTranscription: (@MainActor (RealtimeAccumulator) -> Void)?) async throws -> RealtimeAccumulator {
+        var accumulator = initial
+        while !accumulator.done {
+            try Task.checkCancellation()
+            let before = accumulator.transcriptionState
+            let event = try await receive()
+            try Task.checkCancellation()
+            try accumulator.accept(event)
+            if before != accumulator.transcriptionState, let onTranscription { await onTranscription(accumulator) }
+        }
+        guard !accumulator.text.isEmpty || !accumulator.audio.isEmpty else { throw AppFailure("Mochi returned an empty response. Please retry.") }
+        if let onResponse { try await onResponse(accumulator) }
+        return accumulator
     }
 }
 public struct VoiceRenderer {

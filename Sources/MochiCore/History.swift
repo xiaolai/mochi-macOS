@@ -45,7 +45,7 @@ public extension Library {
         }
     }
     var referencedAudio: Set<String> {
-        Set(conversations.flatMap { $0.messages.compactMap(\.audio) } + expressions.flatMap { [$0.reference].compactMap { $0 } + $0.attempts.map(\.file) })
+        Set(conversations.flatMap { $0.messages.compactMap(\.audio) + [$0.helpDraft?.recording].compactMap { $0 } } + expressions.flatMap { [$0.reference].compactMap { $0 } + $0.attempts.map(\.file) })
     }
     @discardableResult mutating func removePermanently(_ ids: Set<UUID>) -> Set<String> {
         let before = referencedAudio
@@ -60,7 +60,7 @@ public extension Library {
         let messages = conversations.flatMap(\.messages)
         guard Set(messages.map(\.id)).count == messages.count else { throw AppFailure("The library contains duplicate message IDs.") }
         for name in referencedAudio {
-            guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"), !name.hasPrefix("."), !["library.json","library-v1-backup.json"].contains(name) else { throw AppFailure("The library contains an unsafe recording filename.") }
+            guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"), !name.hasPrefix("."), !["library.json","library-v1-backup.json","library-before-help-transcription.json"].contains(name) else { throw AppFailure("The library contains an unsafe recording filename.") }
         }
     }
 }
@@ -118,9 +118,13 @@ public enum LibraryBackup {
                 try FileManager.default.copyItem(at:package.appendingPathComponent(name),to:destination)
                 copied.append(destination); mapping[name] = replacement
             }
-            for ci in additions.conversations.indices { for mi in additions.conversations[ci].messages.indices {
-                if let name = additions.conversations[ci].messages[mi].audio { additions.conversations[ci].messages[mi].audio = mapping[name] }
-            } }
+            for ci in additions.conversations.indices {
+                if let name = additions.conversations[ci].helpDraft?.recording { additions.conversations[ci].helpDraft?.recording = mapping[name] }
+                for mi in additions.conversations[ci].messages.indices {
+                    if let name = additions.conversations[ci].messages[mi].audio { additions.conversations[ci].messages[mi].audio = mapping[name] }
+                    if additions.conversations[ci].messages[mi].transcriptionState == .pending { additions.conversations[ci].messages[mi].transcriptionState = .interrupted }
+                }
+            }
             for i in additions.expressions.indices {
                 if let name = additions.expressions[i].reference { additions.expressions[i].reference = mapping[name] }
                 for ai in additions.expressions[i].attempts.indices { let name = additions.expressions[i].attempts[ai].file; additions.expressions[i].attempts[ai].file = mapping[name]! }

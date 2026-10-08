@@ -1,10 +1,27 @@
 import Foundation
 import AVFoundation
+import Combine
 import MochiCore
 
-@MainActor final class AudioController: NSObject, AVAudioPlayerDelegate {
+protocol PlaybackPlayer: AnyObject {
+    var duration: TimeInterval { get }
+    var currentTime: TimeInterval { get set }
+    var enableRate: Bool { get set }
+    var rate: Float { get set }
+    func play() -> Bool
+    func pause()
+    func stop()
+}
+extension AVAudioPlayer: PlaybackPlayer {}
+
+@MainActor final class AudioController: NSObject, ObservableObject, AVAudioPlayerDelegate {
+    @Published private(set) var position: Double = 0
+    @Published private(set) var duration: Double = 0
+    @Published private(set) var paused = false
+    private var playbackClock: Task<Void,Never>?
     private var recorder: AVAudioRecorder?
-    private var player: AVAudioPlayer?
+    private var player: (any PlaybackPlayer)?
+    var makePlayer: (URL) throws -> any PlaybackPlayer = { try AVAudioPlayer(contentsOf:$0) }
     private var completion: (() -> Void)?
     private var failure: (() -> Void)?
     var isRecording: Bool { recorder?.isRecording == true }
@@ -23,15 +40,39 @@ import MochiCore
     func stopRecording() -> URL? { let url = recorder?.url; recorder?.stop(); recorder = nil; return url }
     func play(url: URL, rate: Float = 1, failed: (() -> Void)? = nil, completed: @escaping () -> Void) throws {
         stop()
-        let p = try AVAudioPlayer(contentsOf:url); p.delegate = self; p.enableRate = true; p.rate = rate; completion = completed; failure = failed; player = p
+        let p = try makePlayer(url); (p as? AVAudioPlayer)?.delegate = self; p.enableRate = true; p.rate = rate; completion = completed; failure = failed; player = p
         guard p.play() else { stop(); throw AppFailure("This audio file could not be played.") }
+        duration = p.duration; paused = false
+        playbackClock = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, let player = self.player else { return }
+                self.position = player.currentTime
+                do { try await Task.sleep(nanoseconds:100_000_000) } catch { return }
+            }
+        }
     }
-    func stop() { recorder?.stop(); recorder = nil; player?.stop(); player = nil; completion = nil; failure = nil }
+    func togglePause() {
+        guard let player else { return }
+        if paused {
+            guard player.play() else { let callback = failure ?? completion; stop(); callback?(); return }
+            paused = false
+        } else { player.pause(); position = player.currentTime; paused = true }
+    }
+    func seek(to seconds: Double) {
+        guard let player, seconds.isFinite else { return }
+        player.currentTime = min(max(0,seconds),player.duration)
+        position = player.currentTime
+    }
+    private func resetPlayback() {
+        playbackClock?.cancel(); playbackClock = nil
+        position = 0; duration = 0; paused = false
+    }
+    func stop() { resetPlayback(); recorder?.stop(); recorder = nil; player?.stop(); player = nil; completion = nil; failure = nil }
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor in guard self.player === player else { return }; let callback = flag ? self.completion : (self.failure ?? self.completion); self.completion = nil; self.failure = nil; self.player = nil; callback?() }
+        Task { @MainActor in guard self.player === player else { return }; let callback = flag ? self.completion : (self.failure ?? self.completion); self.completion = nil; self.failure = nil; self.player = nil; self.resetPlayback(); callback?() }
     }
     nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        Task { @MainActor in guard self.player === player else { return }; let callback = self.failure ?? self.completion; self.completion = nil; self.failure = nil; self.player = nil; callback?() }
+        Task { @MainActor in guard self.player === player else { return }; let callback = self.failure ?? self.completion; self.completion = nil; self.failure = nil; self.player = nil; self.resetPlayback(); callback?() }
     }
 }
 enum AudioFile {

@@ -65,10 +65,20 @@ import MochiCore
                 var checks: [(String,Bool)] = []
                 let selected = model.selectedID
                 model.draft = "Tray smoke draft"
+                var voice = Message(role:"user",text:"",audio:"tray-retained.wav"); voice.transcriptionState = .failed
+                if let selected { model.append(voice,to:selected) }
+                var recoveryStarted = false
+                model.transcribeRecording = { _,_,_ in recoveryStarted = true; try? await Task.sleep(nanoseconds:100_000_000); return "Late tray transcript" }
+                model.retryTranscription(voice.id)
+                let startedDeadline = Date().addingTimeInterval(2)
+                while !recoveryStarted && Date() < startedDeadline { try await Task.sleep(nanoseconds:1_000_000) }
                 let epoch = model.turn.begin(.generating)
                 window.performClose(nil)
                 checks.append(("Close hides the workspace", !window.isVisible))
                 checks.append(("Close cancels active work",model.turn.epoch != epoch && !model.busy))
+                checks.append(("Close cancels pending transcription",recoveryStarted && model.transcribingMessageIDs.isEmpty && model.conversation?.messages.first(where: { $0.id == voice.id })?.transcriptionState == .interrupted))
+                try await Task.sleep(nanoseconds:150_000_000)
+                checks.append(("Late transcript cannot rewrite closed workspace",model.conversation?.messages.first(where: { $0.id == voice.id })?.text == ""))
                 checks.append(("Tray remains installed",tray.statusItem?.button?.image?.isTemplate == true))
                 tray.showWindow()
                 checks.append(("Open restores the same workspace",window.isVisible && tray.window === window))
@@ -103,8 +113,10 @@ import MochiCore
             try? FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
             try? FileManager.default.removeItem(at:directory.appendingPathComponent("smoke.txt"))
             var captureFailures: [String] = []
+            var captureCount = 0
             let mainWindow = NSApp.windows.first(where: { $0.isVisible && !$0.isSheet && $0.parent == nil && $0.canBecomeMain && $0.frame.width >= 760 })
             @MainActor func capture(_ name: String, settings: Bool = false) {
+                captureCount += 1
                 let target = settings ? NSApp.windows.first(where: { $0.isVisible && $0 !== mainWindow && $0.canBecomeMain }) : mainWindow
                 guard let window = target else { captureFailures.append(name); return }
                 try? FileManager.default.removeItem(at:directory.appendingPathComponent(name))
@@ -146,11 +158,75 @@ import MochiCore
             model.newChat()
             try? await Task.sleep(nanoseconds:300_000_000)
             capture("welcome.png")
+            model.auth = "codex"
             model.startHelp()
             try? await Task.sleep(nanoseconds:300_000_000)
             capture("help.png")
-            model.english = "I would like a little more time to think."
+            model.meaning = "I want to ask for a little more time to think."
+            model.editEnglish("I would like a little more time to think.")
+            try? await Task.sleep(nanoseconds:300_000_000)
+            capture("help-english.png")
+            NSApp.appearance = NSAppearance(named:.darkAqua)
+            try? await Task.sleep(nanoseconds:250_000_000)
+            capture("help-english-dark.png")
+            NSApp.appearance = NSAppearance(named:.aqua)
+            model.beginPractice()
+            try? await Task.sleep(nanoseconds:300_000_000)
+            capture("help-practice.png")
+            model.editThought()
+            let thoughtName = "thought-fixture.wav"
+            try? PCM.wav(Data(repeating:0,count:144000)).write(to:model.store.root.appendingPathComponent(thoughtName))
+            model.thoughtRecording = thoughtName
+            model.recordingWarning = "This illustrative recording is very quiet. Listen before transcribing, or record it again."
+            try? await Task.sleep(nanoseconds:300_000_000)
+            capture("help-recording-review.png")
+            model.recognizedThought = "I need a little more time before I can explain my idea."
+            try? await Task.sleep(nanoseconds:300_000_000)
+            capture("help-transcript-review.png")
+            model.recognizedThought = nil
+            _ = model.turn.begin(.recording); model.recordingMeaning = true; model.recordingSeconds = 3; model.recordingLevel = -54
+            try? await Task.sleep(nanoseconds:250_000_000)
+            capture("help-recording-feedback.png")
+            model.stop()
             model.saveExpression(); model.resume()
+            if let id = model.selectedID {
+                try? PCM.wav(Data(repeating:0,count:144000)).write(to:model.store.root.appendingPathComponent(thoughtName))
+                var failed = Message(role:"user",text:"",audio:thoughtName)
+                failed.transcriptionState = .failed; failed.transcriptionError = "Your recording is saved. We couldn’t transcribe it."
+                model.append(failed,to:id)
+                model.append(Message(role:"assistant",text:"Take your time. What would help you decide?"),to:id)
+                try? await Task.sleep(nanoseconds:300_000_000)
+                capture("voice-recovery.png")
+                model.auth = "codex"
+                model.transcribeRecording = { _,_,_ in try await Task.sleep(nanoseconds:900_000_000); return "I would like a little more time to think." }
+                model.retryTranscription(failed.id)
+                try? await Task.sleep(nanoseconds:250_000_000)
+                capture("voice-recovery-progress.png")
+                try? await Task.sleep(nanoseconds:750_000_000)
+                capture("voice-recovery-complete.png")
+                let originalPlayer = model.audio.makePlayer
+                model.audio.makePlayer = { _ in SmokePlaybackPlayer() }
+                model.togglePlayback(thoughtName)
+                model.seekPlayback(thoughtName,to:1)
+                try? await Task.sleep(nanoseconds:250_000_000)
+                capture("message-playback-playing.png")
+                model.togglePlayback(thoughtName)
+                try? await Task.sleep(nanoseconds:250_000_000)
+                capture("message-playback-paused.png")
+                model.seekPlayback(thoughtName,to:2)
+                if !model.audio.paused || model.audio.position != 2 { captureFailures.append("Paused seek did not preserve playback state") }
+                NSApp.appearance = NSAppearance(named:.darkAqua)
+                try? await Task.sleep(nanoseconds:250_000_000)
+                capture("message-playback-dark.png")
+                NSApp.appearance = NSAppearance(named:.aqua)
+                if let window = mainWindow { window.setContentSize(NSSize(width:820,height:700)) }
+                try? await Task.sleep(nanoseconds:250_000_000)
+                capture("message-playback-compact.png")
+                if let window = mainWindow { window.setContentSize(NSSize(width:1120,height:840)) }
+                model.stop(); model.audio.makePlayer = originalPlayer
+
+                if model.conversation?.messages.first(where: { $0.id == failed.id })?.transcriptionState != .completed { captureFailures.append("Codex fixture recovery did not complete") }
+            }
             model.showExpressions = true
             try? await Task.sleep(nanoseconds:300_000_000)
             capture("expressions.png")
@@ -200,7 +276,7 @@ import MochiCore
             try? await Task.sleep(nanoseconds:350_000_000)
             capture("voice-settings-elevenlabs.png",settings:true)
             let passed = captureFailures.isEmpty && model.library.expressions.count >= 1 && model.turn.mode == .conversation && model.turn.owner == .none
-            try? Data("Native smoke: \(passed ? "PASS" : "FAIL"). Twenty native window and sheet snapshots. Capture failures: \(captureFailures.count). No network, microphone or speaker output.\n".utf8).write(to:directory.appendingPathComponent("smoke.txt"))
+            try? Data("Native smoke: \(passed ? "PASS" : "FAIL"). \(captureCount) native window and sheet snapshots. Capture failures: \(captureFailures.count). No network, microphone or speaker output.\n".utf8).write(to:directory.appendingPathComponent("smoke.txt"))
             NSApp.terminate(nil)
         }
     }
@@ -234,4 +310,15 @@ import MochiCore
             NSApp.terminate(nil)
         }
     }
+}
+
+// Native layout fixtures never send sound to the speakers.
+private final class SmokePlaybackPlayer: PlaybackPlayer {
+    let duration: TimeInterval = 3
+    var currentTime: TimeInterval = 0
+    var enableRate = false
+    var rate: Float = 1
+    func play() -> Bool { true }
+    func pause() {}
+    func stop() {}
 }
