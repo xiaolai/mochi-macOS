@@ -413,6 +413,32 @@ import MochiCore
             capture("pitch-curves-comparison-dark.png",window:comparison)
             NSApp.appearance = NSAppearance(named:.aqua)
             comparison.orderOut(nil)
+            model.settingsOpen = false
+            model.newChat()
+            let greetingPlayer = SmokePlaybackPlayer()
+            model.audio.makePlayer = { _ in greetingPlayer }
+            model.microphonePermission = { true }
+            model.recordAudio = { _ in }
+            model.renderGreeting = { _,_,root in
+                let url = root.appendingPathComponent("greeting-fixture.wav")
+                try PCM.wav(Data(repeating:0,count:144000)).write(to:url)
+                return url
+            }
+            model.toggleConversationVoice()
+            try? await Task.sleep(nanoseconds:350_000_000)
+            if model.turn.activity != .playing || !model.greetingActive || model.conversation?.messages.count != 1 {
+                captureFailures.append("Voice entry did not show its saved greeting")
+            }
+            capture("voice-greeting.png")
+            model.togglePlayback("greeting-fixture.wav",mochi:true)
+            try? await Task.sleep(nanoseconds:200_000_000)
+            if !model.audio.paused { captureFailures.append("Greeting pause failed") }
+            capture("voice-greeting-paused.png")
+            model.audio.finishPlayback(greetingPlayer,successfully:true)
+            try? await Task.sleep(nanoseconds:250_000_000)
+            if model.turn.activity != .recording || model.greetingActive { captureFailures.append("Greeting did not transition to recording") }
+            capture("voice-greeting-listening.png")
+            model.stop()
             let passed = captureFailures.isEmpty && model.library.expressions.count >= 1 && model.turn.mode == .conversation && model.turn.owner == .none
             try? Data("Native smoke: \(passed ? "PASS" : "FAIL"). \(captureCount) native window and sheet snapshots. Capture failures: \(captureFailures.count). No network, microphone or speaker output.\n".utf8).write(to:directory.appendingPathComponent("smoke.txt"))
             NSApp.terminate(nil)

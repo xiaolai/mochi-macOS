@@ -86,6 +86,15 @@ struct ReplyCallbacks {
     var findEnglishSuggestion: ((ConversationRequest) async throws -> String)?
     var conversationReply: ((ConversationRequest,ReplyCallbacks) async throws -> Void)?
     var playReply: ((String) -> Void)?
+    var renderGreeting: ((String,RealtimeService,URL) async throws -> URL)?
+    var microphonePermission: (() async -> Bool)?
+    var recordAudio: ((URL) throws -> Void)?
+    @Published private(set) var greetingActive = false
+    var microphoneLabel: String {
+        if turn.activity == .recording { return "Finish Recording" }
+        if greetingActive { return "Skip Greeting and Start Recording" }
+        return conversation?.voiceIntroduced == true ? "Record Voice Message" : "Start Voice Conversation"
+    }
     lazy var endRecording: () -> URL? = { [weak self] in self?.audio.stopRecording() }
     var recordingNow: () -> Date = Date.init
     var recordingSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds:$0) }
@@ -148,7 +157,7 @@ struct ReplyCallbacks {
         switch turn.activity {
         case .recording: if recordingMeaning { return "Recording your thought · finish to review" }; return practice ? "Recording your attempt · stays on this Mac" : "Recording · finish to send to Mochi"
         case .requestingPermission: return "Waiting for microphone permission"
-        case .generating: return practice ? "Preparing your expression…" : "Mochi is thinking…"
+        case .generating: if greetingActive { return "Preparing Mochi’s greeting…" }; return practice ? "Preparing your expression…" : "Mochi is thinking…"
         case .playing: if audio.paused { return "Playback paused" }; return speaking ? "Mochi is speaking" : "Playing your recording"
         case .idle: return practice ? "Conversation paused · microphone off" : "Ready when you are · microphone off"
         }
@@ -210,6 +219,7 @@ struct ReplyCallbacks {
         do { try store.save(library); return true } catch { self.error = "Could not save your conversation. Check available disk space; keep this window open."; return false }
     }
     func stop() {
+        greetingActive = false
         let unfinishedRecording = endRecording()
         task?.cancel(); task = nil; recordingClock?.cancel(); recordingClock = nil
         for job in transcriptTasks.values { job.cancel() }; transcriptTasks.removeAll()
@@ -226,6 +236,7 @@ struct ReplyCallbacks {
         removeUnreferencedRecording(unfinishedRecording?.lastPathComponent)
     }
     func cancelHelpWork() {
+        greetingActive = false
         let recording = endRecording()
         if !practice && task != nil && turn.activity == .generating { notice = "Your pending reply was cancelled. You can retry it when you return." }
         task?.cancel()
@@ -366,7 +377,7 @@ struct ReplyCallbacks {
     }
     func append(_ message: Message, to id: UUID) {
         guard let i = library.conversations.firstIndex(where: { $0.id == id }) else { return }
-        if !library.conversations[i].customTitle && library.conversations[i].messages.isEmpty && message.role == "user" { library.conversations[i].title = String(message.text.prefix(42)) }
+        if !library.conversations[i].customTitle && !library.conversations[i].messages.contains(where: { $0.role == "user" }) && message.role == "user" && !message.text.isEmpty { library.conversations[i].title = String(message.text.prefix(42)) }
         library.conversations[i].messages.append(message); save()
     }
     func send() {
@@ -453,7 +464,7 @@ struct ReplyCallbacks {
         library.conversations[ci].messages[mi].transcriptionState = state
         library.conversations[ci].messages[mi].transcriptionError = error
         if let text, !text.isEmpty, !library.conversations[ci].customTitle,
-           library.conversations[ci].messages.first?.id == messageID {
+           library.conversations[ci].messages.first(where: { $0.role == "user" })?.id == messageID {
             library.conversations[ci].title = String(text.prefix(42))
         }
         save()
@@ -689,8 +700,9 @@ struct ReplyCallbacks {
         guard playbackFile == file else { return }
         audio.seek(to:seconds)
     }
-    func play(_ file: String, mochi: Bool = false) {
+    func play(_ file: String, mochi: Bool = false, afterPlayback: (() -> Void)? = nil) {
         guard !busy || turn.activity == .playing else { return }
+        if afterPlayback == nil { greetingActive = false }
         audio.stop(); playbackFile = nil
         let token = turn.begin(.playing); speaking = mochi
         let finished: () -> Void = { [weak self] in
@@ -699,9 +711,58 @@ struct ReplyCallbacks {
         }
         do {
             try audio.play(url:store.root.appendingPathComponent(file),rate:slow && !mochi ? 0.8 : 1,
-                           failed: { [weak self] in finished(); self?.error = "This recording could not be played. Try another recording." },completed:finished)
+                           failed: { [weak self] in finished(); self?.greetingActive = false; self?.error = "This recording could not be played. Try another recording." },completed: { [weak self] in
+                               guard let self, self.turn.epoch == token else { return }
+                               finished(); afterPlayback?()
+                           })
             playbackFile = file
         } catch { playbackFile = nil; fail(error,token:token) }
+    }
+    func toggleConversationVoice() {
+        guard !practice, writableConversation, libraryReadable, !voiceSetupActive else { return }
+        if greetingActive {
+            stop(); beginRecording(forMeaning:false); return
+        }
+        guard !busy || turn.activity == .recording else { return }
+        guard turn.activity != .recording, conversation?.voiceIntroduced == false, let id = selectedID else {
+            beginRecording(forMeaning:false); return
+        }
+        let token = turn.begin(.requestingPermission)
+        greetingActive = true; error = nil
+        let service = RealtimeService(auth:auth,model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
+        task = Task { [self] in
+            do {
+                let allowed: Bool
+                if let microphonePermission { allowed = await microphonePermission() } else { allowed = await audio.permission() }
+                guard !Task.isCancelled, turn.epoch == token else { return }
+                guard allowed else { throw AppFailure("Microphone access is off. Enable Mochi in System Settings → Privacy & Security → Microphone.") }
+                // Each asynchronous stage is guarded by its epoch; Stop invalidates either stage.
+                let generationToken = turn.begin(.generating)
+                let recent = defaults.stringArray(forKey:"voiceGreetingHistory") ?? []
+                let text = VoiceIdentity.greeting(excluding:recent)
+                do {
+                    let url: URL
+                    if let renderGreeting { url = try await renderGreeting(text,service,store.root) }
+                    else { url = try await service.referenceAudio(text:text,root:store.root) }
+                    guard !Task.isCancelled, turn.epoch == generationToken, selectedID == id,
+                          !practice, writableConversation,
+                          let index = library.conversations.firstIndex(where: { $0.id == id }) else { return }
+                    library.conversations[index].messages.append(Message(role:"assistant",text:text,audio:url.lastPathComponent))
+                    library.conversations[index].voiceIntroduced = true
+                    guard save() else {
+                        library.conversations[index].messages.removeLast()
+                        library.conversations[index].voiceIntroduced = false
+                        greetingActive = false; _ = turn.finish(generationToken); return
+                    }
+                    defaults.set(Array((recent + [text]).suffix(3)),forKey:"voiceGreetingHistory")
+                    task = nil; _ = turn.finish(generationToken)
+                    play(url.lastPathComponent,mochi:true,afterPlayback: { [weak self] in
+                        guard let self, self.greetingActive, self.selectedID == id, !self.practice, self.writableConversation else { return }
+                        self.greetingActive = false; self.beginRecording(forMeaning:false)
+                    })
+                } catch { fail(error,token:generationToken) }
+            } catch { fail(error,token:token) }
+        }
     }
     func recordMeaning() {
         guard !isSavedPractice else { notice = "Open Help Me Say This from the conversation to record a new thought."; return }
@@ -716,12 +777,17 @@ struct ReplyCallbacks {
         if practice && !recordingMeaning { ensureExpression() }
         let token = turn.begin(.requestingPermission)
         task = Task {
-            let allowed = await audio.permission()
+            let allowed: Bool
+            if let microphonePermission { allowed = await microphonePermission() } else { allowed = await audio.permission() }
             guard !Task.isCancelled, turn.epoch == token else { return }
             guard allowed else { recordingMeaning = false; _ = turn.finish(token); error = "Microphone access is off. Enable Mochi in System Settings → Privacy & Security → Microphone."; return }
             do {
                 let file = store.root.appendingPathComponent("recording-\(UUID().uuidString).wav")
-                try audio.record(to:file); _ = turn.finish(token); _ = turn.startRecording(); recordingSeconds = 0; recordingWarning = nil
+                if let recordAudio { try recordAudio(file) } else { try audio.record(to:file) }
+                if !practice, let index = library.conversations.firstIndex(where: { $0.id == selectedID }) {
+                    library.conversations[index].voiceIntroduced = true; save()
+                }
+                _ = turn.finish(token); _ = turn.startRecording(); recordingSeconds = 0; recordingWarning = nil
                 startRecordingFeedback(token:turn.epoch)
             } catch { fail(error,token:token) }
         }
@@ -814,7 +880,7 @@ struct ReplyCallbacks {
     }
     private func fail(_ failure: Error, token: UUID) {
         guard turn.epoch == token else { return }
-        _ = turn.finish(token); speaking = false; recordingMeaning = false
+        _ = turn.finish(token); greetingActive = false; speaking = false; recordingMeaning = false
         helpProgress = nil; recordingLevel = -80
         if !(failure is CancellationError) { error = (failure as? AppFailure)?.message ?? "This operation could not finish. Check the selected audio file or your connection, then retry." }
     }

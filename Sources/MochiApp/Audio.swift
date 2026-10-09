@@ -68,11 +68,16 @@ extension AVAudioPlayer: PlaybackPlayer {}
         position = 0; duration = 0; paused = false
     }
     func stop() { resetPlayback(); recorder?.stop(); recorder = nil; player?.stop(); player = nil; completion = nil; failure = nil }
+    func finishPlayback(_ player: any PlaybackPlayer, successfully flag: Bool) {
+        guard self.player === player else { return }
+        let callback = flag ? completion : (failure ?? completion)
+        completion = nil; failure = nil; self.player = nil; resetPlayback(); callback?()
+    }
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor in guard self.player === player else { return }; let callback = flag ? self.completion : (self.failure ?? self.completion); self.completion = nil; self.failure = nil; self.player = nil; self.resetPlayback(); callback?() }
+        Task { @MainActor in self.finishPlayback(player,successfully:flag) }
     }
     nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        Task { @MainActor in guard self.player === player else { return }; let callback = self.failure ?? self.completion; self.completion = nil; self.failure = nil; self.player = nil; self.resetPlayback(); callback?() }
+        Task { @MainActor in self.finishPlayback(player,successfully:false) }
     }
 }
 enum AudioFile {

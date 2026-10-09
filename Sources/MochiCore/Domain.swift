@@ -59,10 +59,11 @@ public struct Conversation: Codable, Identifiable {
     public var customTitle = false
     public var draft = ""
     public var helpDraft: HelpDraft?
+    public var voiceIntroduced = false
     public var isDeleted: Bool { deletedAt != nil }
     public var updatedAt: Date { messages.last?.date ?? date }
     public init(title: String = "A new conversation") { self.title = title }
-    private enum CodingKeys: String, CodingKey { case id,title,messages,date,pinned,archived,deletedAt,wasArchivedBeforeDeletion,customTitle,draft,helpDraft }
+    private enum CodingKeys: String, CodingKey { case id,title,messages,date,pinned,archived,deletedAt,wasArchivedBeforeDeletion,customTitle,draft,helpDraft,voiceIntroduced }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy:CodingKeys.self)
         id = try c.decode(UUID.self,forKey:.id); title = try c.decode(String.self,forKey:.title)
@@ -74,6 +75,7 @@ public struct Conversation: Codable, Identifiable {
         customTitle = try c.decodeIfPresent(Bool.self,forKey:.customTitle) ?? (title != "A new conversation" && messages.isEmpty)
         draft = try c.decodeIfPresent(String.self,forKey:.draft) ?? ""
         helpDraft = try c.decodeIfPresent(HelpDraft.self,forKey:.helpDraft)
+        voiceIntroduced = try c.decodeIfPresent(Bool.self,forKey:.voiceIntroduced) ?? messages.contains { $0.role == "user" && $0.audio != nil }
     }
 }
 public struct Attempt: Codable, Identifiable {

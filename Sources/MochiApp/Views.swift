@@ -259,12 +259,13 @@ struct WorkspaceView: View {
     private var inputBar: some View {
         VStack(spacing:8) {
             HStack(alignment:.bottom,spacing:12) {
-                Button(action:app.toggleRecord) {
+                Button(action:app.toggleConversationVoice) {
                     Image(systemName:app.turn.activity == .recording ? "stop.circle.fill" : "mic.fill")
                         .font(.system(size:18))
                 }.buttonStyle(.borderless)
-                    .help(app.turn.activity == .recording ? "Finish Recording" : "Record Voice Message")
-                    .disabled(app.busy && app.turn.activity != .recording)
+                    .help(app.microphoneLabel)
+                    .accessibilityLabel(app.microphoneLabel)
+                    .disabled(app.busy && app.turn.activity != .recording && !app.greetingActive)
                 Button(action:app.startHelp) {
                     Image(systemName:"waveform.badge.plus").font(.system(size:18))
                 }.buttonStyle(.borderless)
