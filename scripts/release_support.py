@@ -12,7 +12,7 @@ from pathlib import Path
 
 def validate_metadata(info, version, build):
     expected = {"CFBundleShortVersionString":version, "CFBundleVersion":build,
-                "CFBundleIdentifier":"com.xiaolai.mochi-macos", "LSMinimumSystemVersion":"14.0"}
+                "CFBundleIdentifier":"com.lixiaolai.mochi-macos", "LSMinimumSystemVersion":"14.0"}
     if not str(build).isdigit() or int(build) < 1:
         raise ValueError("Build number must be a positive integer")
     for key, value in expected.items():

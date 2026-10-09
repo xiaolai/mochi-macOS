@@ -180,7 +180,9 @@ struct ReplyCallbacks {
         self.demo = demo
         defaults = preferences ?? (demo ? UserDefaults(suiteName:AppIdentity.bundleIdentifier + ".preview")! : .standard)
         if !demo && libraryRoot == nil {
-            AppIdentity.migratePreferences(into:defaults,legacy:defaults.persistentDomain(forName:AppIdentity.legacyBundleIdentifier) ?? [:])
+            for oldDomain in AppIdentity.legacyBundleIdentifiers {
+                AppIdentity.migratePreferences(into:defaults,legacy:defaults.persistentDomain(forName:oldDomain) ?? [:])
+            }
         }
         auth = defaults.string(forKey:"auth") ?? "api"
         modelName = defaults.string(forKey:"model") ?? "gpt-realtime"

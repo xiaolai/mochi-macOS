@@ -59,8 +59,10 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue(any("submit" in c for c in calls))
 
     def test_metadata_rejects_wrong_version_build_and_identity(self):
-        info={"CFBundleShortVersionString":"0.1.2","CFBundleVersion":"24","CFBundleIdentifier":"com.xiaolai.mochi-macos","LSMinimumSystemVersion":"14.0"}
+        info={"CFBundleShortVersionString":"0.1.2","CFBundleVersion":"24","CFBundleIdentifier":"com.lixiaolai.mochi-macos","LSMinimumSystemVersion":"14.0"}
         release.validate_metadata(info,"0.1.2","24")
+        previous=dict(info); previous["CFBundleIdentifier"]="com.xiaolai.mochi-macos"
+        with self.assertRaises(ValueError): release.validate_metadata(previous,"0.1.2","24")
         for key in info:
             broken=dict(info); broken[key]="wrong"
             with self.assertRaises(ValueError): release.validate_metadata(broken,"0.1.2","24")

@@ -1,6 +1,26 @@
 import XCTest
 @testable import MochiCore
 final class BrandingTests: XCTestCase {
+    func testPreviousMochiPreferencesSurviveIdentityChangeWithoutOverwritingNewValues() {
+        let name = "mochi-identity-test-\(UUID())"
+        let defaults = UserDefaults(suiteName:name)!
+        defer { defaults.removePersistentDomain(forName:name) }
+        defaults.set("cedar",forKey:"conversationVoice")
+        let profile = Data("saved-profile".utf8)
+        AppIdentity.migratePreferences(into:defaults,legacy:[
+            "conversationVoice":"marin", "practiceVoiceMode":"personal",
+            "voiceProfiles":profile, "personalVoiceOptions":Data([1,2]),
+            "voiceGreetingHistory":["Hello", "Hi"], "unknown":"ignore"
+        ])
+        AppIdentity.migratePreferences(into:defaults,legacy:["practiceVoiceMode":"builtIn"])
+        XCTAssertEqual(defaults.string(forKey:"conversationVoice"),"cedar")
+        XCTAssertEqual(defaults.string(forKey:"practiceVoiceMode"),"personal")
+        XCTAssertEqual(defaults.data(forKey:"voiceProfiles"),profile)
+        XCTAssertEqual(defaults.data(forKey:"personalVoiceOptions"),Data([1,2]))
+        XCTAssertEqual(defaults.stringArray(forKey:"voiceGreetingHistory"),["Hello", "Hi"])
+        XCTAssertNil(defaults.object(forKey:"unknown"))
+    }
+
     func testLibraryCopyPreservesOriginalAndDoesNotOverwriteMochi() throws {
         let parent = temporary(); defer { try? FileManager.default.removeItem(at:parent) }
         let legacy = parent.appendingPathComponent(AppIdentity.legacyDataDirectory)

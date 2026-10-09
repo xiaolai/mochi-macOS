@@ -3,10 +3,12 @@ import Darwin
 
 public enum AppIdentity {
     public static let name = "Mochi"
-    public static let bundleIdentifier = "com.xiaolai.mochi-macos"
+    public static let bundleIdentifier = "com.lixiaolai.mochi-macos"
+    public static let previousBundleIdentifier = "com.xiaolai.mochi-macos"
+    public static let legacyBundleIdentifiers = [previousBundleIdentifier, legacyBundleIdentifier]
     public static let legacyBundleIdentifier = "com.xiaolai.enjoy-myself"
     public static let legacyDataDirectory = "Enjoy Myself"
-    public static let backupType = "com.xiaolai.mochi-macos.library"
+    public static let backupType = "com.lixiaolai.mochi-macos.library"
 
     /// Copy first, then atomically install the directory; leave original data intact.
     public static func prepareDataDirectory(in support: URL) throws -> URL {
@@ -33,8 +35,14 @@ public enum AppIdentity {
         return destination
     }
     public static func migratePreferences(into defaults: UserDefaults, legacy: [String:Any]) {
-        for key in ["auth","model","clone","performer"] where defaults.object(forKey:key) == nil {
+        for key in ["auth","model","clone","performer","conversationVoice","builtInPracticeVoice","practiceVoiceMode"] where defaults.object(forKey:key) == nil {
             if let value = legacy[key] as? String { defaults.set(value,forKey:key) }
+        }
+        for key in ["voiceProfiles","conversationVoiceOptions","practiceVoiceOptions","personalVoiceOptions"] where defaults.object(forKey:key) == nil {
+            if let value = legacy[key] as? Data { defaults.set(value,forKey:key) }
+        }
+        if defaults.object(forKey:"voiceGreetingHistory") == nil, let history = legacy["voiceGreetingHistory"] as? [String] {
+            defaults.set(history,forKey:"voiceGreetingHistory")
         }
     }
     private static func validateDirectory(_ url: URL) throws {

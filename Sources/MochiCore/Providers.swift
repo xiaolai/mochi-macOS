@@ -5,9 +5,11 @@ public enum Credentials {
     public static let service = AppIdentity.bundleIdentifier
     public static func read(_ name: String) -> String? {
         if let value = keychainValue(name,service:service) { return value }
-        if let legacy = keychainValue(name,service:AppIdentity.legacyBundleIdentifier) {
-            try? save(legacy,name:name)
-            return legacy
+        for oldService in AppIdentity.legacyBundleIdentifiers {
+            if let legacy = keychainValue(name,service:oldService) {
+                try? save(legacy,name:name)
+                return legacy
+            }
         }
         return ProcessInfo.processInfo.environment[name].flatMap { $0.isEmpty ? nil : $0 }
     }
@@ -21,8 +23,10 @@ public enum Credentials {
         let query: [String:Any] = [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:name]
         if value.isEmpty {
             SecItemDelete(query as CFDictionary)
-            var legacy = query; legacy[kSecAttrService as String] = AppIdentity.legacyBundleIdentifier
-            SecItemDelete(legacy as CFDictionary)
+            for oldService in AppIdentity.legacyBundleIdentifiers {
+                var legacy = query; legacy[kSecAttrService as String] = oldService
+                SecItemDelete(legacy as CFDictionary)
+            }
             return
         }
         let attributes: [String:Any] = [kSecValueData as String:Data(value.utf8)]

@@ -26,7 +26,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0"><dict>
 <key>CFBundleName</key><string>Mochi</string>
 <key>CFBundleDisplayName</key><string>Mochi</string>
-<key>CFBundleIdentifier</key><string>com.xiaolai.mochi-macos</string>
+<key>CFBundleIdentifier</key><string>com.lixiaolai.mochi-macos</string>
 <key>CFBundleExecutable</key><string>Mochi</string>
 <key>CFBundleIconFile</key><string>AppIcon.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
@@ -35,7 +35,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>UTExportedTypeDeclarations</key><array><dict>
-<key>UTTypeIdentifier</key><string>com.xiaolai.mochi-macos.library</string>
+<key>UTTypeIdentifier</key><string>com.lixiaolai.mochi-macos.library</string>
 <key>UTTypeDescription</key><string>Mochi Library Backup</string>
 <key>UTTypeConformsTo</key><array><string>com.apple.package</string></array>
 <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>mochilibrary</string><string>enjoylibrary</string></array></dict>
