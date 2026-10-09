@@ -4,3 +4,4 @@ build/
 .env
 *.local.json
 __pycache__/
+dev-docs/

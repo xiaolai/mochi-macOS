@@ -74,6 +74,6 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn('cask "mochi"',text)
 
     def test_template_does_not_conflict_with_its_own_caskroom_token(self):
-        template=(Path(__file__).parents[2]/"dev-docs/distribution/mochi.rb.in").read_text()
+        template=(Path(__file__).parents[1]/"distribution/mochi.rb.in").read_text()
         self.assertIn('cask "mochi" do',template)
         self.assertNotIn('conflicts_with cask:',template)

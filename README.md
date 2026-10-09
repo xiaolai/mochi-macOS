@@ -16,4 +16,6 @@ brew install --cask xiaolai/tap/mochi
 2. Click the microphone, speak, and listen to Mochi’s response.
 3. When you get stuck, use **Help Me Say This** to find the English, listen, and practise saying it.
 
+Optionally, connect ElevenLabs in Settings to hear practice examples in your own custom voice.
+
 Your conversations and practice recordings are saved locally.
