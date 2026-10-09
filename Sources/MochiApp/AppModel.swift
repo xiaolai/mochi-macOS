@@ -158,13 +158,16 @@ struct MessageDeletionUndo {
     @Published var modelName: String { didSet { defaults.set(modelName,forKey:"model") } }
     @Published var conversationVoice: String { didSet { defaults.set(conversationVoice,forKey:"conversationVoice") } }
     @Published var builtInPracticeVoice: String { didSet { defaults.set(builtInPracticeVoice,forKey:"builtInPracticeVoice") } }
+    @Published var practiceProvider: PracticeProvider { didSet { defaults.set(practiceProvider.rawValue,forKey:"practiceProvider") } }
+    @Published var elevenLabsOptions: ElevenLabsOptions { didSet { persistVoiceOptions(elevenLabsOptions,key:"elevenLabsOptions") } }
+    var elevenLabsSpeech: (ElevenLabsOptions) -> ElevenLabsSpeech = { ElevenLabsSpeech(options:$0) }
     @Published var conversationVoiceOptions: OpenAIVoiceOptions { didSet { persistVoiceOptions(conversationVoiceOptions,key:"conversationVoiceOptions") } }
     @Published var practiceVoiceOptions: OpenAIVoiceOptions { didSet { persistVoiceOptions(practiceVoiceOptions,key:"practiceVoiceOptions") } }
     private func persistVoiceOptions<T: Encodable>(_ value: T, key: String) {
         if let data = try? JSONEncoder().encode(value) { defaults.set(data,forKey:key) }
     }
     @Published var settingsTab = "conversation"
-    var practiceVoiceLabel: String { "\(RealtimeVoice(rawValue:builtInPracticeVoice)?.name ?? "Marin") · Codex voice" }
+    var practiceVoiceLabel: String { practiceProvider == .elevenLabs ? elevenLabsOptions.label : "\(RealtimeVoice(rawValue:builtInPracticeVoice)?.name ?? "Marin") · Codex voice" }
     let store: LibraryStore
     let audio = AudioController()
     let defaults: UserDefaults
@@ -187,6 +190,7 @@ struct MessageDeletionUndo {
         }
     }
     init(demo: Bool = false, libraryRoot: URL? = nil, preferences: UserDefaults? = nil) {
+        InstanceEvidence.record("model-created")
         self.demo = demo
         defaults = preferences ?? (demo ? UserDefaults(suiteName:AppIdentity.bundleIdentifier + ".preview")! : .standard)
         if !demo && libraryRoot == nil {
@@ -197,6 +201,17 @@ struct MessageDeletionUndo {
         modelName = defaults.string(forKey:"model") ?? "gpt-realtime"
         conversationVoice = RealtimeVoice(rawValue:defaults.string(forKey:"conversationVoice") ?? "")?.rawValue ?? "marin"
         builtInPracticeVoice = RealtimeVoice(rawValue:defaults.string(forKey:"builtInPracticeVoice") ?? "")?.rawValue ?? "marin"
+        practiceProvider = PracticeProvider(rawValue:defaults.string(forKey:"practiceProvider") ?? "") ?? .codex
+        var restoredVoice = ElevenLabsOptions()
+        restoredVoice.voiceID = defaults.string(forKey:"clone") ?? ""
+        if let bytes = defaults.data(forKey:"voiceProfiles"), let profiles = try? JSONSerialization.jsonObject(with:bytes) as? [[String:Any]],
+           let profile = profiles.first(where:{ ($0["providerID"] as? String) == restoredVoice.voiceID && ($0["requiresVerification"] as? Bool) != true }) {
+            restoredVoice.voiceName = profile["name"] as? String ?? "My voice"
+        }
+        var selectedVoiceOptions = (defaults.data(forKey:"elevenLabsOptions").flatMap { try? JSONDecoder().decode(ElevenLabsOptions.self,from:$0) }) ?? restoredVoice
+        if !selectedVoiceOptions.speed.isFinite || !(0.7...1.2).contains(selectedVoiceOptions.speed) { selectedVoiceOptions.speed = 1 }
+        if !["eleven_multilingual_v2","eleven_flash_v2_5"].contains(selectedVoiceOptions.model) { selectedVoiceOptions.model = "eleven_multilingual_v2" }
+        elevenLabsOptions = selectedVoiceOptions
         let voicePreferences = defaults
         func options<T: Decodable>(_ key: String, fallback: T, validate: (T) throws -> Void) -> T {
             guard let data = voicePreferences.data(forKey:key), let value = try? JSONDecoder().decode(T.self,from:data), (try? validate(value)) != nil else { return fallback }
@@ -704,16 +719,32 @@ struct MessageDeletionUndo {
         let text = english
         let label = practiceVoiceLabel
         let service = RealtimeService(model:modelName,voice:builtInPracticeVoice,options:practiceVoiceOptions)
+        let eleven = practiceProvider == .elevenLabs ? elevenLabsSpeech(elevenLabsOptions) : nil
         let token = turn.begin(.generating); error = nil; helpProgress = "Creating your example…"
         task = Task {
             do {
-                let url = try await service.referenceAudio(text:text,root:store.root,force:force)
+                let url: URL
+                if let eleven { url = try await eleven.referenceAudio(text:text,root:store.root,force:force) }
+                else { url = try await service.referenceAudio(text:text,root:store.root,force:force) }
                 let pitch = try await Task.detached { try AudioFile.pitch(url) }.value
                 guard !Task.isCancelled, turn.epoch == token else { return }
                 expression?.reference = url.lastPathComponent; expression?.referenceKind = label
                 referencePitch = pitch; saveExpression(); _ = turn.finish(token)
                 helpProgress = nil
                 notice = "Your reference is ready. Listen, then try saying it yourself."
+            } catch { fail(error,token:token) }
+        }
+    }
+
+    func previewElevenLabs() {
+        guard !busy else { return }
+        let speech = elevenLabsSpeech(elevenLabsOptions)
+        let token = turn.begin(.generating); error = nil
+        task = Task {
+            do {
+                let url = try await speech.referenceAudio(text:ReferenceSpeech.preview,root:store.root)
+                guard !Task.isCancelled, turn.epoch == token else { return }
+                _ = turn.finish(token); play(url.lastPathComponent)
             } catch { fail(error,token:token) }
         }
     }

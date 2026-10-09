@@ -13,6 +13,10 @@ from pathlib import Path
 def validate_metadata(info, version, build):
     expected = {"CFBundleShortVersionString":version, "CFBundleVersion":build,
                 "CFBundleIdentifier":"com.lixiaolai.mochi-macos", "LSMinimumSystemVersion":"14.0"}
+    if info.get("LSMultipleInstancesProhibited"):
+        raise ValueError("Single-instance ownership must be per user, not across user sessions")
+    if info.get("MochiSingleInstanceProtocol") is not True:
+        raise ValueError("Missing single-instance protocol marker")
     if not str(build).isdigit() or int(build) < 1:
         raise ValueError("Build number must be a positive integer")
     for key, value in expected.items():
@@ -36,16 +40,16 @@ def check_binary(path, *, run=subprocess.run):
 
 
 def validate_distribution_symbols(app_strings, helper_symbols, app_symbols=""):
-    for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer"):
+    for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "MOCHI_INSTANCE_EVENTS_DIR", "MOCHI_INSTANCE_TEST_ID", "--preview", "native-smoke", "mochi-instance-", "MOCHI_E2E_LIBRARY_ROOT", "mochi.e2e.command", "SingleInstanceE2E", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer", "ComposerGeometryProbe", "mochi-composer-geometry-probe"):
         if probe in app_strings:
             raise ValueError("Development probes cannot ship in the distribution app")
     for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray"):
         if symbol in app_symbols:
             raise ValueError("Development probe symbols cannot ship in the distribution app")
-    for retired in ("api.elevenlabs.io", "ElevenLabsVoices", "VoiceRenderer", "VoiceSetupModel", "ELEVENLABS_API_KEY", "OPENAI_API_KEY"):
+    for retired in ("OPENAI_API_KEY",):
         if retired in app_strings or retired in app_symbols:
-            raise ValueError("Retired voice providers cannot ship in the Codex-only app")
-    for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken"):
+            raise ValueError("OpenAI API-key fallback cannot ship")
+    for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken", "ElevenLabsSpeech", "ElevenLabsCredential"):
         if symbol in helper_symbols:
             raise ValueError("Provider and credential code cannot ship in the MCP helper")
 

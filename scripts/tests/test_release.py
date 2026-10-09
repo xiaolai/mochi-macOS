@@ -59,13 +59,15 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue(any("submit" in c for c in calls))
 
     def test_metadata_rejects_wrong_version_build_and_identity(self):
-        info={"CFBundleShortVersionString":"0.2.0","CFBundleVersion":"25","CFBundleIdentifier":"com.lixiaolai.mochi-macos","LSMinimumSystemVersion":"14.0"}
-        release.validate_metadata(info,"0.2.0","25")
+        info={"CFBundleShortVersionString":"0.3.0","CFBundleVersion":"27","CFBundleIdentifier":"com.lixiaolai.mochi-macos","LSMinimumSystemVersion":"14.0","MochiSingleInstanceProtocol":True}
+        release.validate_metadata(info,"0.3.0","27")
         previous=dict(info); previous["CFBundleIdentifier"]="com.xiaolai.mochi-macos"
-        with self.assertRaises(ValueError): release.validate_metadata(previous,"0.2.0","25")
+        with self.assertRaises(ValueError): release.validate_metadata(previous,"0.3.0","27")
+        cross_user=dict(info); cross_user["LSMultipleInstancesProhibited"]=True
+        with self.assertRaises(ValueError): release.validate_metadata(cross_user,"0.3.0","27")
         for key in info:
             broken=dict(info); broken[key]="wrong"
-            with self.assertRaises(ValueError): release.validate_metadata(broken,"0.2.0","25")
+            with self.assertRaises(ValueError): release.validate_metadata(broken,"0.3.0","27")
 
     def test_cask_requires_real_hash_and_explicit_tap_name(self):
         with self.assertRaises(ValueError): release.render_cask('sha256 "@SHA256@"',"bad")
@@ -101,9 +103,9 @@ class ReleaseTests(unittest.TestCase):
 
     def test_distribution_gate_rejects_probes_and_provider_symbols(self):
         release.validate_distribution_symbols("normal app", "normal helper")
-        for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer"):
+        for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "MOCHI_INSTANCE_EVENTS_DIR", "MOCHI_INSTANCE_TEST_ID", "--preview", "native-smoke", "mochi-instance-", "MOCHI_E2E_LIBRARY_ROOT", "mochi.e2e.command", "SingleInstanceE2E", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer", "ComposerGeometryProbe", "mochi-composer-geometry-probe"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols(probe,"normal")
-        for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken"):
+        for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken", "ElevenLabsSpeech", "ElevenLabsCredential"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal",symbol)
         for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",symbol)
@@ -114,7 +116,8 @@ class ReleaseTests(unittest.TestCase):
         release.check_distribution("app","helper",run=run)
         self.assertEqual(calls,[["strings","app"],["nm","app"],["nm","helper"]])
 
-    def test_distribution_gate_rejects_retired_voice_providers(self):
-        for retired in ("api.elevenlabs.io", "ElevenLabsVoices", "VoiceRenderer", "VoiceSetupModel", "ELEVENLABS_API_KEY", "OPENAI_API_KEY"):
+    def test_distribution_gate_allows_optional_provider_but_rejects_api_key_fallback(self):
+        release.validate_distribution_symbols("api.elevenlabs.io ELEVENLABS_API_KEY", "normal", "ElevenLabsSpeech ElevenLabsCredential")
+        for retired in ("OPENAI_API_KEY",):
             with self.assertRaises(ValueError): release.validate_distribution_symbols(retired,"normal","normal")
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",retired)

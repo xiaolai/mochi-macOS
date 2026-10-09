@@ -32,12 +32,13 @@ struct SettingsView: View {
                 Section("Storage") {
                     LabeledContent("Conversations and recordings",value:"On this Mac")
                     LabeledContent("Sign-in",value:"Your local Codex session")
+                    LabeledContent("ElevenLabs key",value:"macOS Keychain")
                     Button("Export Library Backup…",action:app.exportLibraryBackup)
                     Button("Import Library Backup…",action:app.importLibraryBackup)
                     Button("Show Data Folder…") { NSWorkspace.shared.open(app.store.root) }
                 }
                 Section("Privacy") {
-                    Text("Conversation text, context, voice messages, and example text go to OpenAI through your Codex sign-in. Practice attempts and pitch analysis stay on your Mac.")
+                    Text("Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text goes to the selected provider: Codex or ElevenLabs. Practice attempts and pitch analysis stay on your Mac.")
                     Text("Library backups include conversations and practice audio, not sign-in credentials. Provider processing and retention follow your account settings.").foregroundStyle(.secondary)
                 }
                 Section("Mochi") {

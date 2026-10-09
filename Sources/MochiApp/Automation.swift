@@ -11,6 +11,7 @@ extension AppModel {
     var mcpConfigurationAvailable: Bool { FileManager.default.isExecutableFile(atPath:mcpExecutablePath) && !Bundle.main.bundleURL.path.contains("/AppTranslocation/") }
     var mcpConfiguration: String { (try? MochiTools.encode(["mcpServers":["mochi":["command":mcpExecutablePath,"env":["MOCHI_CONTROL_SOCKET":controlSocketPath]]]])) ?? "" }
     func configureAutomation() {
+        InstanceEvidence.record("automation-configured")
         guard externalControlEnabled && (!demo || allowDemoAutomation) else {
             controlHealthTask?.cancel(); controlHealthTask = nil
             controlServer?.stop(); controlServer = nil; toolResultCache = [:]; toolResultOrder = []; automationStatus = "Disabled"; return

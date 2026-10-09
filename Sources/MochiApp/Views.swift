@@ -297,6 +297,9 @@ struct WorkspaceView: View {
                     .disabled(app.turn.activity == .recording || app.turn.activity == .requestingPermission)
                 TextField("Message Mochi",text:$app.draft,axis:.vertical)
                     .accessibilityIdentifier("conversation-composer")
+                    #if MOCHI_DEVELOPMENT
+                    .background(ComposerGeometryProbe())
+                    #endif
                     .textFieldStyle(.plain).font(.system(size:15)).lineLimit(1...5)
                     .onSubmit { app.send() }.disabled(app.busy)
                 Button(action:app.send) { Image(systemName:"arrow.up").fontWeight(.semibold) }
@@ -421,3 +424,13 @@ private extension View {
         else { self }
     }
 }
+
+#if MOCHI_DEVELOPMENT
+/// Native geometry evidence independent of SwiftUI's accessibility implementation.
+struct ComposerGeometryProbe: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(); view.identifier = NSUserInterfaceItemIdentifier("mochi-composer-geometry-probe"); return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {}
+}
+#endif

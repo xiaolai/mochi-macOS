@@ -5,7 +5,6 @@ struct PracticePane: View {
     @ObservedObject var app: AppModel
     @State private var normalized = false
     @State private var directEnglish = ""
-    @State private var voiceOptionsOpen = false
     @State private var voiceDetailsOpen = false
     @State private var pitchOpen = false
     @State private var smoothPitch = true
@@ -173,21 +172,12 @@ struct PracticePane: View {
             TextField("English sentence",text:Binding(get:{app.english},set:app.editEnglish),axis:.vertical)
                 .font(.system(size:22,weight:.medium)).textFieldStyle(.plain).lineLimit(2...4).disabled(app.busy)
             DisclosureGroup("Example voice: \(app.practiceVoiceLabel)",isExpanded:$voiceDetailsOpen) {
-            VStack(alignment:.leading,spacing:10) {
-            HStack {
-                Picker("Voice",selection:$app.builtInPracticeVoice) {
-                    ForEach(RealtimeVoice.allCases) { voice in Text(voice.name).tag(voice.rawValue) }
-                }.fixedSize().disabled(app.busy)
-                Spacer()
-                Button { voiceOptionsOpen = true } label: { Image(systemName:"slider.horizontal.3") }
-                    .help("Voice options").disabled(app.busy)
-                    .popover(isPresented:$voiceOptionsOpen) {
-                        Form {
-                            OpenAIVoiceOptionsView(options:$app.practiceVoiceOptions,expanded:true)
-                        }.formStyle(.grouped).frame(width:460,height:190)
+                VStack(alignment:.leading,spacing:10) {
+                    PracticeVoiceControls(app:app).disabled(app.busy)
+                    if app.practiceProvider == .elevenLabs {
+                        Button("Connection Settings…") { app.settingsTab = "voices"; app.settingsOpen = true }
                     }
-            }
-            }
+                }
             }
             if app.expression?.reference != nil {
                 Text("Saved example: \(app.expression?.referenceKind ?? "Reference")").font(.caption).foregroundStyle(.secondary)

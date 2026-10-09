@@ -4,11 +4,15 @@ import MochiCore
 
 @main struct MochiApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @StateObject private var model = AppModel(demo:DevelopmentLaunch.demo)
+    @StateObject private var model: AppModel
+    init() {
+        SingleInstanceController.shared.enforce()
+        _model = StateObject(wrappedValue:AppModel(demo:DevelopmentLaunch.demo,libraryRoot:DevelopmentLaunch.libraryRoot,preferences:DevelopmentLaunch.preferences))
+    }
     var body: some Scene {
         Window("Mochi",id:"main") {
             WorkspaceView(app:model)
-                .background(MainWindowReader { delegate.tray.attach($0, model:model) })
+                .background(MainWindowReader { delegate.attachWindow($0,model:model) })
                 .onAppear { delegate.attachModel(model); delegate.runDevelopmentActions(model) }
         }.defaultSize(width:1040,height:760)
         .windowToolbarStyle(.unified)
@@ -41,7 +45,17 @@ import MochiCore
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     var model: AppModel?
     let tray = TrayController()
+    #if MOCHI_DEVELOPMENT
+    private let instanceE2E = SingleInstanceE2E()
+    #endif
     private var ran = false
+    func attachWindow(_ window: NSWindow, model: AppModel) {
+        tray.attach(window,model:model)
+        #if MOCHI_DEVELOPMENT
+        instanceE2E.attach(window,tray:tray)
+        #endif
+        SingleInstanceController.shared.revealWorkspace = { [weak self] in self?.tray.showWindow() }
+    }
     func attachModel(_ model: AppModel) {
         guard self.model !== model else { return }
         self.model = model
@@ -51,7 +65,7 @@ import MochiCore
     func runDevelopmentActions(_ model: AppModel) {
         #if MOCHI_DEVELOPMENT
         if CommandLine.arguments.contains("--smoke-test") { smoke(model) }
-        if CommandLine.arguments.contains("--tray-smoke-test") { smokeTray(model) }
+        if CommandLine.arguments.contains("--tray-smoke-test") || CommandLine.arguments.contains("--single-instance-smoke-test") { smokeTray(model) }
         if CommandLine.arguments.contains("--probe") { probe(model) }
         if CommandLine.arguments.contains("--tools-probe") { toolsProbe(model) }
         #endif
@@ -152,6 +166,24 @@ import MochiCore
                 let clickReopenedDeadline = Date().addingTimeInterval(2)
                 while (NSApp.isHidden || !window.isVisible) && Date() < clickReopenedDeadline { try await Task.sleep(nanoseconds:1_000_000) }
                 checks.append(("Left click restores window and Dock without menu",window.isVisible && !NSApp.isHidden && NSApp.activationPolicy() == .regular && !presented))
+                if CommandLine.arguments.contains("--single-instance-smoke-test") {
+                    tray.closeToTray()
+                    let duplicate = Process()
+                    duplicate.executableURL = Bundle.main.executableURL
+                    duplicate.arguments = ["--single-instance-smoke-test"]
+                    try duplicate.run()
+                    let deadline = Date().addingTimeInterval(8)
+                    while (duplicate.isRunning || !window.isVisible || NSApp.isHidden || !NSApp.isActive || !window.isKeyWindow) && Date() < deadline {
+                        try await Task.sleep(nanoseconds:20_000_000)
+                    }
+                    checks.append(("Duplicate launch exits successfully",!duplicate.isRunning && duplicate.terminationStatus == 0))
+                    checks.append(("Duplicate launch restores existing tray window",window.isVisible && !NSApp.isHidden && tray.window === window))
+                    checks.append(("Duplicate launch restores Dock presence",NSApp.activationPolicy() == .regular))
+                    checks.append(("Duplicate launch restores active key workspace",NSApp.isActive && window.isKeyWindow))
+                    SingleInstanceController.shared.enforce()
+                    checks.append(("Repeated enforce retains the existing workspace",window.isVisible))
+                    if duplicate.isRunning { duplicate.terminate() }
+                }
                 tray.presentMenu = originalPresenter
                 let icon = TrayController.icon()
                 for scale in [1,2,4] {
@@ -165,6 +197,8 @@ import MochiCore
                 }
                 let lines = checks.map { "\($0.1 ? "PASS" : "FAIL"): \($0.0)" }
                 try Data((lines.joined(separator:"\n")+"\n").utf8).write(to:directory.appendingPathComponent("tray-smoke.txt"))
+                let evidence: [String:Any] = ["pid":getpid(),"time":Date().timeIntervalSince1970,"build":Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") ?? "unknown","checks":checks.map { ["name":$0.0,"pass":$0.1] }]
+                try JSONSerialization.data(withJSONObject:evidence,options:[.prettyPrinted,.sortedKeys]).write(to:directory.appendingPathComponent("tray-smoke.json"))
             } catch {
                 try? Data("FAIL: \(error.localizedDescription)\n".utf8).write(to:directory.appendingPathComponent("tray-smoke.txt"))
             }
@@ -242,7 +276,18 @@ import MochiCore
             try? await Task.sleep(nanoseconds:300_000_000)
             capture("welcome.png")
             @MainActor func composerFrame(_ root: Any, depth: Int = 0) -> NSRect? {
-                guard depth < 30, let element = root as? any NSAccessibilityProtocol else { return nil }
+                guard depth < 60 else { return nil }
+                if let window = root as? NSWindow, let content = window.contentView,
+                   let frame = composerFrame(content,depth:depth+1) { return frame }
+                if let view = root as? NSView {
+                    if view.identifier?.rawValue == "mochi-composer-geometry-probe", let window = view.window {
+                        return window.convertToScreen(view.convert(view.bounds,to:nil))
+                    }
+                    for child in view.subviews {
+                        if let frame = composerFrame(child,depth:depth+1) { return frame }
+                    }
+                }
+                guard let element = root as? any NSAccessibilityProtocol else { return nil }
                 if element.accessibilityIdentifier() == "conversation-composer" { return element.accessibilityFrame() }
                 for child in element.accessibilityChildren() ?? [] {
                     if let frame = composerFrame(child,depth:depth+1) { return frame }
@@ -459,6 +504,12 @@ import MochiCore
             model.settingsTab = "voices"
             try? await Task.sleep(nanoseconds:350_000_000)
             capture("voice-settings.png",settings:true)
+            model.practiceProvider = .elevenLabs
+            model.elevenLabsOptions.voiceID = "fixture_voice"
+            model.elevenLabsOptions.voiceName = "Custom voice"
+            try? await Task.sleep(nanoseconds:350_000_000)
+            capture("elevenlabs-settings.png",settings:true)
+            model.practiceProvider = .codex
             let pitchFixture = (0..<150).map { i -> PitchPoint in
                 let t = Double(i)*0.015
                 let value = 7 + 3*sin(t*5) + (i.isMultiple(of:2) ? 0.45 : -0.45) + (i == 88 ? 12 : 0)
@@ -586,9 +637,18 @@ import MochiCore
 }
 
 enum DevelopmentLaunch {
+    static var libraryRoot: URL? {
+        #if MOCHI_DEVELOPMENT
+        if let root = ProcessInfo.processInfo.environment["MOCHI_E2E_LIBRARY_ROOT"] { return URL(fileURLWithPath:root) }
+        #endif
+        return nil
+    }
+    static var preferences: UserDefaults? {
+        libraryRoot.map { UserDefaults(suiteName:"mochi-e2e-" + $0.lastPathComponent)! }
+    }
     static var demo: Bool {
         #if MOCHI_DEVELOPMENT
-        return ["--preview","--smoke-test","--tray-smoke-test","--tools-probe","--probe"].contains { CommandLine.arguments.contains($0) }
+        return ["--preview","--smoke-test","--tray-smoke-test","--single-instance-smoke-test","--tools-probe","--probe"].contains { CommandLine.arguments.contains($0) }
         #else
         return false
         #endif
