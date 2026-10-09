@@ -97,13 +97,21 @@ struct WorkspaceView: View {
                     }
                 }
             }
-            .safeAreaInset(edge:.bottom,spacing:0) {
+            .overlay(alignment:.topTrailing) {
                 if let notice = app.notice, !app.practice {
-                    HStack {
-                        Text(notice).font(.caption).foregroundStyle(.secondary)
-                        Spacer()
-                        Button { app.notice = nil } label: { Label("Dismiss notice",systemImage:"xmark") }.labelStyle(.iconOnly).buttonStyle(.borderless)
-                    }.padding(.horizontal,16).padding(.vertical,10).background(.bar)
+                    HStack(alignment:.top,spacing:10) {
+                        Text(notice).font(.callout).textSelection(.enabled)
+                            .frame(maxWidth:.infinity,alignment:.leading)
+                        Button { app.notice = nil } label: { Image(systemName:"xmark") }
+                            .buttonStyle(.borderless).foregroundStyle(.secondary)
+                            .help("Dismiss notice").accessibilityLabel("Dismiss notice")
+                    }
+                    .padding(12).frame(maxWidth:360)
+                    .background(.regularMaterial,in:RoundedRectangle(cornerRadius:12))
+                    .overlay { RoundedRectangle(cornerRadius:12).strokeBorder(.secondary.opacity(0.15)) }
+                    .shadow(color:.black.opacity(0.08),radius:6,y:2)
+                    .padding(16)
+                    .accessibilityIdentifier("conversation-notice")
                 }
             }
             .navigationTitle("")
@@ -273,6 +281,7 @@ struct WorkspaceView: View {
                     .accessibilityLabel("Help Me Say This")
                     .disabled(app.turn.activity == .recording || app.turn.activity == .requestingPermission)
                 TextField("Message Mochi",text:$app.draft,axis:.vertical)
+                    .accessibilityIdentifier("conversation-composer")
                     .textFieldStyle(.plain).font(.system(size:15)).lineLimit(1...5)
                     .onSubmit { app.send() }.disabled(app.busy)
                 Button(action:app.send) { Image(systemName:"arrow.up").fontWeight(.semibold) }

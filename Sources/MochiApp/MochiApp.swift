@@ -237,6 +237,27 @@ import MochiCore
             model.newChat()
             try? await Task.sleep(nanoseconds:300_000_000)
             capture("welcome.png")
+            @MainActor func composerFrame(_ root: Any, depth: Int = 0) -> NSRect? {
+                guard depth < 30, let element = root as? any NSAccessibilityProtocol else { return nil }
+                if element.accessibilityIdentifier() == "conversation-composer" { return element.accessibilityFrame() }
+                for child in element.accessibilityChildren() ?? [] {
+                    if let frame = composerFrame(child,depth:depth+1) { return frame }
+                }
+                return nil
+            }
+            let beforeNotice = mainWindow.flatMap { composerFrame($0) }
+            model.notice = "Help draft saved."
+            try? await Task.sleep(nanoseconds:250_000_000)
+            capture("conversation-notice.png")
+            let withNotice = mainWindow.flatMap { composerFrame($0) }
+            if let beforeNotice, let withNotice {
+                if abs(beforeNotice.minY-withNotice.minY) > 0.5 || abs(beforeNotice.height-withNotice.height) > 0.5 {
+                    captureFailures.append("Notice moved or resized the conversation composer")
+                }
+            } else { captureFailures.append("Could not locate the composer for notice geometry verification") }
+            try? await Task.sleep(nanoseconds:4_100_000_000)
+            if model.notice != nil { captureFailures.append("Conversation notice did not automatically dismiss") }
+            capture("conversation-notice-dismissed.png")
             model.auth = "codex"
             model.startHelp()
             try? await Task.sleep(nanoseconds:300_000_000)

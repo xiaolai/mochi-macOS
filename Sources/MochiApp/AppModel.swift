@@ -106,7 +106,21 @@ struct ReplyCallbacks {
     @Published var expression: PracticeExpression?
     @Published var turn = TurnMachine()
     @Published var error: String?
-    @Published var notice: String?
+    @Published var notice: String? { didSet { scheduleNoticeDismissal() } }
+    private var noticeTask: Task<Void,Never>?
+    private var noticeRevision = UUID()
+    var noticeSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds:$0) }
+    private func scheduleNoticeDismissal() {
+        noticeTask?.cancel(); noticeTask = nil
+        noticeRevision = UUID()
+        guard notice != nil, !practice else { return }
+        let revision = noticeRevision, sleep = noticeSleep
+        noticeTask = Task { [weak self] in
+            do { try await sleep(4_000_000_000) } catch { return }
+            guard !Task.isCancelled, let self, self.noticeRevision == revision else { return }
+            self.notice = nil
+        }
+    }
     @Published var referencePitch: [PitchPoint] = []
     @Published var attemptPitch: [PitchPoint] = []
     @Published private(set) var playbackFile: String?
@@ -848,7 +862,7 @@ struct ReplyCallbacks {
             } else { library.conversations[ci].helpDraft = saved }
         }
         leavePractice(); expression = nil
-        notice = completed ? "Saved to My Expressions. Say the thought in your own words when you're ready." : "You're back. Your help draft is saved."
+        notice = completed ? "Saved to My Expressions. Say the thought in your own words when you're ready." : "Help draft saved."
     }
     func openExpression(_ item: PracticeExpression) {
         var sourceID = item.conversationID
