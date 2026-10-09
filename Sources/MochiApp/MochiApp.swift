@@ -13,9 +13,16 @@ import MochiCore
         }.defaultSize(width:1040,height:760)
         .windowToolbarStyle(.unified)
         .commands {
+            CommandGroup(replacing:.appTermination) {
+                Button("Close Window to Tray",action:delegate.tray.closeToTray).keyboardShortcut("q")
+                Button("Quit Mochi Completely",action:delegate.tray.quitApp)
+            }
             CommandGroup(replacing:.newItem) { Button("New Conversation",action:model.newChat).keyboardShortcut("n") }
             CommandMenu("Conversation") {
-                Button("Search Conversations") { model.searchOpen = true; model.searchFocusRequest += 1 }.keyboardShortcut("f").disabled(model.practice || model.renameID != nil || !model.permanentDeleteIDs.isEmpty)
+                Button("Find in Conversation",action:model.findInConversation).keyboardShortcut("f").disabled(!model.canFindInConversation)
+                Button("Next Match") { model.moveConversationMatch(1) }.keyboardShortcut("g").disabled(model.conversationMatchIDs.isEmpty)
+                Button("Previous Match") { model.moveConversationMatch(-1) }.keyboardShortcut("g",modifiers:[.command,.shift]).disabled(model.conversationMatchIDs.isEmpty)
+                Button("Search All Conversations") { model.searchOpen = true; model.searchFocusRequest += 1 }.keyboardShortcut("f",modifiers:[.command,.shift]).disabled(model.practice || model.renameID != nil || !model.permanentDeleteIDs.isEmpty)
                 Button("Manage Conversations…") { model.managerOpen = true }.keyboardShortcut("m",modifiers:[.command,.shift]).disabled(model.practice)
                 if let chat = model.conversation { ChatActions(app:model,chat:chat).disabled(model.practice) }
                 Divider()
@@ -23,7 +30,7 @@ import MochiCore
                 Button("Import Library Backup…",action:model.importLibraryBackup)
                 Divider()
                 Button("Help Me Say This",action:model.startHelp).keyboardShortcut("h",modifiers:[.command,.shift]).disabled(!model.writableConversation)
-                Button("Stop",action:model.stop).keyboardShortcut(.escape,modifiers:[])
+                Button("Stop") { if model.conversationSearchOpen { model.closeConversationSearch() } else { model.stop() } }.keyboardShortcut(.escape,modifiers:[])
             }
         }
         Settings {
@@ -47,7 +54,7 @@ import MochiCore
             }
         }
     }
-    func applicationWillTerminate(_ notification: Notification) { model?.stop(); model?.save() }
+    func applicationWillTerminate(_ notification: Notification) { model?.cancelVoiceSetup?(); model?.stop(); model?.save() }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         tray.showWindow()
@@ -87,6 +94,60 @@ import MochiCore
                 _ = applicationShouldHandleReopen(NSApp,hasVisibleWindows:false)
                 checks.append(("Dock reopen restores workspace",window.isVisible))
                 checks.append(("Last window close keeps app running",!applicationShouldTerminateAfterLastWindowClosed(NSApp)))
+                func menuItems(_ menu: NSMenu) -> [NSMenuItem] {
+                    menu.items.flatMap { item in [item] + (item.submenu.map(menuItems) ?? []) }
+                }
+                let commands = NSApp.mainMenu.map(menuItems) ?? []
+                let commandQ = commands.first { $0.keyEquivalent == "q" && $0.keyEquivalentModifierMask == .command }
+                checks.append(("Command-Q is Close Window to Tray",commandQ?.title == "Close Window to Tray"))
+                let quit = tray.menu?.items.first { $0.title == "Quit Mochi Completely" }
+                checks.append(("Tray quit has no Command-Q shortcut",quit != nil && quit?.keyEquivalent == ""))
+                let playbackEpoch = model.turn.begin(.playing)
+                if let commandQ, let menu = commandQ.menu {
+                    menu.performActionForItem(at:menu.index(of:commandQ))
+                }
+                let hiddenDeadline = Date().addingTimeInterval(2)
+                while !NSApp.isHidden && Date() < hiddenDeadline { try await Task.sleep(nanoseconds:1_000_000) }
+                checks.append(("Command-Q hides workspace and keeps tray",!window.isVisible && NSApp.isHidden && tray.statusItem?.button != nil))
+                checks.append(("Command-Q removes Dock presence",NSApp.activationPolicy() == .accessory && NSRunningApplication.current.activationPolicy == .accessory))
+                checks.append(("Command-Q stops active work and preserves draft",model.turn.epoch != playbackEpoch && !model.busy && model.draft == "Tray smoke draft"))
+                tray.showWindow()
+                let reopenedDeadline = Date().addingTimeInterval(2)
+                while (NSApp.isHidden || !window.isVisible) && Date() < reopenedDeadline { try await Task.sleep(nanoseconds:1_000_000) }
+                checks.append(("Tray reopens workspace after Command-Q",window.isVisible && !NSApp.isHidden && tray.window === window))
+                checks.append(("Tray reopen restores Dock presence",NSApp.activationPolicy() == .regular && NSRunningApplication.current.activationPolicy == .regular))
+                checks.append(("Tray button handles clicks without an automatic menu",tray.statusItem?.menu == nil && tray.statusItem?.button?.target === tray))
+                tray.closeToTray()
+                let clickHiddenDeadline = Date().addingTimeInterval(2)
+                while !NSApp.isHidden && Date() < clickHiddenDeadline { try await Task.sleep(nanoseconds:1_000_000) }
+                let originalPresenter = tray.presentMenu
+                var presented = false
+                tray.presentMenu = { menu,event,button in
+                    presented = menu === self.tray.menu && event.type == .rightMouseUp && button === self.tray.statusItem?.button
+                }
+                let rightClick = NSEvent.mouseEvent(with:.rightMouseUp,location:.zero,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:0,context:nil,eventNumber:1,clickCount:1,pressure:0)!
+                tray.handleClick(rightClick)
+                checks.append(("Right click presents tray menu without reopening",presented && !window.isVisible && NSApp.activationPolicy() == .accessory))
+                presented = false
+                tray.presentMenu = { menu,event,button in
+                    presented = menu === self.tray.menu && event.modifierFlags.contains(.control) && button === self.tray.statusItem?.button
+                }
+                let controlClick = NSEvent.mouseEvent(with:.leftMouseUp,location:.zero,modifierFlags:[.control],timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:0,context:nil,eventNumber:3,clickCount:1,pressure:0)!
+                tray.handleClick(controlClick)
+                checks.append(("Control-click presents menu without reopening",presented && !window.isVisible && NSApp.activationPolicy() == .accessory))
+                presented = false
+                let leftClick = NSEvent.mouseEvent(with:.leftMouseUp,location:.zero,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:0,context:nil,eventNumber:2,clickCount:1,pressure:0)!
+                tray.handleClick(leftClick)
+                let clickReopenedDeadline = Date().addingTimeInterval(2)
+                while (NSApp.isHidden || !window.isVisible) && Date() < clickReopenedDeadline { try await Task.sleep(nanoseconds:1_000_000) }
+                checks.append(("Left click restores window and Dock without menu",window.isVisible && !NSApp.isHidden && NSApp.activationPolicy() == .regular && !presented))
+                tray.presentMenu = originalPresenter
+                let setup = VoiceSetupModel(app:model)
+                setup.begin(); tray.closeToTray()
+                checks.append(("Command-Q closes separate voice setup",setup.closed && !model.voiceSetupActive && model.cancelVoiceSetup == nil))
+                tray.showWindow()
+
+
                 let icon = TrayController.icon()
                 for scale in [1,2,4] {
                     let rep = NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:20*scale,pixelsHigh:18*scale,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0)!
@@ -115,9 +176,9 @@ import MochiCore
             var captureFailures: [String] = []
             var captureCount = 0
             let mainWindow = NSApp.windows.first(where: { $0.isVisible && !$0.isSheet && $0.parent == nil && $0.canBecomeMain && $0.frame.width >= 760 })
-            @MainActor func capture(_ name: String, settings: Bool = false) {
+            @MainActor func capture(_ name: String, settings: Bool = false, window explicitWindow: NSWindow? = nil) {
                 captureCount += 1
-                let target = settings ? NSApp.windows.first(where: { $0.isVisible && $0 !== mainWindow && $0.canBecomeMain }) : mainWindow
+                let target = explicitWindow ?? (settings ? NSApp.windows.first(where: { $0.isVisible && $0 !== mainWindow && $0.canBecomeMain }) : mainWindow)
                 guard let window = target else { captureFailures.append(name); return }
                 try? FileManager.default.removeItem(at:directory.appendingPathComponent(name))
                 let capture = Process()
@@ -129,6 +190,13 @@ import MochiCore
                 } catch { captureFailures.append(name) }
 
             }
+            if mainWindow?.titleVisibility != .hidden || mainWindow?.toolbar?.displayMode != .iconOnly {
+                captureFailures.append("Workspace title or toolbar display mode is incorrect")
+            }
+            if #available(macOS 15.0, *), mainWindow?.toolbar?.allowsDisplayModeCustomization != false {
+                captureFailures.append("Toolbar display-mode customization remains enabled")
+            }
+            if mainWindow?.titlebarSeparatorStyle != NSTitlebarSeparatorStyle.none { captureFailures.append("Title-bar separator remains enabled") }
             mainWindow?.attachedSheet?.makeFirstResponder(nil)
             model.practiceVoiceMode = .builtIn
             model.builtInPracticeVoice = "marin"
@@ -154,7 +222,18 @@ import MochiCore
             try? await Task.sleep(nanoseconds:350_000_000)
             model.resume()
             try? await Task.sleep(nanoseconds:350_000_000)
+            if mainWindow?.attachedSheet != nil { captureFailures.append("Practice/voice setup left a sheet attached to the conversation") }
             capture("conversation.png")
+            let toolbarStates: [(Activity,Bool,String)] = [(.generating,false,"generation"),(.playing,false,"playback"),(.recording,false,"recording"),(.requestingPermission,false,"permission"),(.idle,true,"voice-setup")]
+            for (activity,setup,name) in toolbarStates {
+                model.voiceSetupActive = setup
+                _ = model.turn.begin(activity)
+                try? await Task.sleep(nanoseconds:250_000_000)
+                let hasStop = mainWindow?.toolbar?.items.contains(where: { $0.label == "Stop" }) == true
+                if hasStop != (activity == .generating) { captureFailures.append("Incorrect title-bar Stop visibility: \(name)") }
+                capture("titlebar-stop-\(name).png")
+            }
+            model.voiceSetupActive = false; model.stop()
             model.newChat()
             try? await Task.sleep(nanoseconds:300_000_000)
             capture("welcome.png")
@@ -224,6 +303,42 @@ import MochiCore
                 capture("message-playback-compact.png")
                 if let window = mainWindow { window.setContentSize(NSSize(width:1120,height:840)) }
                 model.stop(); model.audio.makePlayer = originalPlayer
+                model.notice = nil; model.search = ""
+                model.openConversationSearch(); model.conversationQuery = "time"
+                try? await Task.sleep(nanoseconds:300_000_000)
+                capture("conversation-search.png")
+                model.moveConversationMatch(1)
+                try? await Task.sleep(nanoseconds:250_000_000)
+                capture("conversation-search-next.png")
+                if model.conversationMatchIDs.count != 2 { captureFailures.append("Current conversation search did not find both messages") }
+                model.conversationQuery = "no-such-message"
+                try? await Task.sleep(nanoseconds:250_000_000)
+                capture("conversation-search-empty.png")
+                @MainActor func searchFields(_ view: NSView) -> [NSSearchField] {
+                    (view as? NSSearchField).map { [$0] } ?? view.subviews.flatMap(searchFields)
+                }
+                let fields = mainWindow?.toolbar?.items.flatMap { item in item.view.map(searchFields) ?? [] } ?? []
+                if let field = fields.first(where: { $0.placeholderString == "Search this conversation" }) {
+                    if field.currentEditor() == nil { captureFailures.append("Conversation search did not acquire keyboard focus") }
+                    field.stringValue = ""
+                    if let action = field.action { NSApp.sendAction(action,to:field.target,from:field) }
+                    if !model.conversationQuery.isEmpty { captureFailures.append("Native search cancel did not clear the query") }
+                } else { captureFailures.append("Native conversation search field was not installed") }
+
+                if let window = mainWindow { window.setContentSize(NSSize(width:820,height:700)) }
+                model.conversationQuery = "time"
+                try? await Task.sleep(nanoseconds:250_000_000)
+                capture("conversation-search-compact.png")
+                let escapeCommand = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items).first { $0.title == "Stop" && $0.keyEquivalent == "\u{1b}" }
+                let searchEpoch = model.turn.begin(.generating)
+                if let command = escapeCommand, let menu = command.menu { menu.performActionForItem(at:menu.index(of:command)) }
+                if escapeCommand == nil || model.conversationSearchOpen || model.turn.epoch != searchEpoch {
+                    captureFailures.append("Escape must close search without cancelling a pending reply")
+                }
+                _ = model.turn.finish(searchEpoch)
+                model.closeConversationSearch()
+                if let window = mainWindow { window.setContentSize(NSSize(width:1120,height:840)) }
+
 
                 if model.conversation?.messages.first(where: { $0.id == failed.id })?.transcriptionState != .completed { captureFailures.append("Codex fixture recovery did not complete") }
             }
@@ -275,6 +390,29 @@ import MochiCore
             model.practiceVoiceMode = .personal
             try? await Task.sleep(nanoseconds:350_000_000)
             capture("voice-settings-elevenlabs.png",settings:true)
+            let pitchFixture = (0..<150).map { i -> PitchPoint in
+                let t = Double(i)*0.015
+                let value = 7 + 3*sin(t*5) + (i.isMultiple(of:2) ? 0.45 : -0.45) + (i == 88 ? 12 : 0)
+                return PitchPoint(time:t,hz:(55...65).contains(i) ? nil : 100*pow(2,value/12))
+            }
+            let comparison = NSWindow(contentRect:NSRect(x:0,y:0,width:680,height:460),styleMask:[.titled,.closable],backing:.buffered,defer:false)
+            comparison.title = "Pitch contour · display comparison"
+            comparison.isReleasedWhenClosed = false
+            comparison.contentView = NSHostingView(rootView:VStack(alignment:.leading,spacing:14) {
+                Text("Original samples · straight segments").font(.headline)
+                PitchChart(reference:pitchFixture,attempt:[],normalized:false,smoothed:false).frame(height:150)
+                Text("Light smoothing · shape-preserving cubic curves").font(.headline)
+                PitchChart(reference:pitchFixture,attempt:[],normalized:false,smoothed:true).frame(height:150)
+                Text("Illustrative pitch data · pauses remain gaps · original analysis stays unchanged").font(.caption).foregroundStyle(.secondary)
+            }.padding(20).frame(width:680,height:460))
+            comparison.center(); comparison.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(nanoseconds:300_000_000)
+            capture("pitch-curves-comparison.png",window:comparison)
+            NSApp.appearance = NSAppearance(named:.darkAqua)
+            try? await Task.sleep(nanoseconds:250_000_000)
+            capture("pitch-curves-comparison-dark.png",window:comparison)
+            NSApp.appearance = NSAppearance(named:.aqua)
+            comparison.orderOut(nil)
             let passed = captureFailures.isEmpty && model.library.expressions.count >= 1 && model.turn.mode == .conversation && model.turn.owner == .none
             try? Data("Native smoke: \(passed ? "PASS" : "FAIL"). \(captureCount) native window and sheet snapshots. Capture failures: \(captureFailures.count). No network, microphone or speaker output.\n".utf8).write(to:directory.appendingPathComponent("smoke.txt"))
             NSApp.terminate(nil)

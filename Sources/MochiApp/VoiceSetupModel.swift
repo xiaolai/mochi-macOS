@@ -36,8 +36,10 @@ struct SetupSample: Identifiable {
     let comparisonRenderer: (RenderIdentity, URL) async throws -> (URL,URL)
     private var task: Task<Void,Never>?
     private var clock: Task<Void,Never>?
-    private var closed = false
+    @Published private(set) var closed = false
+    var requestRecordingPermission: (() async -> Bool)?
     private var temporaryRecording: URL?
+    private var begun = false
     var directory: URL { app.store.root.appendingPathComponent("VoiceProfiles/\(profileID.uuidString)",isDirectory:true) }
     var totalDuration: Double { samples.reduce(0) { $0 + $1.quality.duration } }
     var canCreate: Bool { consent && totalDuration >= 60 && totalDuration <= 180 && !name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && name.count <= 80 }
@@ -47,7 +49,11 @@ struct SetupSample: Identifiable {
         let converted = try await renderer.render(identity,root:root)
         return (source,converted)
     }) { self.app = app; self.api = api; self.comparisonRenderer = comparisonRenderer; target = app.performer; options = app.personalVoiceOptions }
-    func begin() { app.stop(); app.voiceSetupActive = true }
+    func begin() {
+        guard !begun, !closed else { return }; begun = true
+        app.cancelVoiceSetup?(); app.stop(); app.voiceSetupActive = true
+        app.cancelVoiceSetup = { [weak self] in self?.close() }
+    }
     private func prepare() throws { try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700]) }
     func importSamples() {
         guard !busy, !recording else { return }
@@ -82,7 +88,11 @@ struct SetupSample: Identifiable {
         guard !busy, !playing, totalDuration < 180 else { return }
         busy = true; error = nil
         task = Task {
-            guard await audio.permission(), !Task.isCancelled, !closed else { busy = false; error = "Microphone permission is required. You can also import a recording."; return }
+            guard !closed, !Task.isCancelled else { return }
+            let permitted: Bool
+            if let requestRecordingPermission { permitted = await requestRecordingPermission() }
+            else { permitted = await audio.permission() }
+            guard permitted, !Task.isCancelled, !closed else { busy = false; error = "Microphone permission is required. You can also import a recording."; return }
             do {
                 try prepare()
                 let url = directory.appendingPathComponent("capture-\(UUID().uuidString).wav"); temporaryRecording = url
@@ -121,6 +131,7 @@ struct SetupSample: Identifiable {
     func loadAccountVoices() {
         guard !busy, !recording else { return }; busy = true; error = nil
         task = Task {
+            guard !closed, !Task.isCancelled else { return }
             do { let values = try await api.list(); guard !closed else { return }; accountVoices = values; busy = false }
             catch { busy = false; self.error = error.localizedDescription }
         }
@@ -136,6 +147,7 @@ struct SetupSample: Identifiable {
         audio.stop(); playing = false; busy = true; error = nil; sourceAudio = nil; convertedAudio = nil; heardConverted = false
         let selectedTarget = target
         task = Task {
+            guard !closed, !Task.isCancelled else { return }
             do {
                 try prepare()
                 if profile == nil {
@@ -164,6 +176,7 @@ struct SetupSample: Identifiable {
     func checkVerification() {
         guard !busy, let profile else { return }; busy = true; error = nil
         task = Task {
+            guard !closed, !Task.isCancelled else { return }
             do {
                 let voices = try await api.list()
                 guard !closed, let found = voices.first(where:{$0.id == profile.providerID}) else { busy = false; error = "Voice not found in this ElevenLabs account."; return }
@@ -210,12 +223,17 @@ struct SetupSample: Identifiable {
         guard !busy, !recording else { return }; busy = true; error = nil; audio.stop(); playing = false
         let identity = options.identity(text:ReferenceSpeech.preview,performer:target,clone:"")
         task = Task {
+            guard !closed, !Task.isCancelled else { return }
             do { try prepare(); let url = try await VoiceRenderer().pronunciation(identity,root:directory); guard !closed else { return }; busy = false; play(url) }
             catch { busy = false; self.error = error.localizedDescription }
         }
     }
     func close() {
-        closed = true; clock?.cancel(); task?.cancel(); audio.stop(); app.voiceSetupActive = false
+        guard !closed else { return }
+        closed = true; clock?.cancel(); task?.cancel(); audio.stop()
+        busy = false; recording = false; playing = false
+        app.practiceVoiceSetupOpen = false
+        app.voiceSetupActive = false; app.cancelVoiceSetup = nil
         if profile?.id != profileID { try? FileManager.default.removeItem(at:directory) }
         if let url = temporaryRecording { try? FileManager.default.removeItem(at:url) }
     }

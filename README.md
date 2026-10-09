@@ -1,6 +1,6 @@
 # Mochi
 
-Version **0.1.0**.
+Version **0.1.1**.
 
 A native macOS conversation app with Mochi. Find the English for a thought, hear it in your own voice, practise locally, and return to the conversation to say it yourself.
 
@@ -21,7 +21,7 @@ The local development app is ad-hoc signed; it is not a notarized distribution b
 1. Open Settings (⌘,) and configure OpenAI API-key access or explicitly select an existing Codex sign-in. Check connection verifies a real text response. No automatic provider fallback occurs.
 2. In Settings → Voices, choose Mochi’s conversation voice and a separate practice example voice. New users start with built-in Marin; all ten Realtime voices have a common-sentence preview. For personal examples, connect your ElevenLabs account and choose Set Up My Voice. Record/import 60–180 seconds of your voice or select an existing account clone, choose Jake/Grant pronunciation, consent to upload, compare and accept. No voice ID entry is required. Keys stay in Keychain; voice profiles stay in local preferences.
 3. Type a message or click Speak, then Finish to send a voice message. Recording stops at 60 seconds. No microphone opens at launch.
-4. Choose Help Me Say This in the window toolbar (⇧⌘H). An unfinished composer draft seeds the first thought; unfinished help drafts survive dismissing and relaunching. Type the intended meaning, or Record Thought → Finish & Review. Recording stays local until you choose Transcribe. If typed text already exists, review recognized words and choose Add to thought, Replace thought, or Keep typed thought. Then Find the English. The next screen keeps your original thought visible beside editable English; Try another wording offers an alternative, while unclear meaning returns a clarification question. Return immediately or choose Listen & Practise. Returning with English saves the expression to My Expressions and completes the Help draft, so the next Help session can use a new composer thought. Its thought recording is removed unless another item still references it. Closing the window keeps an unfinished draft, including its recognized-word review. Practising a saved expression preserves any separate unfinished draft. Discarding or replacing a thought recording removes the old file only when nothing else references it. Detailed voice options and the unscored pitch chart are expandable. You can also review an English sentence directly.
+4. Choose Help Me Say This beside the microphone in the input area (⇧⌘H). An unfinished composer draft seeds the first thought; unfinished help drafts survive dismissing and relaunching. Type the intended meaning, or Record Thought → Finish & Review. Recording stays local until you choose Transcribe. If typed text already exists, review recognized words and choose Add to thought, Replace thought, or Keep typed thought. Then Find the English. The next screen keeps your original thought visible beside editable English; Try another wording offers an alternative, while unclear meaning returns a clarification question. Return immediately or choose Listen & Practise. Returning with English saves the expression to My Expressions and completes the Help draft, so the next Help session can use a new composer thought. Its thought recording is removed unless another item still references it. Closing the window keeps an unfinished draft, including its recognized-word review. Practising a saved expression preserves any separate unfinished draft. Discarding or replacing a thought recording removes the old file only when nothing else references it. Detailed voice options and the unscored pitch chart are expandable. You can also review an English sentence directly.
 5. Create Example uses the selected built-in voice or performer TTS followed by conversion to your own timbre. Built-in examples are accepted only when the returned transcript matches the displayed sentence. Import audio supports an existing reference without an API call. Saved examples retain their voice label; settings changes affect new examples, and Regenerate Example explicitly replaces the current reference. There is no silent provider/voice fallback.
 6. Listen, record a local attempt, and compare the pitch contours. Playback can slow to 0.8×. Save the expression or return to the chat with Resume Conversation. Practising does not submit the sentence to the chat.
 
@@ -33,9 +33,15 @@ Voice recordings show elapsed time and an input-level meter. Very quiet input pr
 
 Mochi's reply can arrive before its input transcript. The app delivers the reply immediately, then gives transcription a bounded 30-second grace period. Opening Help or My Expressions keeps background transcription running. Stop/conversation navigation/close cancel remaining work; interrupted recordings remain recoverable after relaunch. UI status labels are stored separately and never sent as the user's words in future conversation context.
 
-Closing the main window (red close button or ⌘W) stops active audio and requests, saves your conversation, and keeps Mochi running in the menu bar. Click the halo-free Mochi face → Open Mochi to restore the same window and draft; clicking the Dock icon also restores it. Use Quit Mochi or ⌘Q to exit.
+Closing the main window (red close button or ⌘W) stops conversation audio and requests, saves your conversation, and keeps Mochi running in the menu bar. ⌘Q also cancels voice setup, hides settings windows, and removes the Dock icon. Left-click the halo-free tray face to restore the workspace and Dock icon; right-click or Control-click opens the menu. Use Quit Mochi Completely in the app or tray menu to exit. Settings shows the app version and build on every tab. Other open windows and non-voice-setup sheets are retained when hiding and restored when reopening.
 
-Mochi animates while speaking; her speaking animation is not used during your own-voice reference. My expressions keeps reference audio, attempts and a link to the originating conversation.
+Workspace title-bar controls are fixed to icons with hover tooltips; toolbar display-mode choices, the Mochi name/artwork, and the horizontal title-bar separator are omitted. Conversation actions are on sidebar rows; Help Me Say This is beside the microphone. Search is at the far right of the title bar.
+
+The title-bar Stop button appears only during generation. Recording uses the microphone control, and voice-message playback uses the bubble's play/pause control. Escape remains available to stop work when conversation search is closed.
+
+Practice pitch charts default to light display smoothing with shape-preserving cubic curves. Voiceless gaps remain empty. Turn off Smooth curves to inspect the original pitch samples; this changes only the chart, not the analysis or audio.
+
+Mochi's artwork remains on the welcome screen. My expressions keeps reference audio, attempts and a link to the originating conversation.
 
 ## Data and boundaries
 
@@ -81,7 +87,7 @@ API references consulted and live-tested: [OpenAI Realtime conversations](https:
 
 ### Managing history
 
-Use the sidebar to browse Conversations, Archived, and Recently Deleted. Right-click a conversation to rename, pin, archive, move to Recently Deleted, recover, or export it. Search (⌘F) matches titles and message text; normal search includes archived conversations. Drafts and selected conversation are saved locally.
+Use the sidebar to browse Conversations, Archived, and Recently Deleted. Each conversation has an actions dropdown to rename, pin, archive, move to Recently Deleted, recover, or export it; right-click is also supported. Sidebar search (⇧⌘F) matches titles and message text and includes archived conversations. The collapsible title-bar search (⌘F) searches only the current conversation; use Enter/⌘G for the next match and Shift-Enter/⇧⌘G for the previous match. Escape or Close Search collapses it. While a conversation search is active, new messages do not scroll away from the selected result; close search to return to the latest messages. Drafts and selected conversation are saved locally.
 
 Conversation → Manage Conversations (⇧⌘M) supports selecting several chats with ⌘-click/⇧-click. Deleted chats stay recoverable indefinitely until an explicitly confirmed permanent deletion. Saved expressions and their recordings survive deletion of their source chat. Existing backups and provider-side data are not affected by local deletion.
 

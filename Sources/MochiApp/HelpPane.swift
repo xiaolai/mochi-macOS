@@ -8,6 +8,7 @@ struct PracticePane: View {
     @State private var voiceOptionsOpen = false
     @State private var voiceDetailsOpen = false
     @State private var pitchOpen = false
+    @State private var smoothPitch = true
     @FocusState private var thoughtFocused: Bool
     var body: some View {
         VStack(spacing:0) {
@@ -239,7 +240,7 @@ struct PracticePane: View {
                         Text(app.demo ? "Illustrative preview" : "Unscored").foregroundStyle(.secondary)
                     }.font(.caption)
                     if !app.referencePitch.isEmpty || !app.attemptPitch.isEmpty {
-                        PitchChart(reference:app.referencePitch,attempt:app.attemptPitch,normalized:normalized).frame(height:150)
+                        PitchChart(reference:app.referencePitch,attempt:app.attemptPitch,normalized:normalized,smoothed:smoothPitch).frame(height:150)
                     } else {
                         Text("Add a reference and record an attempt to compare pitch.")
                             .foregroundStyle(.secondary).frame(maxWidth:.infinity,minHeight:85)
@@ -247,6 +248,8 @@ struct PracticePane: View {
                     HStack {
                         Text("Semitones · seconds").foregroundStyle(.secondary)
                         Spacer()
+                        Toggle("Smooth curves",isOn:$smoothPitch).toggleStyle(.checkbox)
+                            .help("Light display smoothing; turn off to inspect original pitch samples")
                         Toggle("Center each voice",isOn:$normalized).toggleStyle(.checkbox)
                     }.font(.caption)
                 }.padding(6)

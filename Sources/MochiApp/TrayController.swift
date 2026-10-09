@@ -1,10 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// Retains the workspace when Close is used; explicit Quit still terminates.
+/// Close and ⌘Q retain the workspace; Quit Mochi Completely terminates.
 @MainActor final class TrayController: NSObject, NSWindowDelegate {
     private(set) var statusItem: NSStatusItem?
     private(set) var window: NSWindow?
+    private(set) var menu: NSMenu?
+    var presentMenu: (NSMenu,NSEvent,NSView) -> Void = { NSMenu.popUpContextMenu($0,with:$1,for:$2) }
     private weak var previousDelegate: NSWindowDelegate?
     private weak var model: AppModel?
 
@@ -18,10 +20,31 @@ import SwiftUI
         let show = menu.addItem(withTitle:"Open Mochi",action:#selector(showWindow),keyEquivalent:"")
         show.target = self
         menu.addItem(.separator())
-        let quit = menu.addItem(withTitle:"Quit Mochi",action:#selector(quitApp),keyEquivalent:"q")
+        let quit = menu.addItem(withTitle:"Quit Mochi Completely",action:#selector(quitApp),keyEquivalent:"")
         quit.target = self
-        item.menu = menu
+        self.menu = menu
+        item.button?.target = self
+        item.button?.action = #selector(clicked)
+        item.button?.sendAction(on:[.leftMouseUp,.rightMouseUp])
         statusItem = item
+        presentMenu = { [weak item] menu,_,_ in
+            guard let item else { return }
+            item.menu = menu
+            defer { item.menu = nil }
+            item.button?.performClick(nil)
+        }
+    }
+
+    @objc private func clicked() {
+        guard let event = NSApp.currentEvent else { return }
+        handleClick(event)
+    }
+
+    func handleClick(_ event: NSEvent) {
+        if event.type == .rightMouseUp || (event.type == .leftMouseUp && event.modifierFlags.contains(.control)) {
+            guard let menu, let button = statusItem?.button else { return }
+            presentMenu(menu,event,button)
+        } else if event.type == .leftMouseUp { showWindow() }
     }
 
     func attach(_ window: NSWindow, model: AppModel) {
@@ -39,14 +62,26 @@ import SwiftUI
         return false
     }
 
+    @objc func closeToTray() {
+        model?.cancelVoiceSetup?()
+        model?.stop()
+        model?.save()
+        window?.orderOut(nil)
+        // Hide settings and attached panels too, while retaining the status item.
+        NSApp.hide(nil)
+        NSApp.setActivationPolicy(.accessory)
+    }
+
     @objc func showWindow() {
         guard let window else { return }
+        NSApp.setActivationPolicy(.regular)
+        NSApp.unhide(nil)
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps:true)
     }
 
-    @objc private func quitApp() { NSApp.terminate(nil) }
+    @objc func quitApp() { NSApp.terminate(nil) }
 
     // Preserve SwiftUI's other window delegate callbacks.
     override func responds(to selector: Selector!) -> Bool {
@@ -89,6 +124,14 @@ struct MainWindowReader: NSViewRepresentable {
     var attach: (NSWindow) -> Void
     func makeNSView(context: Context) -> NSView { NSView() }
     func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async { if let window = view.window { attach(window) } }
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.titleVisibility = .hidden
+            window.titlebarSeparatorStyle = .none
+            window.toolbar?.displayMode = .iconOnly
+            window.toolbar?.allowsUserCustomization = false
+            if #available(macOS 15.0, *) { window.toolbar?.allowsDisplayModeCustomization = false }
+            attach(window)
+        }
     }
 }

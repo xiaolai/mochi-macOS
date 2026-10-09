@@ -80,6 +80,7 @@ struct VoiceSettingsView: View {
             if app.turn.activity != .idle { Button("Stop Preview",action:app.stop) }
         }.formStyle(.grouped)
         .sheet(isPresented:$setupOpen) { VoiceSetupView(app:app,existing:existing) }
+        .onChange(of:app.voiceSetupActive) { _,active in if !active { setupOpen = false } }
         .sheet(item:$deleting) { profile in VoiceDeleteView(app:app,profile:profile) }
     }
 }

@@ -12,6 +12,11 @@ public extension Conversation {
         guard !term.isEmpty else { return nil }
         return messages.first { $0.text.range(of:term,options:[.caseInsensitive,.diacriticInsensitive]) != nil }
     }
+    func matchingMessageIDs(_ query: String) -> [UUID] {
+        let term = query.trimmingCharacters(in:.whitespacesAndNewlines)
+        guard !term.isEmpty else { return [] }
+        return messages.filter { $0.contextText?.range(of:term,options:[.caseInsensitive,.diacriticInsensitive]) != nil }.map(\.id)
+    }
     func matches(_ query: String) -> Bool { title.range(of:query,options:[.caseInsensitive,.diacriticInsensitive]) != nil || matchingMessage(query) != nil }
 }
 public extension Library {

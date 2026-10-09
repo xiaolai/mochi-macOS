@@ -9,8 +9,42 @@ struct ReplyCallbacks {
 }
 
 @MainActor final class AppModel: ObservableObject {
-    @Published var library = Library()
-    @Published var selectedID: UUID?
+    @Published var library = Library() { didSet { refreshConversationMatches() } }
+    @Published var selectedID: UUID? { didSet { if oldValue != selectedID { closeConversationSearch() } } }
+    @Published var conversationQuery = "" { didSet { refreshConversationMatches(reset:true) } }
+    @Published var conversationSearchOpen = false
+    @Published var conversationSearchFocusRequest = 0
+    @Published private(set) var conversationMatchID: UUID?
+    private(set) var conversationMatchIDs: [UUID] = []
+    private(set) var conversationMatchSet: Set<UUID> = []
+    var conversationMatchIndex: Int { conversationMatchID.flatMap { conversationMatchIDs.firstIndex(of:$0) } ?? 0 }
+    private func refreshConversationMatches(reset: Bool = false) {
+        let previousIndex = conversationMatchIndex
+        let ids = conversation?.matchingMessageIDs(conversationQuery) ?? []
+        conversationMatchIDs = ids; conversationMatchSet = Set(ids)
+        if reset || conversationMatchID == nil || !conversationMatchSet.contains(conversationMatchID!) {
+            conversationMatchID = ids.isEmpty ? nil : ids[min(reset ? 0 : previousIndex,ids.count-1)]
+        }
+    }
+    var canFindInConversation: Bool {
+        !practice && renameID == nil && permanentDeleteIDs.isEmpty && (managerOpen || (!showExpressions && conversation != nil))
+    }
+    func findInConversation() {
+        guard canFindInConversation else { return }
+        if managerOpen { searchFocusRequest += 1 } else { openConversationSearch() }
+    }
+    func openConversationSearch() {
+        guard conversation != nil, !showExpressions, !practice else { return }
+        conversationSearchOpen = true; conversationSearchFocusRequest += 1
+    }
+    func closeConversationSearch() {
+        conversationQuery = ""; conversationSearchOpen = false
+    }
+    func moveConversationMatch(_ direction: Int) {
+        let count = conversationMatchIDs.count
+        guard count > 0 else { conversationMatchID = nil; return }
+        conversationMatchID = conversationMatchIDs[((conversationMatchIndex+direction)%count+count)%count]
+    }
     @Published var showExpressions = false
     @Published var search = ""
     @Published var searchOpen = false
@@ -87,6 +121,7 @@ struct ReplyCallbacks {
     private func persistVoiceOptions<T: Encodable>(_ value: T, key: String) {
         if let data = try? JSONEncoder().encode(value) { defaults.set(data,forKey:key) }
     }
+    var cancelVoiceSetup: (() -> Void)?
     @Published var voiceSetupActive = false
     @Published var practiceVoiceSetupOpen = false
     @Published var voiceSetupPreviewStep = 0
@@ -207,6 +242,7 @@ struct ReplyCallbacks {
         isSavedPractice = false; turn.resume()
     }
     func openExpressions() {
+        closeConversationSearch()
         cancelHelpWork(); leavePractice(); expression = nil; showExpressions = true
     }
     func newChat() {

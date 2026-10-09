@@ -53,6 +53,12 @@ struct WorkspaceView: View {
                                     Text(chat.matchingMessage(app.search)?.text ?? (chat.draft.isEmpty ? chat.messages.last?.text ?? "New conversation" : "Draft: " + chat.draft))
                                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                 }
+                                Spacer(minLength:0)
+                                Menu { ChatActions(app:app,chat:chat) } label: {
+                                    Image(systemName:"ellipsis").frame(width:20,height:24)
+                                }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                                    .help("Conversation Actions")
+                                    .accessibilityLabel("Actions for \(chat.title)")
                             }.padding(.vertical,7)
                                 .tag(SidebarDestination.conversation(chat.id))
                                 .contextMenu { ChatActions(app:app,chat:chat) }
@@ -71,11 +77,11 @@ struct WorkspaceView: View {
             .listStyle(.sidebar)
             .searchable(text:$app.search,isPresented:$app.searchOpen,placement:.sidebar,prompt:"Search titles and messages")
             .historySearchFocus($searchFocused)
-            .navigationTitle("Mochi")
+            .navigationTitle("")
             .toolbar {
                 ToolbarItem(placement:.primaryAction) {
                     Button(action:app.newChat) { Label("New Conversation",systemImage:"square.and.pencil") }
-                        .help("New Conversation (⌘N)")
+                        .labelStyle(.iconOnly).help("New Conversation (⌘N)")
                 }
             }
             .navigationSplitViewColumnWidth(min:190,ideal:230,max:320)
@@ -102,23 +108,16 @@ struct WorkspaceView: View {
             }
             .navigationTitle("")
             .toolbar {
-                if #available(macOS 26.0, *) {
-                    ToolbarItem(placement:.principal) { toolbarIdentity }
-                        .sharedBackgroundVisibility(.hidden)
-                } else {
-                    ToolbarItem(placement:.principal) { toolbarIdentity }
-                }
-                ToolbarItemGroup(placement:.primaryAction) {
-                    if !app.showExpressions, let chat = app.conversation {
-                        Menu { ChatActions(app:app,chat:chat); Divider(); Button("Manage Conversations…") { app.managerOpen = true } } label: { Label("Conversation Actions",systemImage:"ellipsis") }
-                        if app.writableConversation {
-                        Button(action:app.practice ? app.resume : app.startHelp) {
-                            Label(app.practice ? "Resume Conversation" : "Help Me Say This",systemImage:app.practice ? "bubble.left" : "waveform.badge.plus")
-                        }.labelStyle(.titleAndIcon).help("Help Me Say This (⇧⌘H)")
-                        }
+                if app.turn.activity == .generating {
+                    ToolbarItem(placement:.primaryAction) {
+                        Button(action:app.stop) { Label("Stop",systemImage:"stop.fill") }.labelStyle(.iconOnly).help("Stop (Escape)")
                     }
-                    if app.busy {
-                        Button(action:app.stop) { Label("Stop",systemImage:"stop.fill") }.help("Stop (Escape)")
+                }
+                if #available(macOS 26.0, *) { ToolbarSpacer(.flexible,placement:.primaryAction) }
+                // Older AppKit toolbars already place primary actions at the trailing edge.
+                if !app.showExpressions, app.conversation != nil {
+                    ToolbarItem(placement:.primaryAction) {
+                        ConversationSearchControl(app:app).disabled(app.practice)
                     }
                 }
             }
@@ -166,18 +165,9 @@ struct WorkspaceView: View {
         }.padding(16).background(.bar)
     }
 
-    private var toolbarIdentity: some View {
-        HStack(spacing:8) {
-            if !app.showExpressions {
-                MochiView(speaking:app.speaking,thinking:app.turn.activity == .generating)
-                    .frame(width:24,height:26)
-            }
-            Text(app.showExpressions ? "My Expressions" : "Mochi").font(.headline)
-        }.accessibilityElement(children:.combine)
-    }
-
     private var transcript: some View {
-        Group {
+        let sidebarMatchID = app.conversation?.matchingMessage(app.search)?.id
+        return Group {
             if app.conversation?.messages.isEmpty != false {
                 if app.conversation == nil {
                     ContentUnavailableView("No Conversation Selected",systemImage:app.historyScope.icon,description:Text("Select a conversation, or start a new one with ⌘N."))
@@ -195,7 +185,7 @@ struct WorkspaceView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment:.leading,spacing:16) {
-                            ForEach(app.conversation?.messages ?? []) { message in messageView(message).id(message.id) }
+                            ForEach(app.conversation?.messages ?? []) { message in messageView(message,sidebarMatchID:sidebarMatchID).id(message.id) }
                             Color.clear.frame(height:1).id("bottom")
                         }
                         .padding(20)
@@ -204,11 +194,17 @@ struct WorkspaceView: View {
                     }
                     .task(id:"\(app.selectedID?.uuidString ?? "")|\(app.search)") {
                         await Task.yield()
-                        if let message = app.conversation?.matchingMessage(app.search) { proxy.scrollTo(message.id,anchor:.center) }
+                        if let id = app.conversationMatchID { proxy.scrollTo(id,anchor:.center) }
+                        else if let message = app.conversation?.matchingMessage(app.search) { proxy.scrollTo(message.id,anchor:.center) }
                         else { proxy.scrollTo("bottom",anchor:.bottom) }
                     }
+                    .onChange(of:app.conversationMatchID) { _,id in
+                        if let id { withAnimation { proxy.scrollTo(id,anchor:.center) } }
+                    }
                     .onChange(of:app.conversation?.messages.count) { _,_ in
-                        withAnimation { proxy.scrollTo("bottom",anchor:.bottom) }
+                        if app.conversationQuery.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+                            withAnimation { proxy.scrollTo("bottom",anchor:.bottom) }
+                        }
                     }
                 }
             }
@@ -217,7 +213,7 @@ struct WorkspaceView: View {
         .background(Color(nsColor:.textBackgroundColor))
     }
 
-    private func messageView(_ message: Message) -> some View {
+    private func messageView(_ message: Message, sidebarMatchID: UUID?) -> some View {
         let isUser = message.role == "user"
         return HStack(alignment:.top,spacing:8) {
             if isUser { Spacer(minLength:60) }
@@ -248,7 +244,10 @@ struct WorkspaceView: View {
                     if let name = message.audio { Button("Show Recording in Finder") { NSWorkspace.shared.activateFileViewerSelecting([app.store.root.appendingPathComponent(name)]) } }
                 }
                 .overlay(alignment:.leading) {
-                    if app.conversation?.matchingMessage(app.search)?.id == message.id { RoundedRectangle(cornerRadius:18).stroke(Color.accentColor,lineWidth:2).padding(-3) }
+                    if app.conversationMatchSet.contains(message.id) || sidebarMatchID == message.id {
+                        RoundedRectangle(cornerRadius:18)
+                            .stroke(app.conversationMatchID == message.id ? Color.orange : Color.accentColor,lineWidth:app.conversationMatchID == message.id ? 3 : 1.5).padding(-3)
+                    }
                 }
                 .background(isUser ? Color.accentColor : Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:18))
 
@@ -266,6 +265,12 @@ struct WorkspaceView: View {
                 }.buttonStyle(.borderless)
                     .help(app.turn.activity == .recording ? "Finish Recording" : "Record Voice Message")
                     .disabled(app.busy && app.turn.activity != .recording)
+                Button(action:app.startHelp) {
+                    Image(systemName:"waveform.badge.plus").font(.system(size:18))
+                }.buttonStyle(.borderless)
+                    .help("Help Me Say This (⇧⌘H)")
+                    .accessibilityLabel("Help Me Say This")
+                    .disabled(app.turn.activity == .recording || app.turn.activity == .requestingPermission)
                 TextField("Message Mochi",text:$app.draft,axis:.vertical)
                     .textFieldStyle(.plain).font(.system(size:15)).lineLimit(1...5)
                     .onSubmit { app.send() }.disabled(app.busy)
@@ -346,27 +351,38 @@ struct PitchChart: View {
     var reference: [PitchPoint]
     var attempt: [PitchPoint]
     var normalized: Bool
+    var smoothed = true
     var body: some View {
         Canvas { context,size in
-            let series = [reference,attempt]
-            let medians = series.map { points -> Double in let values = points.compactMap(\.semitones).sorted(); return normalized && !values.isEmpty ? values[values.count/2] : 0 }
-            let all = series.enumerated().flatMap { index,points in points.compactMap { $0.semitones.map { $0 - medians[index] } } }
+            let series = [reference,attempt].map { PitchContour.runs($0,smoothed:smoothed) }
+            let medians = [reference,attempt].map { normalized ? PitchContour.center($0) : 0 }
+            let all = series.enumerated().flatMap { index,runs in runs.flatMap { $0.map { $0.value-medians[index] } } }
             let low = (all.min() ?? 0)-2, high = max(low+8,(all.max() ?? 12)+2)
-            let duration = max(1, max(reference.last?.time ?? 0,attempt.last?.time ?? 0))
-            let w = size.width-26, h = size.height-20
+            let duration = PitchContour.duration(reference+attempt)
+            let w = max(1,size.width-26), top = 6.0, h = max(1,size.height-26)
             for i in 0...3 {
-                let y = h * Double(i)/3
+                let y = top+h * Double(i)/3
                 var path = Path(); path.move(to:CGPoint(x:24,y:y)); path.addLine(to:CGPoint(x:size.width,y:y))
                 context.stroke(path,with:.color(.secondary.opacity(0.12)),style:StrokeStyle(lineWidth:1,dash:[3,4]))
                 context.draw(Text("\(Int(high-(high-low)*Double(i)/3))").font(.system(size:8)).foregroundColor(.secondary),at:CGPoint(x:9,y:y))
             }
             for i in 0...Int(duration) { context.draw(Text("\(i)s").font(.system(size:8)).foregroundColor(.secondary),at:CGPoint(x:24+Double(i)/duration*w,y:size.height-5)) }
-            for (index,points) in series.enumerated() {
-                var path = Path(); var active = false
-                for point in points {
-                    guard let value = point.semitones else { active = false; continue }
-                    let p = CGPoint(x:24+point.time/duration*w,y:h*(1-(value-medians[index]-low)/(high-low)))
-                    if active { path.addLine(to:p) } else { path.move(to:p); active = true }
+            for (index,runs) in series.enumerated() {
+                func position(_ point: PitchContour.Point) -> CGPoint {
+                    CGPoint(x:24+point.time/duration*w,y:top+h*(1-(point.value-medians[index]-low)/(high-low)))
+                }
+                var path = Path()
+                for run in runs {
+                    guard let first = run.first else { continue }
+                    path.move(to:position(first))
+                    if run.count == 1 {
+                        let p = position(first)
+                        path.addEllipse(in:CGRect(x:p.x-1,y:p.y-1,width:2,height:2))
+                    } else if smoothed {
+                        for curve in PitchContour.curves(run) { path.addCurve(to:position(curve.end),control1:position(curve.control1),control2:position(curve.control2)) }
+                    } else {
+                        for point in run.dropFirst() { path.addLine(to:position(point)) }
+                    }
                 }
                 context.stroke(path,with:.color(index == 0 ? .accentColor : .orange),style:StrokeStyle(lineWidth:2,lineCap:.round,lineJoin:.round))
             }

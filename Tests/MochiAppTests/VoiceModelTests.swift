@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 import MochiCore
 @testable import MochiApp
 final class VoiceModelTests: XCTestCase {
@@ -158,5 +159,71 @@ extension VoiceModelTests {
         XCTAssertEqual(loaded.personalVoiceOptions.speed,1)
         prefs.set(Data("{\"speed\":9}".utf8),forKey:"practiceVoiceOptions")
         XCTAssertEqual(AppModel(libraryRoot:root,preferences:prefs).practiceVoiceOptions.speed,1)
+    }
+}
+
+extension VoiceSetupTests {
+    @MainActor func testTrayCloseCancelsPendingPermissionAndRejectsLateGrant() async {
+        let app = AppModel(demo:true); let setup = VoiceSetupModel(app:app)
+        let started = expectation(description:"Permission requested"), returned = expectation(description:"Permission returned")
+        let gate = TestGate()
+        setup.requestRecordingPermission = { started.fulfill(); await gate.wait(); returned.fulfill(); return true }
+        setup.begin(); app.practiceVoiceSetupOpen = true; setup.toggleRecording()
+        await fulfillment(of:[started],timeout:2)
+        let tray = TrayController(); _ = NSApplication.shared; let window = NSWindow()
+        tray.attach(window,model:app); tray.closeToTray()
+        XCTAssertTrue(setup.closed); XCTAssertFalse(app.voiceSetupActive); XCTAssertFalse(setup.busy)
+        XCTAssertNil(app.cancelVoiceSetup); XCTAssertFalse(app.practiceVoiceSetupOpen)
+        await gate.release(); await fulfillment(of:[returned],timeout:2)
+        await Task.yield()
+        XCTAssertFalse(setup.audio.isRecording); XCTAssertFalse(setup.recording)
+        NSApp.setActivationPolicy(.regular); NSApp.unhide(nil); app.stop()
+    }
+    @MainActor func testTrayCloseCancelsPreviewAndRejectsLateResult() async {
+        let app = AppModel(demo:true); let gate = TestGate()
+        let started = expectation(description:"Preview started"), returned = expectation(description:"Preview cancelled")
+        let setup = VoiceSetupModel(app:app,comparisonRenderer:{ _,root in
+            started.fulfill(); await gate.wait()
+            XCTAssertTrue(Task.isCancelled); returned.fulfill()
+            return (root.appendingPathComponent("source.wav"),root.appendingPathComponent("converted.wav"))
+        })
+        setup.profile = VoiceProfile(name:"Existing",providerID:"test",createdByApp:false)
+        setup.begin(); setup.createAndCompare(); await fulfillment(of:[started],timeout:2)
+        let tray = TrayController(); _ = NSApplication.shared; let window = NSWindow(); tray.attach(window,model:app)
+        tray.closeToTray()
+        XCTAssertTrue(setup.closed); XCTAssertFalse(app.voiceSetupActive); XCTAssertFalse(setup.busy)
+        await gate.release(); await fulfillment(of:[returned],timeout:2); await Task.yield()
+        XCTAssertNil(setup.sourceAudio); XCTAssertNil(setup.convertedAudio)
+        NSApp.setActivationPolicy(.regular); NSApp.unhide(nil); app.stop()
+    }
+}
+
+private struct CancellableUploadAPI: VoiceAccountAPI {
+    let createVoice: () async throws -> CreatedVoice
+    func create(name: String, samples: [VoiceUpload]) async throws -> CreatedVoice { try await createVoice() }
+    func list() async throws -> [AccountVoice] { [] }
+    func delete(id: String) async throws {}
+}
+extension VoiceSetupTests {
+    @MainActor func testTrayCloseCancelsVoiceUploadTask() async throws {
+        let app = AppModel(demo:true), gate = TestGate()
+        let started = expectation(description:"Upload started"), cancelled = expectation(description:"Upload cancellation observed")
+        let api = CancellableUploadAPI(createVoice:{
+            started.fulfill(); await gate.wait()
+            XCTAssertTrue(Task.isCancelled); cancelled.fulfill()
+            try Task.checkCancellation()
+            return CreatedVoice(id:"unreachable",requiresVerification:false)
+        })
+        let setup = VoiceSetupModel(app:app,api:api)
+        let file = app.store.root.appendingPathComponent("upload-fixture.wav")
+        try Data([0,1,2]).write(to:file); defer { try? FileManager.default.removeItem(at:file) }
+        let quality = VoiceSampleQuality(samples:[Float](repeating:0.2,count:1_440_000),rate:24000)
+        setup.samples = [SetupSample(url:file,name:"Fixture",quality:quality)]; setup.consent = true
+        setup.begin(); setup.createAndCompare(); await fulfillment(of:[started],timeout:2)
+        let tray = TrayController(); _ = NSApplication.shared; let window = NSWindow(); tray.attach(window,model:app)
+        tray.closeToTray(); XCTAssertTrue(setup.closed); XCTAssertFalse(setup.busy); XCTAssertFalse(app.voiceSetupActive)
+        await gate.release(); await fulfillment(of:[cancelled],timeout:2); await Task.yield()
+        XCTAssertNil(setup.profile)
+        NSApp.setActivationPolicy(.regular); NSApp.unhide(nil); app.stop()
     }
 }

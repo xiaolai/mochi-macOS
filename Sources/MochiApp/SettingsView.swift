@@ -52,6 +52,11 @@ struct SettingsView: View {
             }.formStyle(.grouped)
                 .tabItem { Label("Data & Privacy",systemImage:"hand.raised") }.tag("privacy")
         }
+        .safeAreaInset(edge:.bottom,spacing:0) {
+            Text("Mochi \(Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "Development") (build \(Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "Development"))")
+                .font(.caption).foregroundStyle(.secondary)
+                .textSelection(.enabled).padding(.top,8)
+        }
         .padding(12)
         .frame(width:620,height:560)
     }
