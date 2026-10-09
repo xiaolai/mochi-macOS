@@ -4,6 +4,14 @@ Version **0.1.2**.
 
 A native macOS conversation app with Mochi. Find the English for a thought, hear it in your own voice, practise locally, and return to the conversation to say it yourself.
 
+## Install with Homebrew
+
+```sh
+brew install --cask xiaolai/tap/mochi
+```
+
+Requires Apple Silicon and macOS 14 or later. Use the fully qualified cask name: Homebrew’s unrelated `mochi` cask is a flashcard app and installs the same `Mochi.app` filename. They cannot be installed together under that filename; remove the unrelated cask first if it is installed. Update with `brew upgrade --cask xiaolai/tap/mochi`.
+
 ## Run
 
 Requires macOS 14 or later and a Swift 5.9+ toolchain (built here with Swift 6.4).
@@ -14,7 +22,7 @@ swift test
 open "build/Mochi.app"
 ```
 
-The local development app is ad-hoc signed; it is not a notarized distribution build. There are no third-party runtime dependencies. The app uses SwiftUI, AppKit, AVFoundation, Security and Foundation.
+The local development app is ad-hoc signed; it is not a notarized distribution build. Public release DMGs use Developer ID signing, hardened runtime, and stapled Apple notarization tickets. There are no third-party runtime dependencies. The app uses SwiftUI, AppKit, AVFoundation, Security and Foundation.
 
 ## Use
 
@@ -106,3 +114,13 @@ Connection/model/voice preferences are copied only when the new setting is absen
 New backups use `.mochilibrary`; older `.enjoylibrary` packages remain importable. `MOCHI_CLONE_VOICE_ID` and `MOCHI_EVIDENCE_DIR` are the preferred environment variables; their former `ENJOY_` aliases remain accepted. The former app bundle is retained under `build/legacy/` for rollback. Quit Mochi before using the old app; changes in the new data folder are not synced back to the original.
 
 Voice options are in **Settings → Voices**, and the slider button beside the practice voice picker. OpenAI has independent conversation/example speech speeds. ElevenLabs has separate pronunciation and conversion controls (stability, similarity, style and speaker boost), with speed applied to the pronunciation recording. Voice setup previews use the selected options, which are saved when the comparison is accepted. Existing saved examples retain their audio; use Regenerate Example to apply new settings.
+
+## Distribution builds
+
+Use a Developer ID Application identity and a notarization Keychain profile:
+
+```sh
+MOCHI_SIGN_ID="Developer ID Application: …" MOCHI_NOTARY_PROFILE="chase-notary" ./scripts/release.sh
+```
+
+This runs Swift and release-helper tests, stages `build/release/Mochi.app`, signs with the audio-input entitlement, notarizes and staples the app, then builds, signs, notarizes and staples `Mochi-<version>.dmg`. It verifies Gatekeeper and the app inside the mounted DMG. A saved submission ID allows polling to resume without re-uploading an unchanged archive. Publication is separate: push the reviewed source, upload the verified DMG to a versioned GitHub release, hash the public download, and render `dev-docs/distribution/mochi.rb.in` with that hash into the tap.

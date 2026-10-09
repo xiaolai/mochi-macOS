@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 swift build -c release -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
 BIN="$(swift build -c release --show-bin-path)"
-APP="$PWD/build/Mochi.app"
+APP="${MOCHI_APP_PATH:-$PWD/build/Mochi.app}"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/Mochi" "$APP/Contents/MacOS/Mochi"
 cp Sources/MochiApp/Resources/AppIcon.png "$APP/Contents/Resources/AppIcon.png"
@@ -43,5 +43,12 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>NSMicrophoneUsageDescription</key><string>Record a voice message for Mochi or a practice attempt. Practice recordings stay on your Mac.</string>
 </dict></plist>
 PLIST
-codesign --force --sign - "$APP"
+if [ "${MOCHI_DISTRIBUTION:-0}" = 1 ]; then
+    : "${MOCHI_SIGN_ID:?Distribution requires MOCHI_SIGN_ID}"
+    [ "$MOCHI_SIGN_ID" != - ] || { echo "Distribution cannot use ad-hoc signing" >&2; exit 1; }
+    codesign --force --options runtime --timestamp --entitlements scripts/release-entitlements.plist --sign "$MOCHI_SIGN_ID" "$APP"
+else
+    codesign --force --sign - "$APP"
+fi
+codesign --verify --strict --deep "$APP"
 printf 'Built %s\n' "$APP"
