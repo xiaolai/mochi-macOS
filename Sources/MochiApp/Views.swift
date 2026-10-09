@@ -102,6 +102,11 @@ struct WorkspaceView: View {
                     HStack(alignment:.top,spacing:10) {
                         Text(notice).font(.callout).textSelection(.enabled)
                             .frame(maxWidth:.infinity,alignment:.leading)
+                        if app.messageDeletionUndo != nil {
+                            Button("Undo",action:app.undoMessageDeletion)
+                                .buttonStyle(.borderless).disabled(!app.canUndoMessageDeletion)
+                                .accessibilityLabel("Undo Delete Message")
+                        }
                         Button { app.notice = nil } label: { Image(systemName:"xmark") }
                             .buttonStyle(.borderless).foregroundStyle(.secondary)
                             .help("Dismiss notice").accessibilityLabel("Dismiss notice")
@@ -129,6 +134,9 @@ struct WorkspaceView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented:Binding(get:{app.instructionsID != nil},set:{if !$0 { app.instructionsID = nil }})) {
+            if let id = app.instructionsID { ConversationInstructionsView(app:app,id:id) }
         }
         .sheet(isPresented:$app.managerOpen) { HistoryManagerView(app:app) }
         .sheet(isPresented:Binding(get:{app.renameID != nil && !app.managerOpen},set:{if !$0 && !app.managerOpen {app.renameID = nil}})) { if let id = app.renameID { RenameChatView(app:app,id:id) } }
@@ -209,8 +217,9 @@ struct WorkspaceView: View {
                     .onChange(of:app.conversationMatchID) { _,id in
                         if let id { withAnimation { proxy.scrollTo(id,anchor:.center) } }
                     }
-                    .onChange(of:app.conversation?.messages.count) { _,_ in
-                        if app.conversationQuery.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+                    .onChange(of:app.conversation?.messages.map(\.id) ?? []) { previous,current in
+                        if current.count > previous.count, current.starts(with:previous),
+                           app.conversationQuery.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
                             withAnimation { proxy.scrollTo("bottom",anchor:.bottom) }
                         }
                     }
@@ -250,6 +259,12 @@ struct WorkspaceView: View {
                     Button("Copy Message") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.text,forType:.string) }
                     Text(message.date.formatted(date:.abbreviated,time:.shortened))
                     if let name = message.audio { Button("Show Recording in Finder") { NSWorkspace.shared.activateFileViewerSelecting([app.store.root.appendingPathComponent(name)]) } }
+                    if app.writableConversation {
+                        Divider()
+                        Button(role:.destructive) { app.deleteMessage(message.id) } label: {
+                            Label("Delete Message",systemImage:"trash")
+                        }.disabled(!app.canDeleteMessages)
+                    }
                 }
                 .overlay(alignment:.leading) {
                     if app.conversationMatchSet.contains(message.id) || sidebarMatchID == message.id {
@@ -257,7 +272,7 @@ struct WorkspaceView: View {
                             .stroke(app.conversationMatchID == message.id ? Color.orange : Color.accentColor,lineWidth:app.conversationMatchID == message.id ? 3 : 1.5).padding(-3)
                     }
                 }
-                .background(isUser ? Color.accentColor : Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:18))
+                .background(isUser ? Color.accentColor : Color.gray.opacity(0.12),in:RoundedRectangle(cornerRadius:18))
 
             }
             if !isUser { Spacer(minLength:60) }

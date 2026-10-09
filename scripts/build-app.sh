@@ -2,11 +2,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
-swift build -c release -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
+if [ "${MOCHI_DISTRIBUTION:-0}" = 1 ]; then
+    swift build -c release -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
+else
+    swift build -c release -Xswiftc -DMOCHI_DEVELOPMENT -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
+fi
 BIN="$(swift build -c release --show-bin-path)"
 APP="${MOCHI_APP_PATH:-$PWD/build/Mochi.app}"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/Mochi" "$APP/Contents/MacOS/Mochi"
+cp "$BIN/mochi-mcp" "$APP/Contents/MacOS/mochi-mcp"
 cp Sources/MochiApp/Resources/AppIcon.png "$APP/Contents/Resources/AppIcon.png"
 ICON_WORK="$(mktemp -d "${TMPDIR:-/tmp}/mochi-icon.XXXXXX")"
 trap 'rm -rf "$ICON_WORK"' EXIT
@@ -30,8 +35,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>Mochi</string>
 <key>CFBundleIconFile</key><string>AppIcon.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.1.2</string>
-<key>CFBundleVersion</key><string>24</string>
+<key>CFBundleShortVersionString</key><string>0.2.0</string>
+<key>CFBundleVersion</key><string>25</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>UTExportedTypeDeclarations</key><array><dict>
@@ -46,8 +51,10 @@ PLIST
 if [ "${MOCHI_DISTRIBUTION:-0}" = 1 ]; then
     : "${MOCHI_SIGN_ID:?Distribution requires MOCHI_SIGN_ID}"
     [ "$MOCHI_SIGN_ID" != - ] || { echo "Distribution cannot use ad-hoc signing" >&2; exit 1; }
+    codesign --force --options runtime --timestamp --sign "$MOCHI_SIGN_ID" "$APP/Contents/MacOS/mochi-mcp"
     codesign --force --options runtime --timestamp --entitlements scripts/release-entitlements.plist --sign "$MOCHI_SIGN_ID" "$APP"
 else
+    codesign --force --sign - "$APP/Contents/MacOS/mochi-mcp"
     codesign --force --sign - "$APP"
 fi
 codesign --verify --strict --deep "$APP"

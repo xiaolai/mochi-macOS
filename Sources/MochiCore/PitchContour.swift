@@ -1,3 +1,4 @@
+import MochiAutomation
 import Foundation
 
 /// Display-only processing. Original PitchPoints remain available for inspection.

@@ -59,13 +59,13 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue(any("submit" in c for c in calls))
 
     def test_metadata_rejects_wrong_version_build_and_identity(self):
-        info={"CFBundleShortVersionString":"0.1.2","CFBundleVersion":"24","CFBundleIdentifier":"com.lixiaolai.mochi-macos","LSMinimumSystemVersion":"14.0"}
-        release.validate_metadata(info,"0.1.2","24")
+        info={"CFBundleShortVersionString":"0.2.0","CFBundleVersion":"25","CFBundleIdentifier":"com.lixiaolai.mochi-macos","LSMinimumSystemVersion":"14.0"}
+        release.validate_metadata(info,"0.2.0","25")
         previous=dict(info); previous["CFBundleIdentifier"]="com.xiaolai.mochi-macos"
-        with self.assertRaises(ValueError): release.validate_metadata(previous,"0.1.2","24")
+        with self.assertRaises(ValueError): release.validate_metadata(previous,"0.2.0","25")
         for key in info:
             broken=dict(info); broken[key]="wrong"
-            with self.assertRaises(ValueError): release.validate_metadata(broken,"0.1.2","24")
+            with self.assertRaises(ValueError): release.validate_metadata(broken,"0.2.0","25")
 
     def test_cask_requires_real_hash_and_explicit_tap_name(self):
         with self.assertRaises(ValueError): release.render_cask('sha256 "@SHA256@"',"bad")
@@ -77,3 +77,44 @@ class ReleaseTests(unittest.TestCase):
         template=(Path(__file__).parents[1]/"distribution/mochi.rb.in").read_text()
         self.assertIn('cask "mochi" do',template)
         self.assertNotIn('conflicts_with cask:',template)
+
+    def test_helper_requires_architecture_runtime_identity_and_timestamp(self):
+        signature="Authority=Developer ID Application: Example (ABC123)\nTimestamp=Oct 9, 2026\nTeamIdentifier=ABC123\nCodeDirectory v=20500 size=123 flags=0x10000(runtime) hashes=1+2 location=embedded\n"
+        release.validate_binary_signature("arm64\n", signature)
+        for architectures in ("x86_64", "arm64 x86_64", ""):
+            with self.assertRaises(ValueError): release.validate_binary_signature(architectures, signature)
+        for fragment in ("Authority=Developer ID Application: Example (ABC123)\n", "Timestamp=Oct 9, 2026\n", "TeamIdentifier=ABC123\n", "CodeDirectory v=20500 size=123 flags=0x10000(runtime) hashes=1+2 location=embedded\n"):
+            with self.assertRaises(ValueError): release.validate_binary_signature("arm64", signature.replace(fragment,""))
+        with self.assertRaises(ValueError): release.validate_binary_signature("arm64", signature.replace("ABC123\n", "not set\n"))
+
+    def test_binary_check_runs_strict_verification_and_checks_both_outputs(self):
+        signature="Authority=Developer ID Application: Example (ABC123)\nTimestamp=Oct 9\nTeamIdentifier=ABC123\nCodeDirectory v=20500 flags=0x10000(runtime)\n"
+        calls=[]
+        def run(args, **kwargs):
+            calls.append(args); self.assertTrue(kwargs["check"])
+            return subprocess.CompletedProcess(args,0,"arm64" if args[0]=="lipo" else "",signature if "-d" in args else "")
+        for path in ("app", "helper"):
+            release.check_binary(path,run=run)
+        self.assertEqual(calls,[["codesign","--verify","--strict","app"],["lipo","-archs","app"],["codesign","-d","--verbose=4","app"],["codesign","--verify","--strict","helper"],["lipo","-archs","helper"],["codesign","-d","--verbose=4","helper"]])
+        def failing(args, **kwargs): raise subprocess.CalledProcessError(1,args)
+        with self.assertRaises(subprocess.CalledProcessError): release.check_binary("bad",run=failing)
+
+    def test_distribution_gate_rejects_probes_and_provider_symbols(self):
+        release.validate_distribution_symbols("normal app", "normal helper")
+        for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer"):
+            with self.assertRaises(ValueError): release.validate_distribution_symbols(probe,"normal")
+        for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken"):
+            with self.assertRaises(ValueError): release.validate_distribution_symbols("normal",symbol)
+        for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray"):
+            with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",symbol)
+        calls=[]
+        def run(args, **kwargs):
+            calls.append(args); self.assertTrue(kwargs["check"])
+            return subprocess.CompletedProcess(args,0,"normal","")
+        release.check_distribution("app","helper",run=run)
+        self.assertEqual(calls,[["strings","app"],["nm","app"],["nm","helper"]])
+
+    def test_distribution_gate_rejects_retired_voice_providers(self):
+        for retired in ("api.elevenlabs.io", "ElevenLabsVoices", "VoiceRenderer", "VoiceSetupModel", "ELEVENLABS_API_KEY", "OPENAI_API_KEY"):
+            with self.assertRaises(ValueError): release.validate_distribution_symbols(retired,"normal","normal")
+            with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",retired)

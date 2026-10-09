@@ -100,14 +100,12 @@ final class TranscriptionTests: XCTestCase {
         } catch {}
     }
     func testRealtimeCredentialRoutesNeverFallBack() async throws {
-        let codex = try await RealtimeService.sessionToken(auth:"codex",model:"gpt-realtime",apiKey:{ XCTFail("Must not read API key"); return nil },codexToken:{ "fake-codex" },transport:{ request in
+        let codex = try await RealtimeService.sessionToken(model:"gpt-realtime",codexToken:{ "fake-codex" },transport:{ request in
             XCTAssertEqual(request.value(forHTTPHeaderField:"Authorization"),"Bearer fake-codex")
             XCTAssertEqual(request.url?.path,"/v1/realtime/client_secrets")
             return Data(#"{"value":"fake-session"}"#.utf8)
         })
         XCTAssertEqual(codex,"fake-session")
-        let api = try await RealtimeService.sessionToken(auth:"api",model:"gpt-realtime",apiKey:{ "fake-api" },codexToken:{ XCTFail("Must not read Codex token"); return "" },transport:{ _ in XCTFail("API key connects directly"); return Data() })
-        XCTAssertEqual(api,"fake-api")
     }
     func testRealtimeRecoveryCancellationRejectsLateCompletion() async throws {
         let waiting = expectation(description:"Receive started")

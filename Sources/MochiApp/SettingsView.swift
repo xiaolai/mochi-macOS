@@ -3,22 +3,13 @@ import MochiCore
 
 struct SettingsView: View {
     @ObservedObject var app: AppModel
-    @State private var openAI = ""
-    @State private var eleven = ""
-    @State private var saved = ""
 
     var body: some View {
         TabView(selection:$app.settingsTab) {
             Form {
                 Section("Connection") {
-                    Picker("Sign-in",selection:$app.auth) {
-                        Text("OpenAI API Key").tag("api")
-                        Text("Codex Sign-in").tag("codex")
-                    }.disabled(app.busy)
-                    if app.auth == "api" {
-                        SecureField("API key",text:$openAI,prompt:Text("Enter to replace saved key"))
-                        Button("Save API Key") { saveKey(openAI,name:"OPENAI_API_KEY"); openAI = "" }.disabled(openAI.isEmpty)
-                    }
+                    LabeledContent("Sign-in",value:"Codex")
+                    Text("Sign in through Codex on this Mac, then check the connection here.").font(.callout).foregroundStyle(.secondary)
                     TextField("Model",text:$app.modelName).disabled(app.busy)
                     LabeledContent("Status") { Text(app.serviceStatus).foregroundStyle(.secondary) }
                     Button("Check Connection",action:app.checkConnection).disabled(app.busy)
@@ -34,17 +25,20 @@ struct SettingsView: View {
             VoiceSettingsView(app:app)
                 .tabItem { Label("Voices",systemImage:"waveform") }.tag("voices")
 
+            AutomationSettingsView(app:app)
+                .tabItem { Label("Automation",systemImage:"switch.2") }.tag("automation")
+
             Form {
                 Section("Storage") {
                     LabeledContent("Conversations and recordings",value:"On this Mac")
-                    LabeledContent("API keys",value:"macOS Keychain")
+                    LabeledContent("Sign-in",value:"Your local Codex session")
                     Button("Export Library Backup…",action:app.exportLibraryBackup)
                     Button("Import Library Backup…",action:app.importLibraryBackup)
                     Button("Show Data Folder…") { NSWorkspace.shared.open(app.store.root) }
                 }
                 Section("Privacy") {
-                    Text("Conversation text, context, and submitted voice messages go to OpenAI. Reference synthesis sends text and performer audio to ElevenLabs. Practice attempts and pitch analysis stay on your Mac.")
-                    Text("Library backups contain practice audio, but not voice setup recordings or provider voice profiles. Provider processing and retention follow your account settings.").foregroundStyle(.secondary)
+                    Text("Conversation text, context, voice messages, and example text go to OpenAI through your Codex sign-in. Practice attempts and pitch analysis stay on your Mac.")
+                    Text("Library backups include conversations and practice audio, not sign-in credentials. Provider processing and retention follow your account settings.").foregroundStyle(.secondary)
                 }
                 Section("Mochi") {
                     Text("Original character and artwork © Xiaolai. Used with permission.").foregroundStyle(.secondary)
@@ -62,14 +56,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var feedback: some View {
-        if !saved.isEmpty { Text(saved).font(.callout).foregroundStyle(.secondary) }
         if let error = app.error { Text(error).font(.callout).foregroundStyle(.red) }
     }
 
-    private func saveKey(_ value: String, name: String) {
-        do {
-            try Credentials.save(value.trimmingCharacters(in:.whitespacesAndNewlines),name:name)
-            saved = "Saved to Keychain."
-        } catch { saved = error.localizedDescription }
-    }
 }

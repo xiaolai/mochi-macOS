@@ -28,6 +28,12 @@ struct VoiceTranscriptControls: View {
             if let name = message.audio {
                 Button("Show recording in Finder") { NSWorkspace.shared.activateFileViewerSelecting([app.store.root.appendingPathComponent(name)]) }
             }
+            if app.writableConversation {
+                Divider()
+                Button(role:.destructive) { app.deleteMessage(message.id) } label: {
+                    Label("Delete Message",systemImage:"trash")
+                }.disabled(!app.canDeleteMessages)
+            }
         } label: {
             if recovering { ProgressView().controlSize(.mini) }
             else { Image(systemName:message.contextText == nil ? "exclamationmark.bubble" : "ellipsis").frame(width:20,height:26) }

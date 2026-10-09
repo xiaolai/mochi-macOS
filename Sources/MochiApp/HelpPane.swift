@@ -86,7 +86,6 @@ struct PracticePane: View {
                 }
             }.padding(20)
         }.background(Color(nsColor:.windowBackgroundColor))
-        .sheet(isPresented:$app.practiceVoiceSetupOpen) { VoiceSetupView(app:app) }
         .onAppear { thoughtFocused = app.helpStage == .thought }
         .onChange(of:app.helpStage) { _,stage in thoughtFocused = stage == .thought }
     }
@@ -176,30 +175,18 @@ struct PracticePane: View {
             DisclosureGroup("Example voice: \(app.practiceVoiceLabel)",isExpanded:$voiceDetailsOpen) {
             VStack(alignment:.leading,spacing:10) {
             HStack {
-                Picker("Practice voice",selection:$app.practiceVoiceMode) {
-                    Text("Built-in Voice").tag(PracticeVoiceMode.builtIn)
-                    Text("My Voice").tag(PracticeVoiceMode.personal)
+                Picker("Voice",selection:$app.builtInPracticeVoice) {
+                    ForEach(RealtimeVoice.allCases) { voice in Text(voice.name).tag(voice.rawValue) }
                 }.fixedSize().disabled(app.busy)
-                if app.practiceVoiceMode == .builtIn {
-                    Picker("Voice",selection:$app.builtInPracticeVoice) {
-                        ForEach(RealtimeVoice.allCases) { voice in Text(voice.name).tag(voice.rawValue) }
-                    }.labelsHidden().fixedSize().disabled(app.busy)
-                } else {
-                    Picker("Pronunciation",selection:$app.performer) {
-                        ForEach(PronunciationTarget.allCases) { target in Text(target.name).tag(target.rawValue) }
-                    }.labelsHidden().fixedSize().disabled(app.busy)
-                }
                 Spacer()
                 Button { voiceOptionsOpen = true } label: { Image(systemName:"slider.horizontal.3") }
                     .help("Voice options").disabled(app.busy)
                     .popover(isPresented:$voiceOptionsOpen) {
                         Form {
-                            if app.practiceVoiceMode == .builtIn { OpenAIVoiceOptionsView(options:$app.practiceVoiceOptions,expanded:true) }
-                            else { PersonalVoiceOptionsView(options:$app.personalVoiceOptions,expanded:true) }
-                        }.formStyle(.grouped).frame(width:460,height:app.practiceVoiceMode == .builtIn ? 190 : 530)
+                            OpenAIVoiceOptionsView(options:$app.practiceVoiceOptions,expanded:true)
+                        }.formStyle(.grouped).frame(width:460,height:190)
                     }
             }
-            Button("Set Up My Voice…") { app.practiceVoiceSetupOpen = true }.disabled(app.busy || !app.voiceProfilesReadable)
             }
             }
             if app.expression?.reference != nil {
@@ -220,15 +207,6 @@ struct PracticePane: View {
                     Button("Import Reference…",action:app.importReference)
                     if app.expression?.reference != nil { Button("Regenerate Example") { app.render(force:true) } }
                 } label: { Label("Reference Options",systemImage:"ellipsis") }.menuStyle(.borderlessButton).fixedSize().disabled(app.busy)
-            }
-            if app.practiceVoiceMode == .personal && app.selectedVoiceProfile?.ready != true {
-                HStack {
-                    Text("Set up or verify your voice to generate a personal example.").font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Use Marin") { app.practiceVoiceMode = .builtIn; app.builtInPracticeVoice = "marin" }.disabled(app.busy)
-                }
-            } else if app.error != nil && app.practiceVoiceMode == .personal {
-                Button("Use Marin for This Example") { app.render(force:true,usingBuiltIn:"marin") }.disabled(app.busy)
             }
             DisclosureGroup("Compare pitch · unscored",isExpanded:$pitchOpen) {
             GroupBox {

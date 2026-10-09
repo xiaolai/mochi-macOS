@@ -29,7 +29,7 @@ final class RealtimeLifecycleTests: XCTestCase {
             ["type":"session.created"],["type":"session.updated"],["type":"input_audio_buffer.committed","item_id":"one"],
             ["type":"conversation.item.input_audio_transcription.completed","item_id":"one","transcript":"Known speech"]
         ])
-        let service = RealtimeService(auth:"codex",model:"selected-model")
+        let service = RealtimeService(model:"selected-model")
         let text = try await service.transcribe(Data(repeating:0,count:4800),credential:{ "test-session" },connect:{ request in
             XCTAssertEqual(request.url?.scheme,"wss")
             XCTAssertEqual(URLComponents(url:request.url!,resolvingAgainstBaseURL:false)?.queryItems?.first?.value,"selected-model")
@@ -58,8 +58,8 @@ final class RealtimeLifecycleTests: XCTestCase {
     }
     func testCodexCredentialFailureNeverConnectsOrReadsApiKey() async throws {
         do {
-            _ = try await RealtimeService(auth:"codex").transcribe(Data(repeating:0,count:4800),credential:{
-                try await RealtimeService.sessionToken(auth:"codex",model:"gpt-realtime",apiKey:{ XCTFail("No fallback"); return "" },codexToken:{ "fake" },transport:{ _ in throw ServiceHTTP.failure(status:403,provider:"OpenAI") })
+            _ = try await RealtimeService().transcribe(Data(repeating:0,count:4800),credential:{
+                try await RealtimeService.sessionToken(model:"gpt-realtime",codexToken:{ "fake" },transport:{ _ in throw ServiceHTTP.failure(status:403,provider:"OpenAI") })
             },connect:{ _ in XCTFail("Must not connect with rejected credentials"); return SocketFixture().channel })
             XCTFail("Expected credential failure")
         } catch { XCTAssertEqual(error.localizedDescription,"This account does not have access to OpenAI.") }

@@ -1,3 +1,4 @@
+import MochiAutomation
 import Foundation
 public struct PitchPoint: Sendable {
     public var time: Double

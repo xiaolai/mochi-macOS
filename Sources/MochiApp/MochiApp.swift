@@ -4,12 +4,12 @@ import MochiCore
 
 @main struct MochiApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @StateObject private var model = AppModel(demo:CommandLine.arguments.contains("--preview") || CommandLine.arguments.contains("--smoke-test") || CommandLine.arguments.contains("--tray-smoke-test"))
+    @StateObject private var model = AppModel(demo:DevelopmentLaunch.demo)
     var body: some Scene {
         Window("Mochi",id:"main") {
             WorkspaceView(app:model)
                 .background(MainWindowReader { delegate.tray.attach($0, model:model) })
-                .onAppear { delegate.model = model; if CommandLine.arguments.contains("--smoke-test") { delegate.smoke(model) }; if CommandLine.arguments.contains("--tray-smoke-test") { delegate.smokeTray(model) }; if CommandLine.arguments.contains("--probe") { delegate.probe(model) } }
+                .onAppear { delegate.attachModel(model); delegate.runDevelopmentActions(model) }
         }.defaultSize(width:1040,height:760)
         .windowToolbarStyle(.unified)
         .commands {
@@ -42,24 +42,35 @@ import MochiCore
     var model: AppModel?
     let tray = TrayController()
     private var ran = false
+    func attachModel(_ model: AppModel) {
+        guard self.model !== model else { return }
+        self.model = model
+        model.revealWorkspace = { [weak self] in self?.tray.showWindow() }
+        model.configureAutomation()
+    }
+    func runDevelopmentActions(_ model: AppModel) {
+        #if MOCHI_DEVELOPMENT
+        if CommandLine.arguments.contains("--smoke-test") { smoke(model) }
+        if CommandLine.arguments.contains("--tray-smoke-test") { smokeTray(model) }
+        if CommandLine.arguments.contains("--probe") { probe(model) }
+        if CommandLine.arguments.contains("--tools-probe") { toolsProbe(model) }
+        #endif
+    }
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps:true)
         tray.install()
-        if CommandLine.arguments.contains("--import-environment") {
-            for name in ["OPENAI_API_KEY", "ELEVENLABS_API_KEY"] {
-                if let value = ProcessInfo.processInfo.environment[name], !value.isEmpty {
-                    do { try Credentials.save(value,name:name); print("Credential saved to Keychain: \(name)") }
-                    catch { print("Credential import failed: \(name)") }
-                }
-            }
-        }
+        #if MOCHI_DEVELOPMENT
+
+        #endif
     }
-    func applicationWillTerminate(_ notification: Notification) { model?.cancelVoiceSetup?(); model?.stop(); model?.save() }
+    func applicationDidBecomeActive(_ notification: Notification) { model?.configureAutomation() }
+    func applicationWillTerminate(_ notification: Notification) { model?.controlServer?.stop(); model?.notice = nil; model?.stop(); model?.save() }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         tray.showWindow()
         return false
     }
+    #if MOCHI_DEVELOPMENT
     func smokeTray(_ model: AppModel) {
         guard !ran else { return }; ran = true
         model.turn.resume()
@@ -142,12 +153,6 @@ import MochiCore
                 while (NSApp.isHidden || !window.isVisible) && Date() < clickReopenedDeadline { try await Task.sleep(nanoseconds:1_000_000) }
                 checks.append(("Left click restores window and Dock without menu",window.isVisible && !NSApp.isHidden && NSApp.activationPolicy() == .regular && !presented))
                 tray.presentMenu = originalPresenter
-                let setup = VoiceSetupModel(app:model)
-                setup.begin(); tray.closeToTray()
-                checks.append(("Command-Q closes separate voice setup",setup.closed && !model.voiceSetupActive && model.cancelVoiceSetup == nil))
-                tray.showWindow()
-
-
                 let icon = TrayController.icon()
                 for scale in [1,2,4] {
                     let rep = NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:20*scale,pixelsHigh:18*scale,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0)!
@@ -175,6 +180,7 @@ import MochiCore
             try? FileManager.default.removeItem(at:directory.appendingPathComponent("smoke.txt"))
             var captureFailures: [String] = []
             var captureCount = 0
+            var viewCaptureCount = 0
             let mainWindow = NSApp.windows.first(where: { $0.isVisible && !$0.isSheet && $0.parent == nil && $0.canBecomeMain && $0.frame.width >= 760 })
             @MainActor func capture(_ name: String, settings: Bool = false, window explicitWindow: NSWindow? = nil) {
                 captureCount += 1
@@ -184,10 +190,21 @@ import MochiCore
                 let capture = Process()
                 capture.executableURL = URL(fileURLWithPath:"/usr/sbin/screencapture")
                 capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), directory.appendingPathComponent(name).path]
+                var captured = false
                 do {
                     try capture.run(); capture.waitUntilExit()
-                    if capture.terminationStatus != 0 { captureFailures.append(name) }
-                } catch { captureFailures.append(name) }
+                    captured = capture.terminationStatus == 0 && FileManager.default.fileExists(atPath:directory.appendingPathComponent(name).path)
+                } catch { }
+                // Capture this app's own view hierarchy when screen recording permission is unavailable.
+                if !captured, let view = window.contentView?.superview ?? window.contentView,
+                   let bitmap = view.bitmapImageRepForCachingDisplay(in:view.bounds) {
+                    view.cacheDisplay(in:view.bounds,to:bitmap)
+                    if let png = bitmap.representation(using:.png,properties:[:]) {
+                        do { try png.write(to:directory.appendingPathComponent(name)); captured = true; viewCaptureCount += 1 }
+                        catch { }
+                    }
+                }
+                if !captured { captureFailures.append(name) }
 
             }
             if mainWindow?.titleVisibility != .hidden || mainWindow?.toolbar?.displayMode != .iconOnly {
@@ -198,7 +215,6 @@ import MochiCore
             }
             if mainWindow?.titlebarSeparatorStyle != NSTitlebarSeparatorStyle.none { captureFailures.append("Title-bar separator remains enabled") }
             mainWindow?.attachedSheet?.makeFirstResponder(nil)
-            model.practiceVoiceMode = .builtIn
             model.builtInPracticeVoice = "marin"
             capture("practice.png")
             NSApp.appearance = NSAppearance(named:.darkAqua)
@@ -209,31 +225,19 @@ import MochiCore
             try? await Task.sleep(nanoseconds:300_000_000)
             capture("practice-compact.png")
             if let window = mainWindow { window.setContentSize(NSSize(width:1120,height:840)) }
-            model.practiceVoiceSetupOpen = true
-            try? await Task.sleep(nanoseconds:450_000_000)
-            capture("voice-setup-recordings.png")
-            model.voiceSetupPreviewStep = 1
-            try? await Task.sleep(nanoseconds:350_000_000)
-            capture("voice-setup-pronunciation.png")
-            model.voiceSetupPreviewStep = 2
-            try? await Task.sleep(nanoseconds:350_000_000)
-            capture("voice-setup-comparison.png")
-            model.practiceVoiceSetupOpen = false
-            try? await Task.sleep(nanoseconds:350_000_000)
             model.resume()
             try? await Task.sleep(nanoseconds:350_000_000)
-            if mainWindow?.attachedSheet != nil { captureFailures.append("Practice/voice setup left a sheet attached to the conversation") }
+            if mainWindow?.attachedSheet != nil { captureFailures.append("Practice left a sheet attached to the conversation") }
             capture("conversation.png")
-            let toolbarStates: [(Activity,Bool,String)] = [(.generating,false,"generation"),(.playing,false,"playback"),(.recording,false,"recording"),(.requestingPermission,false,"permission"),(.idle,true,"voice-setup")]
-            for (activity,setup,name) in toolbarStates {
-                model.voiceSetupActive = setup
+            let toolbarStates: [(Activity,String)] = [(.generating,"generation"),(.playing,"playback"),(.recording,"recording"),(.requestingPermission,"permission"),(.idle,"idle")]
+            for (activity,name) in toolbarStates {
                 _ = model.turn.begin(activity)
                 try? await Task.sleep(nanoseconds:250_000_000)
                 let hasStop = mainWindow?.toolbar?.items.contains(where: { $0.label == "Stop" }) == true
                 if hasStop != (activity == .generating) { captureFailures.append("Incorrect title-bar Stop visibility: \(name)") }
                 capture("titlebar-stop-\(name).png")
             }
-            model.voiceSetupActive = false; model.stop()
+            model.stop()
             model.newChat()
             try? await Task.sleep(nanoseconds:300_000_000)
             capture("welcome.png")
@@ -258,7 +262,53 @@ import MochiCore
             try? await Task.sleep(nanoseconds:4_100_000_000)
             if model.notice != nil { captureFailures.append("Conversation notice did not automatically dismiss") }
             capture("conversation-notice-dismissed.png")
-            model.auth = "codex"
+            let deletedRecording = "message-delete-fixture.wav"
+            try? PCM.wav(Data(repeating:0,count:48000)).write(to:model.store.root.appendingPathComponent(deletedRecording))
+            let deleteFixture = Message(role:"user",text:"Could we practise this sentence?",audio:deletedRecording)
+            model.append(deleteFixture,to:model.selectedID!)
+            try? await Task.sleep(nanoseconds:250_000_000)
+            capture("message-before-deletion.png")
+            model.deleteMessage(deleteFixture.id)
+            try? await Task.sleep(nanoseconds:250_000_000)
+            if !model.canUndoMessageDeletion || model.conversation?.messages.contains(where:{ $0.id == deleteFixture.id }) == true {
+                captureFailures.append("Single-message deletion or Undo availability failed")
+            }
+            capture("message-deleted-undo.png")
+            model.undoMessageDeletion()
+            try? await Task.sleep(nanoseconds:250_000_000)
+            if model.conversation?.messages.last?.id != deleteFixture.id || !FileManager.default.fileExists(atPath:model.store.root.appendingPathComponent(deletedRecording).path) {
+                captureFailures.append("Undo did not restore the message and recording")
+            }
+            capture("message-deletion-undone.png")
+            if let chatID = model.selectedID {
+                var preferences = ConversationPreferences(); preferences.coaching = .direct; preferences.speed = 0.85
+                if !model.setConversationInstructions(chatID,instructions:"Act as a job interviewer. Ask one question at a time and let me finish before offering feedback.",preferences:preferences) { captureFailures.append("Conversation instructions could not be saved") }
+                model.instructionsID = chatID
+                try? await Task.sleep(nanoseconds:450_000_000)
+                capture("conversation-instructions.png",window:mainWindow?.attachedSheet)
+                NSApp.appearance = NSAppearance(named:.darkAqua)
+                try? await Task.sleep(nanoseconds:250_000_000)
+                capture("conversation-instructions-dark.png",window:mainWindow?.attachedSheet)
+                NSApp.appearance = NSAppearance(named:.aqua); model.instructionsID = nil
+                try? await Task.sleep(nanoseconds:350_000_000)
+                // Real bundled MCP subprocess -> private socket -> shared app command layer.
+                model.allowDemoAutomation = true; model.externalControlEnabled = true
+                let socketPath = model.controlSocketPath
+                do {
+                    guard model.controlServer != nil else { throw AppFailure("Production automation listener did not start.") }
+                    let helper = model.mcpExecutablePath
+                    let result = try await Task.detached { try AutomationSmokeClient.run(helper:helper,socketPath:socketPath) }.value
+                    try result.write(to:directory.appendingPathComponent("mcp-process.json"),options:.atomic)
+                    if !model.library.expressions.contains(where:{ $0.english == "Could you give me a moment?" && $0.conversationID == chatID }) { captureFailures.append("Bundled MCP helper did not save the expression") }
+                    model.externalControlEnabled = false
+                    let disabled = try await Task.detached { try AutomationSmokeClient.disabled(helper:helper,socketPath:socketPath) }.value
+                    let unlinked = !FileManager.default.fileExists(atPath:socketPath)
+                    try JSONSerialization.data(withJSONObject:["disabled_rejected":disabled,"socket_unlinked":unlinked]).write(to:directory.appendingPathComponent("mcp-disabled.json"))
+                    if !disabled || !unlinked { captureFailures.append("Production external control shutdown failed") }
+                } catch { captureFailures.append("MCP subprocess smoke failed: \(error)") }
+                model.externalControlEnabled = false; model.allowDemoAutomation = false
+            }
+            model.newChat()
             model.startHelp()
             try? await Task.sleep(nanoseconds:300_000_000)
             capture("help.png")
@@ -297,8 +347,7 @@ import MochiCore
                 model.append(Message(role:"assistant",text:"Take your time. What would help you decide?"),to:id)
                 try? await Task.sleep(nanoseconds:300_000_000)
                 capture("voice-recovery.png")
-                model.auth = "codex"
-                model.transcribeRecording = { _,_,_ in try await Task.sleep(nanoseconds:900_000_000); return "I would like a little more time to think." }
+                    model.transcribeRecording = { _,_,_ in try await Task.sleep(nanoseconds:900_000_000); return "I would like a little more time to think." }
                 model.retryTranscription(failed.id)
                 try? await Task.sleep(nanoseconds:250_000_000)
                 capture("voice-recovery-progress.png")
@@ -360,7 +409,6 @@ import MochiCore
                 model.closeConversationSearch()
                 if let window = mainWindow { window.setContentSize(NSSize(width:1120,height:840)) }
 
-
                 if model.conversation?.messages.first(where: { $0.id == failed.id })?.transcriptionState != .completed { captureFailures.append("Codex fixture recovery did not complete") }
             }
             model.showExpressions = true
@@ -405,12 +453,12 @@ import MochiCore
             model.settingsOpen = true
             try? await Task.sleep(nanoseconds:500_000_000)
             capture("settings.png",settings:true)
+            model.settingsTab = "automation"
+            try? await Task.sleep(nanoseconds:350_000_000)
+            capture("automation-settings.png",settings:true)
             model.settingsTab = "voices"
             try? await Task.sleep(nanoseconds:350_000_000)
             capture("voice-settings.png",settings:true)
-            model.practiceVoiceMode = .personal
-            try? await Task.sleep(nanoseconds:350_000_000)
-            capture("voice-settings-elevenlabs.png",settings:true)
             let pitchFixture = (0..<150).map { i -> PitchPoint in
                 let t = Double(i)*0.015
                 let value = 7 + 3*sin(t*5) + (i.isMultiple(of:2) ? 0.45 : -0.45) + (i == 88 ? 12 : 0)
@@ -435,6 +483,24 @@ import MochiCore
             NSApp.appearance = NSAppearance(named:.aqua)
             comparison.orderOut(nil)
             model.settingsOpen = false
+            NSApp.windows.filter { $0 !== mainWindow && $0.isVisible && $0.canBecomeMain }.forEach { $0.performClose(nil) }
+            try? await Task.sleep(nanoseconds:250_000_000)
+            model.allowDemoAutomation = true; model.externalControlEnabled = true
+            let controlPath = model.controlSocketPath, helper = model.mcpExecutablePath
+            do {
+                if model.automationModal { throw AppFailure("Closing Settings left a conversation modal active.") }
+                let result = try await Task.detached { try AutomationSmokeClient.run(helper:helper,socketPath:controlPath) }.value
+                try result.write(to:directory.appendingPathComponent("mcp-after-settings.json"))
+                tray.closeToTray()
+                try? await Task.sleep(nanoseconds:250_000_000)
+                let hidden = mainWindow?.isVisible == false && NSApp.activationPolicy() == .accessory
+                let trayResult = try await Task.detached { try AutomationSmokeClient.run(helper:helper,socketPath:controlPath) }.value
+                try trayResult.write(to:directory.appendingPathComponent("mcp-in-tray.json"))
+                try JSONSerialization.data(withJSONObject:["settings_closed":true,"modal":model.automationModal,"tray_accessory":hidden,"control_enabled":model.externalControlEnabled]).write(to:directory.appendingPathComponent("mcp-lifecycle.json"))
+                if !hidden { captureFailures.append("MCP tray test did not enter accessory mode") }
+            } catch { captureFailures.append("MCP Settings/tray regression failed: \(error)") }
+            tray.showWindow()
+            model.externalControlEnabled = false; model.allowDemoAutomation = false
             model.newChat()
             let greetingPlayer = SmokePlaybackPlayer()
             model.audio.makePlayer = { _ in greetingPlayer }
@@ -461,7 +527,30 @@ import MochiCore
             capture("voice-greeting-listening.png")
             model.stop()
             let passed = captureFailures.isEmpty && model.library.expressions.count >= 1 && model.turn.mode == .conversation && model.turn.owner == .none
-            try? Data("Native smoke: \(passed ? "PASS" : "FAIL"). \(captureCount) native window and sheet snapshots. Capture failures: \(captureFailures.count). No network, microphone or speaker output.\n".utf8).write(to:directory.appendingPathComponent("smoke.txt"))
+            try? JSONSerialization.data(withJSONObject:["capture_count":captureCount,"view_capture_count":viewCaptureCount,"failures":captureFailures],options:[.prettyPrinted,.sortedKeys]).write(to:directory.appendingPathComponent("smoke-report.json"))
+            try? Data("Native smoke: \(passed ? "PASS" : "FAIL"). \(captureCount) native window and sheet snapshots (\(viewCaptureCount) AppKit view captures). Capture failures: \(captureFailures.count). No network, microphone or speaker output.\n".utf8).write(to:directory.appendingPathComponent("smoke.txt"))
+            NSApp.terminate(nil)
+        }
+    }
+    func toolsProbe(_ model: AppModel) {
+        guard !ran else { return }; ran = true
+        Task {
+            let directory = URL(fileURLWithPath:ProcessInfo.processInfo.environment["MOCHI_EVIDENCE_DIR"] ?? "/tmp/mochi-tools-probe")
+            try? FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+            model.stop(); model.leavePractice(); model.newChat()
+            let token = model.turn.begin(.generating)
+            var calls: [String] = [], result = "FAIL"
+            do {
+                let preferences = UserDefaults.standard
+                let service = RealtimeService(model:preferences.string(forKey:"model") ?? "gpt-realtime",voice:"marin")
+                let reply = try await service.reply(ConversationRequest(history:[],text:"Use get_session to find the current conversation ID, then use save_expression to save exactly: Could you give me a moment? Once the tool confirms success, say Saved.",spoken:true,instructions:"For this test, execute the requested tools before answering. Reply with the single word Saved after success."),onTool: { name,args,_ in
+                    guard model.turn.epoch == token else { throw CancellationError() }
+                    calls.append(name); return try model.executeTool(name,arguments:args,origin:.voice)
+                })
+                if !reply.audio.isEmpty && calls.contains("get_session") && calls.contains("save_expression") && model.library.expressions.contains(where:{ $0.english == "Could you give me a moment?" && $0.conversationID == model.selectedID }) && reply.text.trimmingCharacters(in:.whitespacesAndNewlines).lowercased().hasPrefix("saved") { result = "PASS" }
+            } catch { result = "UNVERIFIED: " + ((error as? AppFailure)?.message ?? "Provider connection failed.") }
+            _ = model.turn.finish(token)
+            try? Data("Live Realtime instructions and tools: \(result). Calls: \(calls.joined(separator:", ")). Synthetic spoken response; audio returned without playback. No real library changes or microphone use.\n".utf8).write(to:directory.appendingPathComponent("live-tools-probe.txt"))
             NSApp.terminate(nil)
         }
     }
@@ -472,31 +561,41 @@ import MochiCore
             try? FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
             var lines: [String] = []
             do {
-                let service = RealtimeService(auth:model.auth,model:model.modelName,voice:model.conversationVoice,options:model.conversationVoiceOptions)
+                let service = RealtimeService(model:model.modelName,voice:model.conversationVoice,options:model.conversationVoiceOptions)
                 let result = try await service.reply(ConversationRequest(history:[],text:"Reply with the single word ready."))
                 lines.append("Realtime text: \(!result.text.isEmpty ? "PASS" : "FAIL")")
                 let translation = try await service.reply(ConversationRequest(history:[],text:"我一直拖着不做，因为不知道从哪里开始。",help:true))
                 lines.append("Help translation: \(!translation.text.isEmpty && translation.audio.isEmpty ? "PASS" : "FAIL")")
                 let spoken = try await service.reply(ConversationRequest(history:[],text:"Say hello briefly.",spoken:true))
                 lines.append("Realtime audio generation: \(!spoken.audio.isEmpty ? "PASS" : "FAIL") (not played)")
+                let reference = try await service.referenceAudio(text:"I would like a little more time to think.",root:model.store.root,force:true)
+                let samples = try AudioFile.samples(reference)
+                lines.append("Exact practice reference and local decode: \(!samples.samples.isEmpty ? "PASS" : "FAIL") (not played)")
                 if !spoken.audio.isEmpty {
+                    let recovered = try await service.transcribe(spoken.audio)
+                    lines.append("Standalone transcription recovery: \(!recovered.isEmpty ? "PASS" : "FAIL") (synthetic audio)")
                     let heard = try await service.reply(ConversationRequest(history:[],text:"",pcm:spoken.audio))
                     lines.append("Synthetic audio input and transcription: \(!heard.inputTranscript.isEmpty && !heard.text.isEmpty ? "PASS" : "FAIL") (no microphone)")
                 }
             } catch { lines.append("Realtime: \(error.localizedDescription)") }
-            if !model.clone.isEmpty {
-                do {
-                    let url = try await VoiceRenderer().render(model.personalVoiceOptions.identity(text:"I would like a little more time to think.",performer:model.performer,clone:model.clone),root:model.store.root)
-                    let pitch = try AudioFile.pitch(url)
-                    lines.append("Own-voice TTS → STS and decode: \(pitch.contains(where: { $0.hz != nil }) ? "PASS" : "FAIL") (not played)")
-                } catch { lines.append("Own voice: \(error.localizedDescription)") }
-            } else { lines.append("Own voice: not probed (clone ID not configured)") }
             try? Data((lines.joined(separator:"\n")+"\n").utf8).write(to:directory.appendingPathComponent("live-probe.txt"))
             NSApp.terminate(nil)
         }
     }
+    #endif
 }
 
+enum DevelopmentLaunch {
+    static var demo: Bool {
+        #if MOCHI_DEVELOPMENT
+        return ["--preview","--smoke-test","--tray-smoke-test","--tools-probe","--probe"].contains { CommandLine.arguments.contains($0) }
+        #else
+        return false
+        #endif
+    }
+}
+
+#if MOCHI_DEVELOPMENT
 // Native layout fixtures never send sound to the speakers.
 private final class SmokePlaybackPlayer: PlaybackPlayer {
     let duration: TimeInterval = 3
@@ -507,3 +606,5 @@ private final class SmokePlaybackPlayer: PlaybackPlayer {
     func pause() {}
     func stop() {}
 }
+
+#endif

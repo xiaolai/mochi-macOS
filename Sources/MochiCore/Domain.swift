@@ -1,3 +1,4 @@
+import MochiAutomation
 import Foundation
 import CryptoKit
 import Darwin
@@ -59,11 +60,13 @@ public struct Conversation: Codable, Identifiable {
     public var customTitle = false
     public var draft = ""
     public var helpDraft: HelpDraft?
+    public var instructions = ""
+    public var preferences = ConversationPreferences()
     public var voiceIntroduced = false
     public var isDeleted: Bool { deletedAt != nil }
     public var updatedAt: Date { messages.last?.date ?? date }
     public init(title: String = "A new conversation") { self.title = title }
-    private enum CodingKeys: String, CodingKey { case id,title,messages,date,pinned,archived,deletedAt,wasArchivedBeforeDeletion,customTitle,draft,helpDraft,voiceIntroduced }
+    private enum CodingKeys: String, CodingKey { case id,title,messages,date,pinned,archived,deletedAt,wasArchivedBeforeDeletion,customTitle,draft,helpDraft,voiceIntroduced,instructions,preferences }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy:CodingKeys.self)
         id = try c.decode(UUID.self,forKey:.id); title = try c.decode(String.self,forKey:.title)
@@ -75,6 +78,8 @@ public struct Conversation: Codable, Identifiable {
         customTitle = try c.decodeIfPresent(Bool.self,forKey:.customTitle) ?? (title != "A new conversation" && messages.isEmpty)
         draft = try c.decodeIfPresent(String.self,forKey:.draft) ?? ""
         helpDraft = try c.decodeIfPresent(HelpDraft.self,forKey:.helpDraft)
+        instructions = try c.decodeIfPresent(String.self,forKey:.instructions) ?? ""
+        preferences = try c.decodeIfPresent(ConversationPreferences.self,forKey:.preferences) ?? ConversationPreferences()
         voiceIntroduced = try c.decodeIfPresent(Bool.self,forKey:.voiceIntroduced) ?? messages.contains { $0.role == "user" && $0.audio != nil }
     }
 }
@@ -121,6 +126,19 @@ public struct LibraryStore {
         library.version = 2
         return library
     }
+    public func cleanupOrphanedAudio(_ library: Library) throws {
+        try library.validate()
+        let referenced = library.referencedAudio
+        for url in try FileManager.default.contentsOfDirectory(at:root,includingPropertiesForKeys:[.isRegularFileKey,.isSymbolicLinkKey]) {
+            let name = url.lastPathComponent
+            guard !referenced.contains(name), name.hasSuffix(".wav"),
+                  name.hasPrefix("recording-") || name.hasPrefix("reply-") else { continue }
+            let stem = String(name.dropLast(4)), uuid = stem.hasPrefix("reply-") ? String(stem.dropFirst(6)) : String(stem.dropFirst(10))
+            guard UUID(uuidString:uuid) != nil else { continue }
+            let values = try url.resourceValues(forKeys:[.isRegularFileKey,.isSymbolicLinkKey])
+            if values.isRegularFile == true && values.isSymbolicLink != true { try FileManager.default.removeItem(at:url) }
+        }
+    }
     public func save(_ library: Library) throws {
         try prepare()
         try library.validate()
@@ -128,6 +146,11 @@ public struct LibraryStore {
             let original = try Data(contentsOf:file)
             let existing = try JSONDecoder().decode(Library.self,from:original)
             guard (1...2).contains(existing.version) else { throw AppFailure("Unsupported library version; existing data was not changed.") }
+            let instructionsBackup = root.appendingPathComponent("library-before-conversation-instructions.json")
+            if !FileManager.default.fileExists(atPath:instructionsBackup.path) {
+                try original.write(to:instructionsBackup,options:.atomic)
+                try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:instructionsBackup.path)
+            }
             let featureBackup = root.appendingPathComponent("library-before-help-transcription.json")
             if library.conversations.contains(where: { $0.helpDraft != nil || $0.messages.contains(where: { $0.transcriptionState != nil }) }), !FileManager.default.fileExists(atPath:featureBackup.path) {
                 try original.write(to:featureBackup,options:.atomic)
@@ -146,31 +169,4 @@ public struct LibraryStore {
         try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:staging.path)
         guard Darwin.rename(staging.path,file.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue:errno) ?? .EIO) }
     }
-}
-public struct RenderIdentity: Codable {
-    public var text: String
-    public var performer: String
-    public var clone: String
-    public var speed: Double = 1
-    public var ttsModel = "eleven_multilingual_v2"
-    public var stsModel = "eleven_multilingual_sts_v2"
-    public var schema = 2
-    public var stability = 0.5
-    public var similarity = 0.75
-    public var style = 0.0
-    public var speakerBoost = true
-    public var conversion = ElevenVoiceOptions()
-    public var pronunciation: ElevenVoiceOptions {
-        var value = ElevenVoiceOptions(); value.stability = stability; value.similarity = similarity; value.style = style; value.speakerBoost = speakerBoost; return value
-    }
-    public var sourceKey: String {
-        var source = self; source.clone = ""; source.conversion = ElevenVoiceOptions(); source.stsModel = ""; return source.key
-    }
-    public init(text: String, performer: String, clone: String) { self.text = text; self.performer = performer; self.clone = clone }
-    public var key: String { let e = JSONEncoder(); e.outputFormatting = .sortedKeys; return SHA256.hash(data: (try? e.encode(self)) ?? Data()).map { String(format: "%02x", $0) }.joined() }
-}
-public struct AppFailure: LocalizedError {
-    public let message: String
-    public init(_ message: String) { self.message = message }
-    public var errorDescription: String? { message }
 }

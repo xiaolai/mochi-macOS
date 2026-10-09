@@ -1,3 +1,4 @@
+import MochiAutomation
 import Foundation
 
 public enum TranscriptionState: String, Codable { case pending, completed, failed, timedOut, interrupted }

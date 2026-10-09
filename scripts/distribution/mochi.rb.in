@@ -1,7 +1,5 @@
-# Draft: replace @SHA256@ with the hash of the publicly downloaded, notarized DMG.
-# The proposed GitHub repository and release asset must exist before installation.
 cask "mochi" do
-  version "0.1.2"
+  version "0.2.0"
   sha256 "@SHA256@"
 
   url "https://github.com/xiaolai/mochi-macOS/releases/download/v#{version}/Mochi-#{version}.dmg"

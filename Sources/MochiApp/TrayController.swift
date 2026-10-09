@@ -63,7 +63,6 @@ import SwiftUI
     }
 
     @objc func closeToTray() {
-        model?.cancelVoiceSetup?()
         model?.stop()
         model?.save()
         window?.orderOut(nil)

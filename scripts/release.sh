@@ -9,13 +9,15 @@ swift test
 python3 -m unittest discover -s scripts/tests
 OUT="$PWD/build/release"
 APP="$OUT/Mochi.app"
-[ ! -e "$OUT/Mochi-${MOCHI_RELEASE_VERSION:-0.1.2}.dmg" ] || { echo 'Release DMG already exists; preserve it before rebuilding' >&2; exit 1; }
+[ ! -e "$OUT/Mochi-${MOCHI_RELEASE_VERSION:-0.2.0}.dmg" ] || { echo 'Release DMG already exists; preserve it before rebuilding' >&2; exit 1; }
 mkdir -p "$OUT"
 MOCHI_DISTRIBUTION=1 MOCHI_APP_PATH="$APP" ./scripts/build-app.sh
 version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")
 build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")
-python3 scripts/release_support.py metadata "$APP/Contents/Info.plist" "${MOCHI_RELEASE_VERSION:-0.1.2}" "${MOCHI_RELEASE_BUILD:-24}"
-[ "$(lipo -archs "$APP/Contents/MacOS/Mochi")" = arm64 ] || { echo 'Unexpected architecture' >&2; exit 1; }
+python3 scripts/release_support.py metadata "$APP/Contents/Info.plist" "${MOCHI_RELEASE_VERSION:-0.2.0}" "${MOCHI_RELEASE_BUILD:-25}"
+python3 scripts/release_support.py binary "$APP/Contents/MacOS/Mochi"
+python3 scripts/release_support.py binary "$APP/Contents/MacOS/mochi-mcp"
+python3 scripts/release_support.py distribution "$APP/Contents/MacOS/Mochi" "$APP/Contents/MacOS/mochi-mcp"
 codesign -d --verbose=4 "$APP" 2> "$OUT/signature.txt"
 grep -q 'Authority=Developer ID Application' "$OUT/signature.txt"
 grep -q 'Timestamp=' "$OUT/signature.txt"

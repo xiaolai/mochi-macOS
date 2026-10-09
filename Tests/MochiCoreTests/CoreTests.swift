@@ -22,13 +22,12 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(turn.startRecording())
         XCTAssertEqual(turn.owner, .conversation)
     }
-    func testCacheSeparatesCloneAndSettings() {
-        let a = RenderIdentity(text: "Hello", performer: "performer", clone: "one")
-        let b = RenderIdentity(text: "Hello", performer: "performer", clone: "two")
-        XCTAssertNotEqual(a.key, b.key)
-        XCTAssertEqual(a.key, a.key)
-        var c = a; c.speed = 0.8
-        XCTAssertNotEqual(a.key, c.key)
+    func testReferenceCacheSeparatesVoiceAndSpeed() {
+        let a = ReferenceSpeech.cacheName(text:"Hello",model:"gpt-realtime",voice:"marin")
+        let b = ReferenceSpeech.cacheName(text:"Hello",model:"gpt-realtime",voice:"cedar")
+        XCTAssertNotEqual(a,b)
+        var options = OpenAIVoiceOptions(); options.speed = 0.8
+        XCTAssertNotEqual(a,ReferenceSpeech.cacheName(text:"Hello",model:"gpt-realtime",voice:"marin",options:options))
     }
     func testPersistenceRoundTripAndCorruptionDoesNotOverwrite() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

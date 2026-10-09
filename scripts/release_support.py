@@ -20,6 +20,43 @@ def validate_metadata(info, version, build):
             raise ValueError(f"Unexpected {key}: {info.get(key)!r}; expected {value!r}")
 
 
+def validate_binary_signature(architectures, signature):
+    if architectures.strip() != "arm64":
+        raise ValueError("Unexpected executable architecture")
+    for pattern in (r"^Authority=Developer ID Application:", r"^Timestamp=.+", r"^TeamIdentifier=(?!not set).+", r"^CodeDirectory .*flags=.*runtime"):
+        if not re.search(pattern, signature, re.MULTILINE):
+            raise ValueError("Executable needs timestamped Developer ID signing with hardened runtime")
+
+
+def check_binary(path, *, run=subprocess.run):
+    run(["codesign", "--verify", "--strict", path], check=True, capture_output=True)
+    architectures = run(["lipo", "-archs", path], check=True, capture_output=True, text=True).stdout
+    signature = run(["codesign", "-d", "--verbose=4", path], check=True, capture_output=True, text=True).stderr
+    validate_binary_signature(architectures, signature)
+
+
+def validate_distribution_symbols(app_strings, helper_symbols, app_symbols=""):
+    for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer"):
+        if probe in app_strings:
+            raise ValueError("Development probes cannot ship in the distribution app")
+    for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray"):
+        if symbol in app_symbols:
+            raise ValueError("Development probe symbols cannot ship in the distribution app")
+    for retired in ("api.elevenlabs.io", "ElevenLabsVoices", "VoiceRenderer", "VoiceSetupModel", "ELEVENLABS_API_KEY", "OPENAI_API_KEY"):
+        if retired in app_strings or retired in app_symbols:
+            raise ValueError("Retired voice providers cannot ship in the Codex-only app")
+    for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken"):
+        if symbol in helper_symbols:
+            raise ValueError("Provider and credential code cannot ship in the MCP helper")
+
+
+def check_distribution(app, helper, *, run=subprocess.run):
+    app_strings = run(["strings", app], check=True, capture_output=True, text=True).stdout
+    app_symbols = run(["nm", app], check=True, capture_output=True, text=True).stdout
+    helper_symbols = run(["nm", helper], check=True, capture_output=True, text=True).stdout
+    validate_distribution_symbols(app_strings, helper_symbols, app_symbols)
+
+
 def render_cask(template, digest):
     if not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise ValueError("A real lowercase SHA-256 is required")
@@ -75,6 +112,10 @@ if __name__ == "__main__":
     try:
         if sys.argv[1] == "notarize":
             notarize(sys.argv[2],sys.argv[3])
+        elif sys.argv[1] == "distribution":
+            check_distribution(sys.argv[2],sys.argv[3])
+        elif sys.argv[1] == "binary":
+            check_binary(sys.argv[2])
         elif sys.argv[1] == "metadata":
             with open(sys.argv[2],"rb") as file:
                 validate_metadata(plistlib.load(file),sys.argv[3],sys.argv[4])
@@ -82,5 +123,5 @@ if __name__ == "__main__":
             Path(sys.argv[4]).write_text(render_cask(Path(sys.argv[2]).read_text(),sys.argv[3]))
         else:
             raise ValueError("Unknown operation")
-    except (ValueError, RuntimeError) as error:
+    except (ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         sys.exit(str(error))

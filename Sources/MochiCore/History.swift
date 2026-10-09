@@ -1,3 +1,4 @@
+import MochiAutomation
 import Foundation
 
 public enum HistoryScope: String, CaseIterable, Identifiable {
@@ -64,8 +65,9 @@ public extension Library {
         guard Set(attempts.map(\.id)).count == attempts.count else { throw AppFailure("The library contains duplicate attempt IDs.") }
         let messages = conversations.flatMap(\.messages)
         guard Set(messages.map(\.id)).count == messages.count else { throw AppFailure("The library contains duplicate message IDs.") }
+        for chat in conversations { try chat.preferences.validate() }
         for name in referencedAudio {
-            guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"), !name.hasPrefix("."), !["library.json","library-v1-backup.json","library-before-help-transcription.json"].contains(name) else { throw AppFailure("The library contains an unsafe recording filename.") }
+            guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"), !name.hasPrefix("."), !["library.json","library-v1-backup.json","library-before-help-transcription.json","library-before-conversation-instructions.json"].contains(name) else { throw AppFailure("The library contains an unsafe recording filename.") }
         }
     }
 }

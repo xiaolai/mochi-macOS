@@ -1,3 +1,4 @@
+import MochiAutomation
 import Foundation
 
 public enum VoiceIdentity {
@@ -11,6 +12,17 @@ public enum VoiceIdentity {
     ]
     public static func greeting(excluding recent: [String]) -> String {
         greetings.filter { !recent.suffix(3).contains($0) }.randomElement()!
+    }
+    public static func conversationInstructions(custom: String, preferences: ConversationPreferences) -> String {
+        var result = instructions
+        switch preferences.coaching {
+        case .natural: break
+        case .gentle: result += "\nOffer occasional gentle corrections when useful, without interrupting the conversation."
+        case .direct: result += "\nOffer concise direct corrections of significant English errors, then continue the conversation."
+        }
+        let text = custom.trimmingCharacters(in:.whitespacesAndNewlines)
+        if !text.isEmpty { result += "\nConversation-specific instructions (these override the conversational defaults above when they conflict):\n" + text }
+        return result
     }
     public static let instructions = """
     You are Mochi (pronounced MOH-chee), Xiaolai's warm and thoughtful English conversation companion.

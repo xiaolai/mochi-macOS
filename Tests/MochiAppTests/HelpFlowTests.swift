@@ -32,7 +32,7 @@ final class HelpFlowTests: XCTestCase {
         app.append(voice,to:app.selectedID!)
         app.append(Message(role:"assistant",text:"Existing reply"),to:app.selectedID!)
         let count = app.conversation!.messages.count
-        app.auth = "codex"
+
         app.transcribeRecording = { _,connection,model in
             XCTAssertEqual(connection,"codex"); XCTAssertEqual(model,app.modelName)
             return "Recovered thought"
@@ -57,7 +57,7 @@ final class HelpFlowTests: XCTestCase {
         XCTAssertTrue(app.transcribingMessageIDs.isEmpty)
     }
     @MainActor func testDeletionAndStopRejectLateRecoveryAndKeepAudioReference() async throws {
-        let app = AppModel(demo:true); app.resume(); app.auth = "api"
+        let app = AppModel(demo:true); app.resume();
         var voice = Message(role:"user",text:"",audio:"saved.wav"); voice.transcriptionState = .failed
         let chatID = app.selectedID!; app.append(voice,to:chatID)
         let gate = TestGate(), started = expectation(description:"Recovery started")
@@ -109,7 +109,7 @@ final class HelpFlowTests: XCTestCase {
         XCTAssertEqual(app.expression?.meaning,"My actual meaning")
     }
     @MainActor func testRecordedThoughtUsesSelectedRealtimeConnectionWithoutTranslation() async throws {
-        let app = AppModel(demo:true); app.startHelp(); app.auth = "codex"
+        let app = AppModel(demo:true); app.startHelp();
         app.meaning = "Previous thought"; app.editEnglish("Previous English"); app.editThought()
         app.thoughtRecording = "thought.wav"
         app.transcribeRecording = { _,connection,model in

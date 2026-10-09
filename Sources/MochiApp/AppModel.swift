@@ -7,9 +7,28 @@ struct ReplyCallbacks {
     let response: @MainActor (RealtimeAccumulator) throws -> Void
     let transcription: @MainActor (RealtimeAccumulator) -> Void
 }
+struct MessageDeletionUndo {
+    let conversationID: UUID
+    let message: Message
+    let index: Int
+}
 
 @MainActor final class AppModel: ObservableObject {
-    @Published var library = Library() { didSet { refreshConversationMatches() } }
+    @Published var library = Library() { didSet { libraryRevision = UUID(); refreshConversationMatches() } }
+    var libraryRevision = UUID()
+    var deferredToolAction: (() -> Void)?
+    var revealWorkspace: (() -> Void)?
+    @Published var instructionsID: UUID?
+    @Published var externalControlEnabled = false { didSet { defaults.set(externalControlEnabled,forKey:"externalControlEnabled"); configureAutomation() } }
+    @Published var automationStatus = "Disabled"
+    var controlHealthTask: Task<Void,Never>?
+    var controlServer: LocalControlServer?
+    var allowDemoAutomation = false
+    var voiceToolKey: String?
+    var voiceToolResults: [String:[String:Any]] = [:]
+    var voiceToolOrder: [String] = []
+    var toolResultCache: [String:(String,Data)] = [:]
+    var toolResultOrder: [String] = []
     @Published var selectedID: UUID? { didSet { if oldValue != selectedID { closeConversationSearch() } } }
     @Published var conversationQuery = "" { didSet { refreshConversationMatches(reset:true) } }
     @Published var conversationSearchOpen = false
@@ -80,8 +99,8 @@ struct ReplyCallbacks {
     @Published var recordingLevel: Float = -80
     @Published var recordingWarning: String?
     @Published var transcribingMessageIDs: Set<UUID> = []
-    var transcribeRecording: (URL,String,String) async throws -> String = { url,auth,model in
-        try await RealtimeService(auth:auth,model:model).transcribe(AudioFile.pcm(url))
+    var transcribeRecording: (URL,String,String) async throws -> String = { url,_,model in
+        try await RealtimeService(model:model).transcribe(AudioFile.pcm(url))
     }
     var findEnglishSuggestion: ((ConversationRequest) async throws -> String)?
     var conversationReply: ((ConversationRequest,ReplyCallbacks) async throws -> Void)?
@@ -106,7 +125,11 @@ struct ReplyCallbacks {
     @Published var expression: PracticeExpression?
     @Published var turn = TurnMachine()
     @Published var error: String?
-    @Published var notice: String? { didSet { scheduleNoticeDismissal() } }
+    @Published var notice: String? { didSet {
+        if notice != "Message deleted." { finishMessageDeletion() }
+        scheduleNoticeDismissal()
+    } }
+    @Published private(set) var messageDeletionUndo: MessageDeletionUndo?
     private var noticeTask: Task<Void,Never>?
     private var noticeRevision = UUID()
     var noticeSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds:$0) }
@@ -115,8 +138,9 @@ struct ReplyCallbacks {
         noticeRevision = UUID()
         guard notice != nil, !practice else { return }
         let revision = noticeRevision, sleep = noticeSleep
+        let duration: UInt64 = messageDeletionUndo == nil ? 4_000_000_000 : 10_000_000_000
         noticeTask = Task { [weak self] in
-            do { try await sleep(4_000_000_000) } catch { return }
+            do { try await sleep(duration) } catch { return }
             guard !Task.isCancelled, let self, self.noticeRevision == revision else { return }
             self.notice = nil
         }
@@ -130,30 +154,17 @@ struct ReplyCallbacks {
     @Published var recordingSeconds = 0
     @Published var recordingMeaning = false
     @Published var serviceStatus = "Not checked"
-    @Published var auth: String { didSet { defaults.set(auth,forKey:"auth") } }
+    let auth = "codex"
     @Published var modelName: String { didSet { defaults.set(modelName,forKey:"model") } }
-    @Published var clone: String { didSet { defaults.set(clone,forKey:"clone") } }
-    @Published var performer: String { didSet { defaults.set(performer,forKey:"performer") } }
     @Published var conversationVoice: String { didSet { defaults.set(conversationVoice,forKey:"conversationVoice") } }
     @Published var builtInPracticeVoice: String { didSet { defaults.set(builtInPracticeVoice,forKey:"builtInPracticeVoice") } }
-    @Published var practiceVoiceMode: PracticeVoiceMode { didSet { defaults.set(practiceVoiceMode.rawValue,forKey:"practiceVoiceMode") } }
-    @Published var voiceProfiles: [VoiceProfile] { didSet { if let data = try? JSONEncoder().encode(voiceProfiles) { defaults.set(data,forKey:"voiceProfiles") } } }
     @Published var conversationVoiceOptions: OpenAIVoiceOptions { didSet { persistVoiceOptions(conversationVoiceOptions,key:"conversationVoiceOptions") } }
     @Published var practiceVoiceOptions: OpenAIVoiceOptions { didSet { persistVoiceOptions(practiceVoiceOptions,key:"practiceVoiceOptions") } }
-    @Published var personalVoiceOptions: PersonalVoiceOptions { didSet { persistVoiceOptions(personalVoiceOptions,key:"personalVoiceOptions") } }
     private func persistVoiceOptions<T: Encodable>(_ value: T, key: String) {
         if let data = try? JSONEncoder().encode(value) { defaults.set(data,forKey:key) }
     }
-    var cancelVoiceSetup: (() -> Void)?
-    @Published var voiceSetupActive = false
-    @Published var practiceVoiceSetupOpen = false
-    @Published var voiceSetupPreviewStep = 0
     @Published var settingsTab = "conversation"
-    var selectedVoiceProfile: VoiceProfile? { voiceProfiles.first { $0.providerID == clone } }
-    var practiceVoiceLabel: String {
-        if practiceVoiceMode == .builtIn { return "\(RealtimeVoice(rawValue:builtInPracticeVoice)?.name ?? "Marin") · Built-in voice" }
-        return "\(selectedVoiceProfile?.name ?? "My Voice") · \(PronunciationTarget(rawValue:performer)?.name ?? "Pronunciation target")"
-    }
+    var practiceVoiceLabel: String { "\(RealtimeVoice(rawValue:builtInPracticeVoice)?.name ?? "Marin") · Codex voice" }
     let store: LibraryStore
     let audio = AudioController()
     let defaults: UserDefaults
@@ -161,11 +172,10 @@ struct ReplyCallbacks {
     private var task: Task<Void,Never>?
     private(set) var recordingClock: Task<Void,Never>?
     private var libraryReadable = true
-    private(set) var voiceProfilesReadable = true
     var conversation: Conversation? { library.conversations.first { $0.id == selectedID } }
     var writableConversation: Bool { conversation.map { !$0.archived && !$0.isDeleted } ?? false }
     var visibleChats: [Conversation] { library.history(in:historyScope,query:search) }
-    var busy: Bool { turn.activity != .idle || voiceSetupActive }
+    var busy: Bool { turn.activity != .idle }
     var practice: Bool { turn.mode == .practice }
     var status: String {
         switch turn.activity {
@@ -184,11 +194,7 @@ struct ReplyCallbacks {
                 AppIdentity.migratePreferences(into:defaults,legacy:defaults.persistentDomain(forName:oldDomain) ?? [:])
             }
         }
-        auth = defaults.string(forKey:"auth") ?? "api"
         modelName = defaults.string(forKey:"model") ?? "gpt-realtime"
-        clone = (ProcessInfo.processInfo.environment["MOCHI_CLONE_VOICE_ID"] ?? ProcessInfo.processInfo.environment["ENJOY_CLONE_VOICE_ID"]) ?? defaults.string(forKey:"clone") ?? ""
-        if let value = (ProcessInfo.processInfo.environment["MOCHI_CLONE_VOICE_ID"] ?? ProcessInfo.processInfo.environment["ENJOY_CLONE_VOICE_ID"]), !demo { defaults.set(value,forKey:"clone") }
-        performer = defaults.string(forKey:"performer") ?? "ev2kMR9ZJZZsemuogS5u"
         conversationVoice = RealtimeVoice(rawValue:defaults.string(forKey:"conversationVoice") ?? "")?.rawValue ?? "marin"
         builtInPracticeVoice = RealtimeVoice(rawValue:defaults.string(forKey:"builtInPracticeVoice") ?? "")?.rawValue ?? "marin"
         let voicePreferences = defaults
@@ -198,16 +204,6 @@ struct ReplyCallbacks {
         }
         conversationVoiceOptions = options("conversationVoiceOptions",fallback:OpenAIVoiceOptions(),validate: { try $0.validate() })
         practiceVoiceOptions = options("practiceVoiceOptions",fallback:OpenAIVoiceOptions(),validate: { try $0.validate() })
-        personalVoiceOptions = options("personalVoiceOptions",fallback:PersonalVoiceOptions(),validate: { try $0.validate() })
-        let legacyClone = (ProcessInfo.processInfo.environment["MOCHI_CLONE_VOICE_ID"] ?? ProcessInfo.processInfo.environment["ENJOY_CLONE_VOICE_ID"]) ?? defaults.string(forKey:"clone") ?? ""
-        practiceVoiceMode = PracticeVoiceMode(rawValue:defaults.string(forKey:"practiceVoiceMode") ?? "") ?? (legacyClone.isEmpty ? .builtIn : .personal)
-        let profileData = defaults.data(forKey:"voiceProfiles")
-        let decodedProfiles = profileData.flatMap { try? JSONDecoder().decode([VoiceProfile].self,from:$0) }
-        voiceProfilesReadable = profileData == nil || decodedProfiles != nil
-        var profiles = decodedProfiles ?? []
-        if !legacyClone.isEmpty && !profiles.contains(where:{$0.providerID == legacyClone}) { profiles.append(VoiceProfile(name:"My Voice",providerID:legacyClone,createdByApp:false)) }
-        voiceProfiles = profiles
-        if voiceProfilesReadable, let data = try? JSONEncoder().encode(profiles) { defaults.set(data,forKey:"voiceProfiles") }
         let support = FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0]
         var root = libraryRoot ?? (demo ? FileManager.default.temporaryDirectory.appendingPathComponent("mochi-preview-\(UUID().uuidString)") : support.appendingPathComponent(AppIdentity.name))
         if !demo && libraryRoot == nil {
@@ -218,12 +214,15 @@ struct ReplyCallbacks {
         do {
             guard libraryReadable else { throw AppFailure("The existing library could not be migrated.") }
             try store.prepare(); library = try store.load()
+            if libraryRoot != nil || !NSRunningApplication.runningApplications(withBundleIdentifier:AppIdentity.bundleIdentifier).contains(where:{ $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
+                try? store.cleanupOrphanedAudio(library)
+            }
         }
         catch { libraryReadable = false; self.error = "Your saved library could not be opened. It has not been overwritten. Reveal the data folder from Settings to recover it." }
         if demo { seedPreview() }
         else if library.conversations.isEmpty && libraryReadable { library.conversations = [Conversation()] }
         selectedID = library.selectedConversationID.flatMap { id in library.conversations.contains(where:{ $0.id == id }) ? id : nil } ?? library.history(in:.active).first?.id
-        if !voiceProfilesReadable { self.error = "Saved voice profiles could not be opened. They have not been overwritten; built-in voices remain available." }
+        externalControlEnabled = !demo && defaults.bool(forKey:"externalControlEnabled")
         if let chat = conversation {
             historyScope = chat.isDeleted ? .deleted : chat.archived ? .archived : .active
             draft = chat.draft
@@ -235,6 +234,7 @@ struct ReplyCallbacks {
         do { try store.save(library); return true } catch { self.error = "Could not save your conversation. Check available disk space; keep this window open."; return false }
     }
     func stop() {
+        deferredToolAction = nil
         greetingActive = false
         let unfinishedRecording = endRecording()
         task?.cancel(); task = nil; recordingClock?.cancel(); recordingClock = nil
@@ -252,6 +252,7 @@ struct ReplyCallbacks {
         removeUnreferencedRecording(unfinishedRecording?.lastPathComponent)
     }
     func cancelHelpWork() {
+        deferredToolAction = nil
         greetingActive = false
         let recording = endRecording()
         if !practice && task != nil && turn.activity == .generating { notice = "Your pending reply was cancelled. You can retry it when you return." }
@@ -274,7 +275,7 @@ struct ReplyCallbacks {
     }
     func newChat() {
         guard libraryReadable else { return }
-        if let chat = conversation, writableConversation, chat.messages.isEmpty, !chat.customTitle {
+        if let chat = conversation, writableConversation, chat.messages.isEmpty, !chat.customTitle, chat.instructions.isEmpty, chat.preferences == ConversationPreferences() {
             stop(); leavePractice(); expression = nil; showExpressions = false; historyScope = .active; search = ""; return
         }
         var candidate = library
@@ -303,6 +304,48 @@ struct ReplyCallbacks {
         guard !value.isEmpty, value.count <= 160, let i = library.conversations.firstIndex(where:{ $0.id == id && !$0.isDeleted }) else { return }
         var candidate = library; candidate.conversations[i].title = value; candidate.conversations[i].customTitle = true
         if commitHistory(candidate) { renameID = nil }
+    }
+    var canDeleteMessages: Bool {
+        writableConversation && !practice && turn.activity != .recording && turn.activity != .requestingPermission
+    }
+    var canUndoMessageDeletion: Bool {
+        messageDeletionUndo?.conversationID == selectedID && messageDeletionUndo != nil && writableConversation && !busy && !practice
+    }
+    func deleteMessage(_ id: UUID) {
+        guard canDeleteMessages, let ci = library.conversations.firstIndex(where:{ $0.id == selectedID }),
+              let mi = library.conversations[ci].messages.firstIndex(where:{ $0.id == id }) else { return }
+        var message = library.conversations[ci].messages[mi]
+        if message.transcriptionState == .pending { message.transcriptionState = .interrupted }
+        var candidate = library
+        candidate.conversations[ci].messages.remove(at:mi)
+        refreshAutomaticTitle(&candidate.conversations[ci])
+        guard commitHistory(candidate) else { return }
+        let previous = messageDeletionUndo
+        messageDeletionUndo = MessageDeletionUndo(conversationID:library.conversations[ci].id,message:message,index:mi)
+        // Commit first. A disk failure must not stop playback or cancel an active reply.
+        stop()
+        removeUnreferencedRecording(previous?.message.audio)
+        notice = "Message deleted."
+    }
+    func undoMessageDeletion() {
+        guard canUndoMessageDeletion, let undo = messageDeletionUndo,
+              let ci = library.conversations.firstIndex(where:{ $0.id == undo.conversationID }),
+              !library.conversations[ci].messages.contains(where:{ $0.id == undo.message.id }) else { return }
+        var candidate = library
+        candidate.conversations[ci].messages.insert(undo.message,at:min(undo.index,candidate.conversations[ci].messages.count))
+        refreshAutomaticTitle(&candidate.conversations[ci])
+        guard commitHistory(candidate) else { return }
+        notice = nil // The restored library now owns its recording again.
+    }
+    private func refreshAutomaticTitle(_ chat: inout Conversation) {
+        guard !chat.customTitle else { return }
+        chat.title = chat.messages.first(where:{ $0.role == "user" && $0.contextText != nil })
+            .flatMap(\.contextText).map { String($0.prefix(42)) } ?? "A new conversation"
+    }
+    private func finishMessageDeletion() {
+        let recording = messageDeletionUndo?.message.audio
+        messageDeletionUndo = nil
+        removeUnreferencedRecording(recording)
     }
     func pinChats(_ ids: Set<UUID>, pinned: Bool) {
         var candidate = library
@@ -423,13 +466,17 @@ struct ReplyCallbacks {
             message.transcriptionState = .pending; userID = message.id
             append(message,to:conversationID)
         }
+        let operationID = userID ?? library.conversations.first(where:{ $0.id == conversationID })?.messages.last?.id ?? UUID()
         let requestID = UUID()
         if let userID, pcm != nil {
             transcriptTokens[userID] = requestID; transcribingMessageIDs.insert(userID)
             updateTranscript(userID,chatID:conversationID,text:nil,state:.pending,error:nil)
         }
         let token = turn.begin(.generating); error = nil
-        let service = RealtimeService(auth:auth,model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
+        let chat = library.conversations.first { $0.id == conversationID }
+        let instructions = String((chat?.instructions ?? "").prefix(MochiTools.maxInstructions)), preferences = chat?.preferences ?? ConversationPreferences()
+        var options = conversationVoiceOptions; if let speed = preferences.speed { options.speed = speed }
+        let service = RealtimeService(model:modelName,voice:conversationVoice,options:options)
         let voiceID = pcm == nil ? nil : userID
         let operation = Task { [weak self] in
             guard let self else { return }
@@ -454,19 +501,30 @@ struct ReplyCallbacks {
                     }
                     append(Message(role:"assistant",text:reply.text,audio:filename),to:conversationID)
                     _ = turn.finish(token)
-                    if let filename { if let playReply { playReply(filename) } else { play(filename,mochi:true) } }
+                    let action = deferredToolAction; deferredToolAction = nil
+                    if let action {
+                        if let filename {
+                            if let playReply { playReply(filename); action() }
+                            else { play(filename,mochi:true,afterPlayback:action,afterPlaybackFailure:action) }
+                        } else { action() }
+                    }
+                    else if let filename { if let playReply { playReply(filename) } else { play(filename,mochi:true) } }
                 },transcription: { [weak self] reply in
                     guard let self, !Task.isCancelled, let voiceID, transcriptTokens[voiceID] == requestID else { return }
                     updateTranscript(voiceID,chatID:conversationID,text:reply.inputTranscript.isEmpty ? nil : reply.inputTranscript,state:reply.transcriptionState,error:reply.transcriptionError)
                 })
-                let request = ConversationRequest(history:history,text:text,pcm:pcm,spoken:audioFile != nil)
+                let request = ConversationRequest(history:history,text:text,pcm:pcm,spoken:audioFile != nil,instructions:instructions,preferences:preferences)
                 if let conversationReply { try await conversationReply(request,callbacks) }
-                else { _ = try await service.reply(request,onResponse:callbacks.response,onTranscription:callbacks.transcription) }
+                else { _ = try await service.reply(request,onResponse:callbacks.response,onTranscription:callbacks.transcription,onTool: { [weak self] name,args,_ in
+                    guard let self, !Task.isCancelled, self.turn.epoch == token, self.selectedID == conversationID else { throw CancellationError() }
+                    return try self.executeVoiceTool(name,arguments:args,operationID:operationID)
+                }) }
             } catch {
                 if let voiceID, transcriptTokens[voiceID] == requestID,
                    library.conversations.first(where: { $0.id == conversationID })?.messages.first(where: { $0.id == voiceID })?.transcriptionState == .pending {
                     updateTranscript(voiceID,chatID:conversationID,text:nil,state:.interrupted,error:"Transcription was interrupted. Your recording is saved.")
                 }
+                if turn.epoch == token { deferredToolAction = nil }
                 fail(error,token:token)
             }
         }
@@ -580,7 +638,7 @@ struct ReplyCallbacks {
     }
     private func removeUnreferencedRecording(_ name: String?) {
         guard let name, !name.isEmpty, URL(fileURLWithPath:name).lastPathComponent == name,
-              !library.referencedAudio.contains(name) else { return }
+              !library.referencedAudio.contains(name), messageDeletionUndo?.message.audio != name else { return }
         let url = store.root.appendingPathComponent(name)
         guard FileManager.default.fileExists(atPath:url.path) else { return }
         do { try FileManager.default.removeItem(at:url) }
@@ -599,7 +657,7 @@ struct ReplyCallbacks {
         guard !input.isEmpty, !busy, let id = selectedID else { return }
         let history = conversation?.messages ?? []
         let token = turn.begin(.generating); error = nil; helpProgress = "Finding the English…"
-        let service = RealtimeService(auth:auth,model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
+        let service = RealtimeService(model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
         let requestText = alternative && !english.isEmpty ? "Intended thought: \(input)\nPrevious English wording: \(english)\nOffer a different natural wording with exactly the same meaning." : input
         task = Task {
             do {
@@ -639,20 +697,17 @@ struct ReplyCallbacks {
         persistHelpDraft()
         return save()
     }
-    func render(force: Bool = false, usingBuiltIn voiceOverride: String? = nil) {
+    func render(force: Bool = false) {
         guard !busy, !english.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { return }
         ensureExpression()
-        if voiceOverride == nil && practiceVoiceMode == .personal && (selectedVoiceProfile?.ready != true) {
-            error = "Set up or verify your voice first, or choose a built-in practice voice."; return
-        }
-        let identity = personalVoiceOptions.identity(text:english,performer:performer,clone:clone)
-        let mode = voiceOverride == nil ? practiceVoiceMode : .builtIn
-        let label = voiceOverride.map { "\(RealtimeVoice(rawValue:$0)?.name ?? $0) · Built-in voice" } ?? practiceVoiceLabel
-        let service = RealtimeService(auth:auth,model:modelName,voice:voiceOverride ?? builtInPracticeVoice,options:practiceVoiceOptions)
+
+        let text = english
+        let label = practiceVoiceLabel
+        let service = RealtimeService(model:modelName,voice:builtInPracticeVoice,options:practiceVoiceOptions)
         let token = turn.begin(.generating); error = nil; helpProgress = "Creating your example…"
         task = Task {
             do {
-                let url = mode == .personal ? try await VoiceRenderer().render(identity,root:store.root,force:force) : try await service.referenceAudio(text:identity.text,root:store.root,force:force)
+                let url = try await service.referenceAudio(text:text,root:store.root,force:force)
                 let pitch = try await Task.detached { try AudioFile.pitch(url) }.value
                 guard !Task.isCancelled, turn.epoch == token else { return }
                 expression?.reference = url.lastPathComponent; expression?.referenceKind = label
@@ -662,25 +717,11 @@ struct ReplyCallbacks {
             } catch { fail(error,token:token) }
         }
     }
-    func acceptVoiceProfile(_ profile: VoiceProfile) {
-        guard upsertVoiceProfile(profile), profile.ready else { return }
-        clone = profile.providerID; practiceVoiceMode = .personal
-    }
-    @discardableResult func upsertVoiceProfile(_ profile: VoiceProfile) -> Bool {
-        guard voiceProfilesReadable else { error = "Saved voice profiles could not be opened. They have not been overwritten."; return false }
-        if let i = voiceProfiles.firstIndex(where:{$0.id == profile.id || $0.providerID == profile.providerID}) { voiceProfiles[i] = profile }
-        else { voiceProfiles.append(profile) }
-        return true
-    }
-    func removeVoiceProfile(_ profile: VoiceProfile) {
-        guard voiceProfilesReadable else { return }
-        voiceProfiles.removeAll { $0.id == profile.id }
-        if clone == profile.providerID { clone = ""; practiceVoiceMode = .builtIn }
-    }
+
     func previewBuiltIn(_ voice: String, options: OpenAIVoiceOptions? = nil) {
-        guard !busy, !voiceSetupActive else { return }
+        guard !busy else { return }
         let token = turn.begin(.generating); error = nil
-        let service = RealtimeService(auth:auth,model:modelName,voice:voice,options:options ?? practiceVoiceOptions)
+        let service = RealtimeService(model:modelName,voice:voice,options:options ?? practiceVoiceOptions)
         task = Task {
             do {
                 let url = try await service.referenceAudio(text:ReferenceSpeech.preview,root:store.root)
@@ -716,7 +757,7 @@ struct ReplyCallbacks {
         guard playbackFile == file else { return }
         audio.seek(to:seconds)
     }
-    func play(_ file: String, mochi: Bool = false, afterPlayback: (() -> Void)? = nil) {
+    func play(_ file: String, mochi: Bool = false, afterPlayback: (() -> Void)? = nil, afterPlaybackFailure: (() -> Void)? = nil) {
         guard !busy || turn.activity == .playing else { return }
         if afterPlayback == nil { greetingActive = false }
         audio.stop(); playbackFile = nil
@@ -727,15 +768,18 @@ struct ReplyCallbacks {
         }
         do {
             try audio.play(url:store.root.appendingPathComponent(file),rate:slow && !mochi ? 0.8 : 1,
-                           failed: { [weak self] in finished(); self?.greetingActive = false; self?.error = "This recording could not be played. Try another recording." },completed: { [weak self] in
+                           failed: { [weak self] in
+                               guard let self, self.turn.epoch == token else { return }
+                               finished(); self.greetingActive = false; self.error = "This recording could not be played. Try another recording."; afterPlaybackFailure?()
+                           },completed: { [weak self] in
                                guard let self, self.turn.epoch == token else { return }
                                finished(); afterPlayback?()
                            })
             playbackFile = file
-        } catch { playbackFile = nil; fail(error,token:token) }
+        } catch { playbackFile = nil; fail(error,token:token); afterPlaybackFailure?() }
     }
     func toggleConversationVoice() {
-        guard !practice, writableConversation, libraryReadable, !voiceSetupActive else { return }
+        guard !practice, writableConversation, libraryReadable else { return }
         if greetingActive {
             stop(); beginRecording(forMeaning:false); return
         }
@@ -745,7 +789,7 @@ struct ReplyCallbacks {
         }
         let token = turn.begin(.requestingPermission)
         greetingActive = true; error = nil
-        let service = RealtimeService(auth:auth,model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
+        let service = RealtimeService(model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
         task = Task { [self] in
             do {
                 let allowed: Bool
@@ -886,7 +930,7 @@ struct ReplyCallbacks {
     func checkConnection() {
         guard !busy else { return }
         let token = turn.begin(.generating); serviceStatus = "Checking…"
-        let service = RealtimeService(auth:auth,model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
+        let service = RealtimeService(model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
         task = Task {
             do {
                 _ = try await service.reply(ConversationRequest(history:[],text:"Reply with the single word ready."))
