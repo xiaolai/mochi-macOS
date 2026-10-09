@@ -92,7 +92,7 @@ import SwiftUI
         return super.forwardingTarget(for:selector)
     }
 
-    /// Original halo-free Mochi proportions, simplified to a menu-bar template.
+    /// Mochi contour only, drawn as a template so macOS supplies the menu-bar color.
     static func icon() -> NSImage {
         let image = NSImage(size:NSSize(width:20,height:18),flipped:true) { _ in
             let body = NSBezierPath()
@@ -102,17 +102,10 @@ import SwiftUI
             body.curve(to:NSPoint(x:10,y:16),controlPoint1:NSPoint(x:19,y:15),controlPoint2:NSPoint(x:16,y:16))
             body.curve(to:NSPoint(x:1,y:12),controlPoint1:NSPoint(x:4,y:16),controlPoint2:NSPoint(x:1,y:15))
             body.close()
-            body.windingRule = .evenOdd
-            body.appendOval(in:NSRect(x:6,y:8,width:2,height:2))
-            body.appendOval(in:NSRect(x:12,y:8,width:2,height:2))
-            let smile = NSBezierPath()
-            smile.move(to:NSPoint(x:7,y:12))
-            smile.line(to:NSPoint(x:13,y:12))
-            smile.curve(to:NSPoint(x:7,y:12),controlPoint1:NSPoint(x:12.5,y:14),controlPoint2:NSPoint(x:7.5,y:14))
-            smile.close()
-            body.append(smile)
-            NSColor.black.setFill()
-            body.fill()
+            body.lineWidth = 1.5
+            body.lineJoinStyle = .round
+            NSColor.black.setStroke()
+            body.stroke()
             return true
         }
         image.isTemplate = true
