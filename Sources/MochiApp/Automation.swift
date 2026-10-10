@@ -80,27 +80,36 @@ extension AppModel {
     var controlRevision: String {
         [libraryRevision.uuidString,selectedID?.uuidString ?? "none",turn.epoch.uuidString,
          String(practice),String(managerOpen),
-         instructionsID?.uuidString ?? "none",renameID?.uuidString ?? "none",String(permanentDeleteIDs.count),String(audio.paused),playbackFile ?? "none"].joined(separator:":")
+         instructionsID?.uuidString ?? "none",templatePresentation?.rawValue ?? "none",renameID?.uuidString ?? "none",String(permanentDeleteIDs.count),String(audio.paused),playbackFile ?? "none"].joined(separator:":")
     }
-    var automationModal: Bool { practice || managerOpen || instructionsID != nil || renameID != nil || !permanentDeleteIDs.isEmpty }
+    var automationModal: Bool { templatePresentation != nil || practice || managerOpen || instructionsID != nil || renameID != nil || !permanentDeleteIDs.isEmpty }
     var canOpenConversationInstructions: Bool { !busy && !automationModal }
     func openConversationInstructions(_ id: UUID) {
         guard canOpenConversationInstructions, library.conversations.contains(where:{ $0.id == id && !$0.archived && !$0.isDeleted }) else { return }
         instructionsID = id
     }
     @discardableResult func setConversationInstructions(_ id: UUID, instructions: String, preferences: ConversationPreferences) -> Bool {
+        setConversationInstructions(id,instructions:instructions,preferences:preferences,characterName:library.conversations.first(where:{ $0.id == id })?.characterName)
+    }
+    @discardableResult func setConversationInstructions(_ id: UUID, instructions: String, preferences: ConversationPreferences, characterName: String?) -> Bool {
         do {
-            try MochiTools.validateInstructions(instructions); try preferences.validate()
+            let characterName = characterName?.trimmingCharacters(in:.whitespacesAndNewlines)
+            try preferences.validate(); try ConversationTemplate.validateName(characterName)
             guard !busy, !practice, !managerOpen, renameID == nil, permanentDeleteIDs.isEmpty, let index = library.conversations.firstIndex(where:{ $0.id == id && !$0.archived && !$0.isDeleted }) else { throw AppFailure("This conversation cannot be edited right now.") }
             var candidate = library
-            candidate.conversations[index].instructions = instructions.trimmingCharacters(in:.whitespacesAndNewlines)
+            if instructions != candidate.conversations[index].instructions {
+                try MochiTools.validateInstructions(instructions)
+                candidate.conversations[index].instructions = instructions.trimmingCharacters(in:.whitespacesAndNewlines)
+            }
             candidate.conversations[index].preferences = preferences
+            candidate.conversations[index].characterName = characterName
             return commitHistory(candidate)
         } catch { self.error = (error as? AppFailure)?.message ?? "Could not save conversation instructions."; return false }
     }
     func executeTool(_ name: String, arguments: [String:Any], origin: ToolOrigin) throws -> [String:Any] {
         let tool = try MochiTools.validate(name:name,arguments:arguments,origin:origin)
         if origin == .external && !externalControlEnabled { throw AppFailure("External control is disabled in Mochi Settings.") }
+        if name.contains("conversation_template") { return try executeTemplateTool(name,arguments:arguments) }
         if origin == .voice, turn.activity == .generating, deferredToolAction != nil, ["prepare_expression","start_practice","play_audio","seek_audio"].contains(name) {
             throw AppFailure("A view or playback action is already scheduled for this reply.")
         }
@@ -112,7 +121,13 @@ extension AppModel {
                 result["conversation_id"] = chat.id.uuidString; result["title"] = chat.title
                 result["writable"] = !chat.archived && !chat.isDeleted
                 if !chat.archived && !chat.isDeleted {
-                    result["instructions"] = String(chat.instructions.prefix(origin == .voice ? 1000 : MochiTools.maxInstructions)); result["instructions_truncated"] = chat.instructions.count > (origin == .voice ? 1000 : MochiTools.maxInstructions); result["coaching"] = chat.preferences.coaching.rawValue
+                    let preview = MochiTools.boundedText(chat.instructions,characters:origin == .voice ? 1000 : 8000,bytes:origin == .voice ? 6000 : 12000)
+                    result["instructions"] = preview; result["instructions_truncated"] = preview != chat.instructions; result["coaching"] = chat.preferences.coaching.rawValue
+                    result["character_name"] = chat.characterName.map { MochiTools.boundedText($0,characters:80,bytes:1024) } as Any? ?? NSNull()
+                    result["character_name_needs_review"] = chat.characterNameNeedsReview
+                    result["character_name_truncated"] = chat.characterName.map { MochiTools.boundedText($0,characters:80,bytes:1024) != $0 } ?? false
+                    result["display_character_name"] = chat.displayCharacterName
+                    if let source = chat.sourceTemplateID { result["source_template_id"] = source.uuidString; result["source_template_revision"] = chat.sourceTemplateRevision }
                     result["speed"] = chat.preferences.speed ?? conversationVoiceOptions.speed
                     result["audio_message_ids"] = chat.messages.filter { $0.audio != nil }.suffix(origin == .voice ? 20 : 100).map { $0.id.uuidString }
                     result["expression_ids"] = library.expressions.filter { $0.conversationID == chat.id }.sorted { $0.date > $1.date }.prefix(origin == .voice ? 20 : 100).map { $0.id.uuidString }
@@ -182,15 +197,30 @@ extension AppModel {
             }
             return success(["expressions":expressions,"has_more":found.count > expressions.count])
         case "create_conversation":
-            var chat = Conversation(title:(arguments["title"] as? String)?.trimmingCharacters(in:.whitespacesAndNewlines) ?? "A new conversation")
-            if chat.title.isEmpty { chat.title = "A new conversation" }
-            chat.customTitle = !(arguments["title"] as? String ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty; chat.instructions = (arguments["instructions"] as? String ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
+            var chat: Conversation
+            if let text = arguments["template_id"] as? String, let id = UUID(uuidString:text) {
+                var source = try template(id:id)
+                if let expected = arguments["expected_template_revision"] as? String, expected != source.revision { throw AppFailure("Template changed. Read it again before starting.") }
+                if let value = arguments["instructions"] as? String { source.instructions = value.trimmingCharacters(in:.whitespacesAndNewlines) }
+                if let name = arguments["character_name"] as? String { source.characterName = name.trimmingCharacters(in:.whitespacesAndNewlines) }
+                if arguments["clear_character_name"] as? Bool == true { source.characterName = nil }
+                if let speed = arguments["speed"] as? NSNumber { source.preferences.speed = speed.doubleValue }
+                if let style = arguments["coaching"] as? String { source.preferences.coaching = CoachingStyle(rawValue:style)! }
+                chat = try source.conversation(title:arguments["title"] as? String)
+            } else { chat = Conversation() }
+            if let title = arguments["title"] as? String, !title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty { chat.title = title.trimmingCharacters(in:.whitespacesAndNewlines); chat.customTitle = true }
+            if let instructions = arguments["instructions"] as? String { chat.instructions = instructions.trimmingCharacters(in:.whitespacesAndNewlines) }
+            if let name = arguments["character_name"] as? String { chat.characterName = name.trimmingCharacters(in:.whitespacesAndNewlines) }
+            if arguments["clear_character_name"] as? Bool == true { chat.characterName = nil }
+            if let speed = arguments["speed"] as? NSNumber { chat.preferences.speed = speed.doubleValue }
+            if let style = arguments["coaching"] as? String { chat.preferences.coaching = CoachingStyle(rawValue:style)! }
+            try ConversationTemplate.validateName(chat.characterName); try chat.preferences.validate()
             var candidate = library
-            if let current = conversation, !current.archived, !current.isDeleted, current.messages.isEmpty, !current.customTitle,
-               current.instructions.isEmpty, current.preferences == ConversationPreferences(), current.draft.isEmpty, current.helpDraft == nil,
+            if arguments["template_id"] == nil, let current = conversation, !current.archived, !current.isDeleted, current.isPristine,
                let index = candidate.conversations.firstIndex(where:{ $0.id == current.id }) {
                 var reused = current
                 reused.title = chat.title; reused.customTitle = chat.customTitle; reused.instructions = chat.instructions
+                reused.characterName = chat.characterName; reused.preferences = chat.preferences
                 chat = reused; candidate.conversations[index] = reused
             } else { candidate.conversations.insert(chat,at:0) }
             candidate.selectedConversationID = chat.id
@@ -201,7 +231,9 @@ extension AppModel {
         case "set_conversation_instructions", "set_conversation_preferences":
             guard let index = library.conversations.firstIndex(where:{ $0.id == requestedID }) else { throw AppFailure("Conversation not found.") }
             var candidate = library
-            if name == "set_conversation_instructions" { candidate.conversations[index].instructions = (arguments["instructions"] as! String).trimmingCharacters(in:.whitespacesAndNewlines) }
+            if let instructions = arguments["instructions"] as? String { candidate.conversations[index].instructions = instructions.trimmingCharacters(in:.whitespacesAndNewlines) }
+            if let character = arguments["character_name"] as? String { candidate.conversations[index].characterName = character.trimmingCharacters(in:.whitespacesAndNewlines); try ConversationTemplate.validateName(candidate.conversations[index].characterName) }
+            if arguments["clear_character_name"] as? Bool == true { candidate.conversations[index].characterName = nil }
             if let speed = arguments["speed"] as? NSNumber { candidate.conversations[index].preferences.speed = speed.doubleValue }
             if let coaching = arguments["coaching"] as? String { candidate.conversations[index].preferences.coaching = CoachingStyle(rawValue:coaching)! }
             try candidate.conversations[index].preferences.validate(); try persist(candidate); return success()

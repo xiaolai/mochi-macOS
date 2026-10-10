@@ -55,8 +55,9 @@ final class CoreTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at:root) }
         let store = LibraryStore(root:root)
-        var library = Library(); library.version = 3
-        try store.save(library)
+        var library = Library(); library.version = 4
+        try store.prepare()
+        try JSONEncoder().encode(library).write(to:store.file)
         let before = try Data(contentsOf:store.file)
         XCTAssertThrowsError(try store.load())
         XCTAssertEqual(try Data(contentsOf:store.file),before)

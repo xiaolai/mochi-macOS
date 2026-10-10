@@ -65,7 +65,7 @@ final class BrandingTests: XCTestCase {
             let parent = temporary(); defer { try? FileManager.default.removeItem(at:parent) }
             let legacy = parent.appendingPathComponent(AppIdentity.legacyDataDirectory)
             let store = LibraryStore(root:legacy); try store.prepare()
-            if future { var library = Library(); library.version = 3; try store.save(library) }
+            if future { var library = Library(); library.version = 4; try JSONEncoder().encode(library).write(to:store.file) }
             else { try Data("broken".utf8).write(to:store.file) }
             let before = try Data(contentsOf:store.file)
             XCTAssertThrowsError(try AppIdentity.prepareDataDirectory(in:parent))

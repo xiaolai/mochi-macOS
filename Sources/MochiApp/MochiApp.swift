@@ -21,7 +21,11 @@ import MochiCore
                 Button("Close Window to Tray",action:delegate.tray.closeToTray).keyboardShortcut("q")
                 Button("Quit Mochi Completely",action:delegate.tray.quitApp)
             }
-            CommandGroup(replacing:.newItem) { Button("New Conversation",action:model.newChat).keyboardShortcut("n") }
+            CommandGroup(replacing:.newItem) {
+                Button("New Conversation",action:model.newChat).keyboardShortcut("n").disabled(model.automationModal)
+                Button("New Conversation from Template…",action:model.openTemplatePicker).keyboardShortcut("n",modifiers:[.command,.shift]).disabled(!model.canOpenConversationInstructions)
+                Button("Manage Templates…",action:model.openTemplateManager).disabled(!model.canOpenConversationInstructions)
+            }
             CommandMenu("Conversation") {
                 Button("Find in Conversation",action:model.findInConversation).keyboardShortcut("f").disabled(!model.canFindInConversation)
                 Button("Next Match") { model.moveConversationMatch(1) }.keyboardShortcut("g").disabled(model.conversationMatchIDs.isEmpty)
@@ -64,10 +68,10 @@ import MochiCore
     }
     func runDevelopmentActions(_ model: AppModel) {
         #if MOCHI_DEVELOPMENT
+        if CommandLine.arguments.contains("--tools-probe") { toolsProbe(model); return }
+        if CommandLine.arguments.contains("--probe") { probe(model); return }
         if CommandLine.arguments.contains("--smoke-test") { smoke(model) }
         if CommandLine.arguments.contains("--tray-smoke-test") || CommandLine.arguments.contains("--single-instance-smoke-test") { smokeTray(model) }
-        if CommandLine.arguments.contains("--probe") { probe(model) }
-        if CommandLine.arguments.contains("--tools-probe") { toolsProbe(model) }
         #endif
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -336,6 +340,54 @@ import MochiCore
                 capture("conversation-instructions-dark.png",window:mainWindow?.attachedSheet)
                 NSApp.appearance = NSAppearance(named:.aqua); model.instructionsID = nil
                 try? await Task.sleep(nanoseconds:350_000_000)
+                model.openTemplatePicker()
+                model.templateDraft = TemplateEditorDraft(value:ConversationTemplate.builtins[0],editingID:nil,expectedRevision:ConversationTemplate.builtins[0].revision)
+                try? await Task.sleep(nanoseconds:350_000_000)
+                capture("template-picker.png",window:mainWindow?.attachedSheet)
+                let previousFrame = mainWindow?.frame
+                mainWindow?.setContentSize(NSSize(width:760,height:580))
+                try? await Task.sleep(nanoseconds:250_000_000)
+                capture("template-picker-minimum-window.png")
+                capture("template-picker-minimum-sheet.png",window:mainWindow?.attachedSheet)
+                if let window = mainWindow, let sheet = window.attachedSheet {
+                    try? JSONSerialization.data(withJSONObject:["requested_content_width":760,"requested_content_height":580,"actual_window_width":window.frame.width,"actual_window_height":window.frame.height,"content_width":window.contentLayoutRect.width,"content_height":window.contentLayoutRect.height,"sheet_width":sheet.frame.width,"sheet_height":sheet.frame.height,"os":ProcessInfo.processInfo.operatingSystemVersionString],options:[.prettyPrinted,.sortedKeys]).write(to:directory.appendingPathComponent("template-minimum-geometry.json"))
+                    @MainActor func findTable(_ view: NSView) -> NSTableView? {
+                        if let table = view as? NSTableView { return table }
+                        for child in view.subviews { if let table = findTable(child) { return table } }
+                        return nil
+                    }
+                    let before = model.templateDraft?.value.id
+                    if let content = sheet.contentView, let table = findTable(content), sheet.makeFirstResponder(table),
+                       let event = NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:sheet.windowNumber,context:nil,characters:"\u{F701}",charactersIgnoringModifiers:"\u{F701}",isARepeat:false,keyCode:125) {
+                        table.keyDown(with:event)
+                        try? await Task.sleep(nanoseconds:250_000_000)
+                        let moved = model.templateDraft?.value.id != before
+                        try? JSONSerialization.data(withJSONObject:["arrow_key_moved_selection":moved,"native_table":true]).write(to:directory.appendingPathComponent("template-keyboard.json"))
+                        if !moved { captureFailures.append("Template arrow-key selection did not update preview") }
+                    } else { captureFailures.append("Native template list could not be reached for keyboard verification") }
+                }
+                if let previousFrame { mainWindow?.setFrame(previousFrame,display:true) }
+
+                model.templatePresentation = nil; model.templateDraft = nil
+                try? await Task.sleep(nanoseconds:350_000_000)
+                model.openTemplateManager(); model.editTemplate(ConversationTemplate.builtins[0],duplicate:true)
+                try? await Task.sleep(nanoseconds:350_000_000)
+                capture("template-editor.png",window:mainWindow?.attachedSheet)
+                model.templatePresentation = nil; model.templateDraft = nil; model.templateReturnTo = nil
+                try? await Task.sleep(nanoseconds:350_000_000)
+                if !model.setConversationInstructions(chatID,instructions:"Discuss books",preferences:preferences,characterName:"Loki") { captureFailures.append("Character identity could not be saved") }
+                model.instructionsID = chatID
+                try? await Task.sleep(nanoseconds:350_000_000)
+                capture("character-editor.png",window:mainWindow?.attachedSheet)
+                model.saveConversationAsTemplate(chatID,draft:ConversationSettingsDraft(id:chatID,instructions:"Unsaved template instructions",characterName:nil,preferences:preferences))
+                try? await Task.sleep(nanoseconds:350_000_000)
+                capture("template-save-as.png",window:mainWindow?.attachedSheet)
+                model.closeTemplateEditor()
+                try? await Task.sleep(nanoseconds:350_000_000)
+                if model.retainedInstructionsDraft?.instructions != "Unsaved template instructions" { captureFailures.append("Save-as lost instructions draft") }
+                capture("instructions-draft-return.png",window:mainWindow?.attachedSheet)
+                model.instructionsID = nil; model.retainedInstructionsDraft = nil
+                try? await Task.sleep(nanoseconds:350_000_000)
                 // Real bundled MCP subprocess -> private socket -> shared app command layer.
                 model.allowDemoAutomation = true; model.externalControlEnabled = true
                 let socketPath = model.controlSocketPath
@@ -599,6 +651,20 @@ import MochiCore
                     calls.append(name); return try model.executeTool(name,arguments:args,origin:.voice)
                 })
                 if !reply.audio.isEmpty && calls.contains("get_session") && calls.contains("save_expression") && model.library.expressions.contains(where:{ $0.english == "Could you give me a moment?" && $0.conversationID == model.selectedID }) && reply.text.trimmingCharacters(in:.whitespacesAndNewlines).lowercased().hasPrefix("saved") { result = "PASS" }
+                var identityCases: [[String:Any]] = []
+                for (name, custom, expected) in [(Optional("Loki"),"Your name is Sam.","Loki"),(Optional("Loki"),"Your name is Sam.","Loki"),(Optional("Loki"),"Your name is Sam.","Loki"),(Optional("Renée"),"Discuss books.","Renée"),(Optional<String>.none,"Your name is Sam.","Sam")] {
+                    let history = [Message(role:"assistant",text:"Hi, I'm Mochi.")]
+                    let response = try await service.reply(ConversationRequest(history:history,text:"What is your name? Reply with only your name.",instructions:custom,characterName:name))
+                    identityCases.append(["expected":expected,"response":response.text,"passed":response.text.trimmingCharacters(in:CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn:"\".!")).union(CharacterSet(charactersIn:"“”"))).precomposedStringWithCanonicalMapping == expected.precomposedStringWithCanonicalMapping])
+                }
+                var builtinCases: [[String:Any]] = []
+                for t in ConversationTemplate.builtins {
+                    let response = try await service.reply(ConversationRequest(history:[],text:"Let's start. Ask me for the information you need.",instructions:t.instructions,characterName:t.characterName,preferences:t.preferences))
+                    builtinCases.append(["title":t.title,"response":response.text,"responded":!response.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,"semantic_review_required":true])
+                }
+                try JSONSerialization.data(withJSONObject:["identity_cases":identityCases,"builtin_cases":builtinCases,"audio_bytes":reply.audio.count,"auditioned":false],options:[.prettyPrinted,.sortedKeys]).write(to:directory.appendingPathComponent("live-template-cases.json"))
+                if identityCases.contains(where:{ $0["passed"] as? Bool != true }) || builtinCases.contains(where:{ $0["responded"] as? Bool != true }) { result = "FAIL identity/template cases" }
+
             } catch { result = "UNVERIFIED: " + ((error as? AppFailure)?.message ?? "Provider connection failed.") }
             _ = model.turn.finish(token)
             try? Data("Live Realtime instructions and tools: \(result). Calls: \(calls.joined(separator:", ")). Synthetic spoken response; audio returned without playback. No real library changes or microphone use.\n".utf8).write(to:directory.appendingPathComponent("live-tools-probe.txt"))

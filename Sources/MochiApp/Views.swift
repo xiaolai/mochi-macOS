@@ -80,8 +80,12 @@ struct WorkspaceView: View {
             .navigationTitle("")
             .toolbar {
                 ToolbarItem(placement:.primaryAction) {
-                    Button(action:app.newChat) { Label("New Conversation",systemImage:"square.and.pencil") }
-                        .labelStyle(.iconOnly).help("New Conversation (⌘N)")
+                    Button(action:app.newChat) { Label("New Conversation",systemImage:"square.and.pencil") }.labelStyle(.iconOnly).help("New Conversation (⌘N)")
+                    Menu {
+                        Button("New Conversation from Template…",action:app.openTemplatePicker)
+                        Button("Manage Templates…",action:app.openTemplateManager)
+                    } label: { Image(systemName:"chevron.down") }
+                    .menuStyle(.borderlessButton).fixedSize().help("Conversation Templates").disabled(!app.canOpenConversationInstructions)
                 }
             }
             .navigationSplitViewColumnWidth(min:190,ideal:230,max:320)
@@ -135,8 +139,9 @@ struct WorkspaceView: View {
                 }
             }
         }
-        .sheet(isPresented:Binding(get:{app.instructionsID != nil},set:{if !$0 { app.instructionsID = nil }})) {
-            if let id = app.instructionsID { ConversationInstructionsView(app:app,id:id) }
+        .sheet(isPresented:Binding(get:{app.instructionsID != nil || app.templatePresentation != nil},set:{if !$0 { app.instructionsID = nil; app.templatePresentation = nil; app.templateDraft = nil; app.retainedInstructionsDraft = nil }})) {
+            if app.templatePresentation != nil { ConversationTemplatesView(app:app) }
+            else if let id = app.instructionsID { ConversationInstructionsView(app:app,id:id) }
         }
         .sheet(isPresented:$app.managerOpen) { HistoryManagerView(app:app) }
         .sheet(isPresented:Binding(get:{app.renameID != nil && !app.managerOpen},set:{if !$0 && !app.managerOpen {app.renameID = nil}})) { if let id = app.renameID { RenameChatView(app:app,id:id) } }
@@ -194,7 +199,7 @@ struct WorkspaceView: View {
                     MochiView().frame(width:72,height:78)
                     Text("A little conversation. A little practice.")
                 } description: {
-                    Text("Talk with Mochi in English. When you get stuck,\nwe’ll find the words and practise them in your own voice.")
+                    Text("Talk with \(app.displayCharacterName) in English. When you get stuck,\nwe’ll find the words and practise them in your own voice.")
                 }
                 }
             } else {
@@ -235,7 +240,7 @@ struct WorkspaceView: View {
         return HStack(alignment:.top,spacing:8) {
             if isUser { Spacer(minLength:60) }
             VStack(alignment:isUser ? .trailing : .leading,spacing:5) {
-                Text(isUser ? "You" : "Mochi").font(.caption).foregroundStyle(.secondary)
+                Text(isUser ? "You" : (message.speakerName ?? "Mochi")).font(.caption).foregroundStyle(.secondary)
                 VStack(alignment:.leading,spacing:8) {
                     Text(message.displayText)
                         .font(.system(size:15))
@@ -295,7 +300,7 @@ struct WorkspaceView: View {
                     .help("Help Me Say This (⇧⌘H)")
                     .accessibilityLabel("Help Me Say This")
                     .disabled(app.turn.activity == .recording || app.turn.activity == .requestingPermission)
-                TextField("Message Mochi",text:$app.draft,axis:.vertical)
+                TextField("Message \(app.displayCharacterName)",text:$app.draft,axis:.vertical)
                     .accessibilityIdentifier("conversation-composer")
                     #if MOCHI_DEVELOPMENT
                     .background(ComposerGeometryProbe())

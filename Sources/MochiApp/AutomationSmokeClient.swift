@@ -52,6 +52,24 @@ enum AutomationSmokeClient {
         _ = try client.call("save_expression",id:4,arguments:["conversation_id":id,"expected_revision":revision,"english":"Could you give me a moment?","meaning":"Ask politely for time to think."])
         let replay = try client.call("save_expression",id:4,arguments:["conversation_id":id,"expected_revision":revision,"english":"Could you give me a moment?","meaning":"Ask politely for time to think."])
         guard replay["expression_id"] != nil else { throw AppFailure("MCP replay failed.") }
+        let catalog = try client.call("list_conversation_templates",id:5)
+        guard (catalog["templates"] as? [[String:Any]])?.count ?? 0 >= 6 else { throw AppFailure("Built-in templates missing.") }
+        let created = try client.call("create_conversation_template",id:6,arguments:["title":"MCP Loki","character_name":"Loki"])
+        guard let template = created["template"] as? [String:Any], let templateID = template["id"] as? String, let templateRevision = template["template_revision"] as? String else { throw AppFailure("Template create failed.") }
+        _ = try client.call("get_conversation_template",id:7,arguments:["template_id":templateID])
+        let updated = try client.call("update_conversation_template",id:8,arguments:["template_id":templateID,"expected_template_revision":templateRevision,"instructions":"Discuss books"])
+        let updatedRevision = (updated["template"] as? [String:Any])?["template_revision"] as? String ?? ""
+        let stale = try client.request("tools/call",id:80,params:["name":"update_conversation_template","arguments":["template_id":templateID,"expected_template_revision":templateRevision,"instructions":"Stale overwrite"]])
+        guard (stale["result"] as? [String:Any])?["isError"] as? Bool == true else { throw AppFailure("Stale helper update was accepted.") }
+        let unchanged = try client.call("get_conversation_template",id:81,arguments:["template_id":templateID])
+        guard (unchanged["template"] as? [String:Any])?["instructions"] as? String == "Discuss books" else { throw AppFailure("Stale request changed template instructions.") }
+
+        let beforeStart = try client.call("get_session",id:9)
+        _ = try client.call("create_conversation",id:10,arguments:["template_id":templateID,"expected_template_revision":updatedRevision,"expected_revision":beforeStart["revision"] as! String])
+        _ = try client.call("delete_conversation_template",id:11,arguments:["template_id":templateID,"expected_template_revision":updatedRevision])
+        let snapshot = try client.call("get_session",id:12)
+        guard snapshot["character_name"] as? String == "Loki", snapshot["instructions"] as? String == "Discuss books" else { throw AppFailure("Conversation lost deleted template snapshot.") }
+        _ = try client.call("open_conversation",id:13,arguments:["conversation_id":id,"expected_revision":snapshot["revision"] as! String])
         return try JSONSerialization.data(withJSONObject:client.transcript,options:[.prettyPrinted,.sortedKeys])
     }
     static func disabled(helper: String, socketPath: String) throws -> Bool {

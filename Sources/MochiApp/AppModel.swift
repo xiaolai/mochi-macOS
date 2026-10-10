@@ -18,6 +18,11 @@ struct MessageDeletionUndo {
     var libraryRevision = UUID()
     var deferredToolAction: (() -> Void)?
     var revealWorkspace: (() -> Void)?
+    @Published var templatePresentation: TemplatePresentation?
+    @Published var templateDraft: TemplateEditorDraft?
+    var templateReturnTo: TemplatePresentation?
+    var templateReturnDraft: TemplateEditorDraft?
+    var retainedInstructionsDraft: ConversationSettingsDraft?
     @Published var instructionsID: UUID?
     @Published var externalControlEnabled = false { didSet { defaults.set(externalControlEnabled,forKey:"externalControlEnabled"); configureAutomation() } }
     @Published var automationStatus = "Disabled"
@@ -182,10 +187,10 @@ struct MessageDeletionUndo {
     var practice: Bool { turn.mode == .practice }
     var status: String {
         switch turn.activity {
-        case .recording: if recordingMeaning { return "Recording your thought · finish to review" }; return practice ? "Recording your attempt · stays on this Mac" : "Recording · finish to send to Mochi"
+        case .recording: if recordingMeaning { return "Recording your thought · finish to review" }; return practice ? "Recording your attempt · stays on this Mac" : "Recording · finish to send to \(displayCharacterName)"
         case .requestingPermission: return "Waiting for microphone permission"
-        case .generating: if greetingActive { return "Preparing Mochi’s greeting…" }; return practice ? "Preparing your expression…" : "Mochi is thinking…"
-        case .playing: if audio.paused { return "Playback paused" }; return speaking ? "Mochi is speaking" : "Playing your recording"
+        case .generating: if greetingActive { return "Preparing \(displayCharacterName)’s greeting…" }; return practice ? "Preparing your expression…" : "\(displayCharacterName) is thinking…"
+        case .playing: if audio.paused { return "Playback paused" }; return speaking ? "\(displayCharacterName) is speaking" : "Playing your recording"
         case .idle: return practice ? "Conversation paused · microphone off" : "Ready when you are · microphone off"
         }
     }
@@ -289,8 +294,8 @@ struct MessageDeletionUndo {
         cancelHelpWork(); leavePractice(); expression = nil; showExpressions = true
     }
     func newChat() {
-        guard libraryReadable else { return }
-        if let chat = conversation, writableConversation, chat.messages.isEmpty, !chat.customTitle, chat.instructions.isEmpty, chat.preferences == ConversationPreferences() {
+        guard libraryReadable, templatePresentation == nil, instructionsID == nil else { return }
+        if let chat = conversation, writableConversation, chat.isPristine {
             stop(); leavePractice(); expression = nil; showExpressions = false; historyScope = .active; search = ""; return
         }
         var candidate = library
@@ -307,11 +312,16 @@ struct MessageDeletionUndo {
         selectedID = library.history(in:scope).first?.id
         draft = conversation?.draft ?? ""; save()
     }
+    func commitLibraryCandidate(_ candidate: Library) throws {
+        guard libraryReadable else { throw AppFailure("Your library is unavailable. No changes were saved.") }
+        var normalized = candidate; normalized.version = 3
+        if !demo { try store.save(normalized) }
+        library = normalized
+    }
     @discardableResult func commitHistory(_ candidate: Library) -> Bool {
-        guard libraryReadable else { return false }
         do {
-            if !demo { try store.save(candidate) }
-            library = candidate; error = nil; return true
+            try commitLibraryCandidate(candidate)
+            error = nil; return true
         } catch { self.error = "The history change could not be saved. Your library was not changed. Check disk space and try again."; return false }
     }
     func renameChat(_ id: UUID, title: String) {
@@ -441,11 +451,14 @@ struct MessageDeletionUndo {
         panel.message = "Choose a .mochilibrary or older .enjoylibrary backup. Missing items are added; matching IDs keep the local version."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let before = library.referencedAudio
+        let templateIDsBeforeImport = Set(library.conversationTemplates.map(\.id))
         var candidate = library
         do {
             let imported = try LibraryBackup.read(url)
             let count = try LibraryBackup.merge(imported,from:url,into:&candidate,root:store.root)
-            if commitHistory(candidate) { historyFeedback = "Imported \(count) conversations. Existing local items were kept." }
+            if commitHistory(candidate) {
+                historyFeedback = ConversationTemplate.importSummary(conversations:count,imported:imported.conversationTemplates,merged:candidate.conversationTemplates,localIDs:templateIDsBeforeImport)
+            }
             else { for name in candidate.referencedAudio.subtracting(before) { try? FileManager.default.removeItem(at:store.root.appendingPathComponent(name)) } }
         } catch { self.error = "This backup could not be imported. It may contain missing recordings, invalid IDs, or an unsupported schema. Your history was not changed." }
     }
@@ -457,6 +470,7 @@ struct MessageDeletionUndo {
     func send() {
         let text = draft.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !text.isEmpty, !busy, !practice, writableConversation, libraryReadable, let id = selectedID else { return }
+        if conversation?.characterNameNeedsReview == true { error = "Review the character name in Conversation Instructions before sending. Your draft is kept."; return }
         draft = ""; notice = nil
         let history = conversation?.messages ?? []
         append(Message(role:"user",text:text),to:id)
@@ -468,6 +482,7 @@ struct MessageDeletionUndo {
     }
     func retryReply() {
         guard canRetry, let chat = conversation, let last = chat.messages.last else { return }
+        if chat.characterNameNeedsReview { error = "Review the character name in Conversation Instructions before retrying."; return }
         do {
             let pcm = try last.contextText == nil ? last.audio.map { try AudioFile.pcm(store.root.appendingPathComponent($0)) } : nil
             requestReply(history:Array(chat.messages.dropLast()),text:last.text,pcm:pcm,audioFile:last.audio,conversationID:chat.id,existingUserID:last.id)
@@ -489,7 +504,8 @@ struct MessageDeletionUndo {
         }
         let token = turn.begin(.generating); error = nil
         let chat = library.conversations.first { $0.id == conversationID }
-        let instructions = String((chat?.instructions ?? "").prefix(MochiTools.maxInstructions)), preferences = chat?.preferences ?? ConversationPreferences()
+        let instructions = MochiTools.boundedInstructions(chat?.instructions ?? ""), preferences = chat?.preferences ?? ConversationPreferences()
+        let characterName = chat?.characterName, speakerName = chat?.displayCharacterName ?? "Mochi"
         var options = conversationVoiceOptions; if let speed = preferences.speed { options.speed = speed }
         let service = RealtimeService(model:modelName,voice:conversationVoice,options:options)
         let voiceID = pcm == nil ? nil : userID
@@ -514,7 +530,7 @@ struct MessageDeletionUndo {
                         filename = "reply-\(UUID().uuidString).wav"
                         try PCM.wav(reply.audio).write(to:store.root.appendingPathComponent(filename!))
                     }
-                    append(Message(role:"assistant",text:reply.text,audio:filename),to:conversationID)
+                    append(Message(role:"assistant",text:reply.text,audio:filename,speakerName:speakerName),to:conversationID)
                     _ = turn.finish(token)
                     let action = deferredToolAction; deferredToolAction = nil
                     if let action {
@@ -528,7 +544,7 @@ struct MessageDeletionUndo {
                     guard let self, !Task.isCancelled, let voiceID, transcriptTokens[voiceID] == requestID else { return }
                     updateTranscript(voiceID,chatID:conversationID,text:reply.inputTranscript.isEmpty ? nil : reply.inputTranscript,state:reply.transcriptionState,error:reply.transcriptionError)
                 })
-                let request = ConversationRequest(history:history,text:text,pcm:pcm,spoken:audioFile != nil,instructions:instructions,preferences:preferences)
+                let request = ConversationRequest(history:history,text:text,pcm:pcm,spoken:audioFile != nil,instructions:instructions,characterName:characterName,preferences:preferences)
                 if let conversationReply { try await conversationReply(request,callbacks) }
                 else { _ = try await service.reply(request,onResponse:callbacks.response,onTranscription:callbacks.transcription,onTool: { [weak self] name,args,_ in
                     guard let self, !Task.isCancelled, self.turn.epoch == token, self.selectedID == conversationID else { throw CancellationError() }
@@ -811,6 +827,7 @@ struct MessageDeletionUndo {
     }
     func toggleConversationVoice() {
         guard !practice, writableConversation, libraryReadable else { return }
+        if turn.activity != .recording, !greetingActive, conversation?.characterNameNeedsReview == true { error = "Review the character name in Conversation Instructions before recording."; return }
         if greetingActive {
             stop(); beginRecording(forMeaning:false); return
         }
@@ -820,6 +837,7 @@ struct MessageDeletionUndo {
         }
         let token = turn.begin(.requestingPermission)
         greetingActive = true; error = nil
+        let speakerName = conversation?.displayCharacterName ?? "Mochi"
         let service = RealtimeService(model:modelName,voice:conversationVoice,options:conversationVoiceOptions)
         task = Task { [self] in
             do {
@@ -830,7 +848,8 @@ struct MessageDeletionUndo {
                 // Each asynchronous stage is guarded by its epoch; Stop invalidates either stage.
                 let generationToken = turn.begin(.generating)
                 let recent = defaults.stringArray(forKey:"voiceGreetingHistory") ?? []
-                let text = VoiceIdentity.greeting(excluding:recent)
+                let greeting = VoiceIdentity.namedGreeting(name:speakerName,excluding:recent)
+                let text = greeting.text
                 do {
                     let url: URL
                     if let renderGreeting { url = try await renderGreeting(text,service,store.root) }
@@ -838,14 +857,14 @@ struct MessageDeletionUndo {
                     guard !Task.isCancelled, turn.epoch == generationToken, selectedID == id,
                           !practice, writableConversation,
                           let index = library.conversations.firstIndex(where: { $0.id == id }) else { return }
-                    library.conversations[index].messages.append(Message(role:"assistant",text:text,audio:url.lastPathComponent))
+                    library.conversations[index].messages.append(Message(role:"assistant",text:text,audio:url.lastPathComponent,speakerName:speakerName))
                     library.conversations[index].voiceIntroduced = true
                     guard save() else {
                         library.conversations[index].messages.removeLast()
                         library.conversations[index].voiceIntroduced = false
                         greetingActive = false; _ = turn.finish(generationToken); return
                     }
-                    defaults.set(Array((recent + [text]).suffix(3)),forKey:"voiceGreetingHistory")
+                    defaults.set(Array((recent + [greeting.pattern]).suffix(3)),forKey:"voiceGreetingHistory")
                     task = nil; _ = turn.finish(generationToken)
                     play(url.lastPathComponent,mochi:true,afterPlayback: { [weak self] in
                         guard let self, self.greetingActive, self.selectedID == id, !self.practice, self.writableConversation else { return }

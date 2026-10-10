@@ -32,7 +32,7 @@ public final class MochiMCPProtocol {
             initialized = true
             let requested = params["protocolVersion"] as! String
             let supported = ["2025-06-18","2025-03-26","2024-11-05"]
-            result = ["protocolVersion":supported.contains(requested) ? requested : "2025-06-18","capabilities":["tools":["listChanged":false]],"serverInfo":["name":"mochi","version":"1.0.0"],"instructions":"Control the running Mochi app. External control must be enabled in Settings. Read get_session before mutations and pass its revision as expected_revision. Scope operations to the open conversation. Recording is always user initiated."]
+            result = ["protocolVersion":supported.contains(requested) ? requested : "2025-06-18","capabilities":["tools":["listChanged":false]],"serverInfo":["name":"mochi","version":"1.0.0"],"instructions":"Control the running Mochi app. External control must be enabled in Settings. Read get_session before conversation mutations and pass its revision as expected_revision. Scope conversation operations to the open conversation. Template tools (*_conversation_template) work without an open conversation, use template_id and expected_template_revision, and do not accept expected_revision. Recording is always user initiated."]
         case "ping": result = [:]
         case "tools/list":
             guard ready else { return error(-32002,"Initialize the server first.") }

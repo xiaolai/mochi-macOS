@@ -61,13 +61,15 @@ public extension Library {
     }
     func validate() throws {
         guard Set(conversations.map(\.id)).count == conversations.count, Set(expressions.map(\.id)).count == expressions.count else { throw AppFailure("The library contains duplicate IDs.") }
+        guard Set(conversationTemplates.map(\.id)).count == conversationTemplates.count,
+              !conversationTemplates.contains(where:{ $0.isBuiltin || $0.revision.isEmpty || $0.revision.utf8.count > 200 }) else { throw AppFailure("The library contains invalid or duplicate template IDs/revisions.") }
         let attempts = expressions.flatMap(\.attempts)
         guard Set(attempts.map(\.id)).count == attempts.count else { throw AppFailure("The library contains duplicate attempt IDs.") }
         let messages = conversations.flatMap(\.messages)
         guard Set(messages.map(\.id)).count == messages.count else { throw AppFailure("The library contains duplicate message IDs.") }
         for chat in conversations { try chat.preferences.validate() }
         for name in referencedAudio {
-            guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"), !name.hasPrefix("."), !["library.json","library-v1-backup.json","library-before-help-transcription.json","library-before-conversation-instructions.json"].contains(name) else { throw AppFailure("The library contains an unsafe recording filename.") }
+            guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"), !name.hasPrefix("."), !name.hasPrefix("library-before-character-templates-v3"), !["library.json","library-v1-backup.json","library-before-help-transcription.json","library-before-conversation-instructions.json"].contains(name) else { throw AppFailure("The library contains an unsafe recording filename.") }
         }
     }
 }
@@ -75,7 +77,7 @@ public enum HistoryExport {
     public static func markdown(_ chats: [Conversation]) -> String {
         chats.map { chat in
             "# \(chat.title.replacingOccurrences(of:"\n",with:" "))\n\n" + chat.messages.map { message in
-                "### \(message.role == "user" ? "You" : "Mochi") · \(message.date.formatted(.iso8601))\n\n\(message.text)\n" + (message.audio.map { "\nRecording: `\($0)` (audio is included only in a library backup).\n" } ?? "")
+                "### \(message.role == "user" ? "You" : (message.speakerName ?? "Mochi")) · \(message.date.formatted(.iso8601))\n\n\(message.text)\n" + (message.audio.map { "\nRecording: `\($0)` (audio is included only in a library backup).\n" } ?? "")
             }.joined(separator:"\n")
         }.joined(separator:"\n---\n\n")
     }
@@ -93,17 +95,18 @@ public enum LibraryBackup {
         try FileManager.default.createDirectory(at:package,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
         do {
             let e = JSONEncoder(); e.outputFormatting = [.prettyPrinted,.sortedKeys]
-            try e.encode(library).write(to:package.appendingPathComponent("library.json"),options:.atomic)
+            var normalized = library; normalized.version = 3
+            try e.encode(normalized).write(to:package.appendingPathComponent("library.json"),options:.atomic)
             for name in library.referencedAudio { try FileManager.default.copyItem(at:root.appendingPathComponent(name),to:package.appendingPathComponent(name)) }
         } catch { try? FileManager.default.removeItem(at:package); throw error }
     }
     public static func read(_ package: URL) throws -> Library {
         _ = try regularFile(package.appendingPathComponent("library.json"))
         var library = try JSONDecoder().decode(Library.self,from:Data(contentsOf:package.appendingPathComponent("library.json")))
-        guard (1...2).contains(library.version) else { throw AppFailure("This backup requires a newer app.") }
+        guard (1...3).contains(library.version) else { throw AppFailure("This backup requires a newer app.") }
         try library.validate()
         for name in library.referencedAudio { _ = try regularFile(package.appendingPathComponent(name)) }
-        library.version = 2
+        library.version = 3
         return library
     }
     // Only missing IDs are imported; each imported audio name is remapped to avoid collisions.
@@ -114,6 +117,8 @@ public enum LibraryBackup {
         var additions = Library()
         additions.conversations = imported.conversations.filter { !chatIDs.contains($0.id) }
         additions.expressions = imported.expressions.filter { !expressionIDs.contains($0.id) }
+        let templateIDs = Set(local.conversationTemplates.map(\.id))
+        additions.conversationTemplates = imported.conversationTemplates.filter { !templateIDs.contains($0.id) }
         let localMessageIDs = Set(local.conversations.flatMap(\.messages).map(\.id))
         guard !additions.conversations.flatMap(\.messages).contains(where:{ localMessageIDs.contains($0.id) }) else { throw AppFailure("Imported message IDs conflict with local history.") }
         try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
@@ -136,7 +141,8 @@ public enum LibraryBackup {
                 if let name = additions.expressions[i].reference { additions.expressions[i].reference = mapping[name] }
                 for ai in additions.expressions[i].attempts.indices { let name = additions.expressions[i].attempts[ai].file; additions.expressions[i].attempts[ai].file = mapping[name]! }
             }
-            local.conversations += additions.conversations; local.expressions += additions.expressions
+            local.conversations += additions.conversations; local.expressions += additions.expressions; local.conversationTemplates += additions.conversationTemplates
+            local.version = 3
             return additions.conversations.count
         } catch { for url in copied { try? FileManager.default.removeItem(at:url) }; throw error }
     }

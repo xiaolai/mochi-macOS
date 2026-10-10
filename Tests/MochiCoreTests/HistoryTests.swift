@@ -8,7 +8,7 @@ final class HistoryTests: XCTestCase {
         let legacy = Data("{\"version\":1,\"conversations\":[{\"id\":\"\(id)\",\"title\":\"Old\",\"messages\":[],\"date\":0}],\"expressions\":[]}".utf8)
         try legacy.write(to:store.file)
         var library = try store.load()
-        XCTAssertEqual(library.version,2)
+        XCTAssertEqual(library.version,3)
         XCTAssertFalse(library.conversations[0].pinned)
         XCTAssertEqual(library.conversations[0].draft,"")
         library.conversations[0].draft = "Unsaved thought"
@@ -75,8 +75,10 @@ final class HistoryTests: XCTestCase {
         XCTAssertEqual(json["format"] as? String,"mochi-transcript")
         XCTAssertEqual(json["version"] as? Int,1)
         var library = Library(); library.conversations = (0..<1000).map { n in var c = Conversation(title:"\(n)"); c.messages = [Message(role:"assistant",text:"A paragraph about needle")]; return c }
-        let start = Date(); XCTAssertEqual(library.history(in:.active,query:"needle").count,1000)
-        XCTAssertLessThan(Date().timeIntervalSince(start),0.1)
+        // Thread CPU time measures the search's own work; wall time also counts scheduler waits on a loaded host.
+        func cpu() -> Double { var t = timespec(); clock_gettime(CLOCK_THREAD_CPUTIME_ID,&t); return Double(t.tv_sec) + Double(t.tv_nsec) / 1e9 }
+        let start = cpu(); XCTAssertEqual(library.history(in:.active,query:"needle").count,1000)
+        XCTAssertLessThan(cpu() - start,0.1)
     }
     func testFailedSaveKeepsOriginalAndDoesNotCleanAudio() throws {
         let root = temporary(); defer { try? FileManager.default.removeItem(at:root) }

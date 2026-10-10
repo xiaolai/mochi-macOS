@@ -9,6 +9,7 @@ struct ChatActions: View {
             Button("Recover Conversation") { app.restoreChats([chat.id]) }
             Button("Delete Permanently…",role:.destructive) { app.permanentDeleteIDs = [chat.id] }
         } else {
+            Button("Save as Template…") { app.saveConversationAsTemplate(chat.id) }.disabled(chat.archived || !app.canOpenConversationInstructions)
             Button("Conversation Instructions…") { app.openConversationInstructions(chat.id) }.disabled(chat.archived || !app.canOpenConversationInstructions)
             Button("Rename…") { app.renameID = chat.id }
             Button(chat.pinned ? "Unpin" : "Pin") { app.pinChats([chat.id],pinned:!chat.pinned) }

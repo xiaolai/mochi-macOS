@@ -159,7 +159,7 @@ final class VoiceIdentityModelTests: XCTestCase {
         let reopened = AppModel(libraryRoot:root,preferences:prefs)
         XCTAssertEqual(reopened.selectedID,app.selectedID)
         XCTAssertTrue(reopened.conversation?.voiceIntroduced == true)
-        XCTAssertEqual(prefs.stringArray(forKey:"voiceGreetingHistory"),Array(greetings.suffix(3)))
+        XCTAssertEqual(prefs.stringArray(forKey:"voiceGreetingHistory"),Array(greetings.suffix(3)).map { $0.replacingOccurrences(of:"Mochi",with:"{name}") })
         var rendered = false
         reopened.renderGreeting = { _,_,root in rendered = true; return root.appendingPathComponent("unexpected.wav") }
         reopened.microphonePermission = { true }; reopened.recordAudio = { _ in }
@@ -167,5 +167,24 @@ final class VoiceIdentityModelTests: XCTestCase {
         XCTAssertFalse(rendered)
         reopened.stop()
     }
-
+    /// Audit regression (2026-10-10): the greeting name is captured before the permission wait and survives a rename.
+    @MainActor func testGreetingUsesNameCapturedBeforePermissionAfterRename() async throws {
+        let app = app(), gate = TestGate()
+        let id = try XCTUnwrap(app.selectedID)
+        XCTAssertTrue(app.setConversationInstructions(id,instructions:"",preferences:ConversationPreferences(),characterName:"Loki"))
+        var rendered: String?
+        app.microphonePermission = { await gate.wait(); return true }
+        app.renderGreeting = { text,_,root in rendered = text; return root.appendingPathComponent("greeting.wav") }
+        app.audio.makePlayer = { _ in GreetingPlayer() }
+        app.toggleConversationVoice()
+        await wait { app.turn.activity == .requestingPermission }
+        let index = try XCTUnwrap(app.library.conversations.firstIndex(where:{ $0.id == id }))
+        app.library.conversations[index].characterName = "Sam"
+        await gate.release()
+        await wait { app.conversation?.messages.first != nil }
+        let greeting = try XCTUnwrap(app.conversation?.messages.first)
+        XCTAssertEqual(greeting.speakerName,"Loki"); XCTAssertEqual(rendered,greeting.text)
+        XCTAssertTrue(greeting.text.contains("Loki")); XCTAssertFalse(greeting.text.contains("Mochi"))
+        app.stop()
+    }
 }
