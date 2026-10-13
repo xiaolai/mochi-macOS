@@ -1,7 +1,20 @@
 import Foundation
 import MochiCore
+import MochiProviders
 
 enum HelpStage { case thought, english, practice }
+
+/// What the word check says about the latest practice attempt.
+enum AttemptCheckStatus: Equatable {
+    /// No attempt yet, or its check has not finished.
+    case none
+    case checked(AttemptCheck)
+    /// The check needs Apple's speech model, which downloads only when the learner agrees.
+    case needsDownload
+    case unavailable(WordRecognition.Reason)
+    /// Recognition failed; the attempt itself is saved.
+    case failed
+}
 
 /// Help Me Say This, as it is being worked on: the thought, its English, the example and the practice attempts.
 /// Each edit is written to the conversation's help draft through `persist`. Changes made inside `restoring` are
@@ -33,6 +46,7 @@ enum HelpStage { case thought, english, practice }
     var expression: PracticeExpression?
     var referencePitch: [PitchPoint] = []
     var attemptPitch: [PitchPoint] = []
+    var attemptCheck: AttemptCheckStatus = .none
     /// True while `restoring` runs.
     @ObservationIgnored private(set) var isRestoring = false
     /// Writes the help draft; `typing` lets typing in an existing draft be written after a pause.
@@ -40,6 +54,11 @@ enum HelpStage { case thought, english, practice }
     @ObservationIgnored var persist: (_ typing: Bool) -> Bool = { _ in false }
     /// Removes a recording if nothing references it any more.
     @ObservationIgnored var removeRecording: (String?) -> Void = { _ in }
+    /// Forgets the analysis of the latest attempt, when there is a new sentence or none.
+    func clearAttempt() {
+        attemptPitch = []
+        attemptCheck = .none
+    }
     /// Makes several changes as one: none of them is written or cleans up a recording on its own.
     func restoring(_ change: () -> Void) {
         let outer = isRestoring

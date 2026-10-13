@@ -86,6 +86,7 @@ struct MessageDeletionUndo {
     var transcribingMessageIDs: Set<UUID> { transcripts.messageIDs }
     @ObservationIgnored var speech: SpeechServices
     @ObservationIgnored var media: MediaServices
+    @ObservationIgnored var recognition: RecognitionServices
     @ObservationIgnored var playReply: ((String) -> Void)?
     /// Writes a reply's audio file; replaceable so a failed audio write can be tested while the library still saves.
     @ObservationIgnored var writeReplyAudio: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
@@ -193,7 +194,7 @@ struct MessageDeletionUndo {
     /// - Parameter applicationSupport: where the managed library lives when `libraryRoot` is nil; tests pass a temporary folder.
     init(
         demo: Bool = false, libraryRoot: URL? = nil, preferences: UserDefaults? = nil, speech: SpeechServices? = nil,
-        media: MediaServices? = nil, applicationSupport: URL? = nil
+        media: MediaServices? = nil, recognition: RecognitionServices? = nil, applicationSupport: URL? = nil
     ) {
         InstanceEvidence.record("model-created")
         assert(!TestEnvironment.active || preferences != nil, "Tests must give AppModel isolated preferences.")
@@ -203,6 +204,7 @@ struct MessageDeletionUndo {
         self.audio = audio
         self.media = media ?? .live(audio)
         self.speech = speech ?? .live
+        self.recognition = recognition ?? .live
         settings = PreferencesStore(
             preferences ?? (demo ? UserDefaults(suiteName: AppIdentity.bundleIdentifier + ".preview")! : .standard),
             importLegacy: !demo && libraryRoot == nil, allowExternalControl: !demo)
@@ -461,5 +463,11 @@ struct MessageDeletionUndo {
             let frequency: Double = 151 + 16 * sin(t * 0.07 + 0.3)
             return PitchPoint(time: t * 0.027, hz: i % 39 < 5 ? nil : frequency)
         }
+        let said: [(String, Double)] = [
+            ("I", 0.9), ("keep", 0.9), ("putting", 0.8), ("it", 0.9), ("of", 0.7), ("because", 0.9), ("I", 0.9),
+            ("don't", 0.9), ("know", 0.9), ("where", 0.3), ("to", 0.9), ("start", 0.8), ("now", 0.6),
+        ]
+        help.attemptCheck = .checked(
+            AttemptCheck(target: help.english, recognized: said.map { RecognizedWord(text: $0.0, confidence: $0.1) }))
     }
 }

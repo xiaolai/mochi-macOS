@@ -416,9 +416,17 @@
                 let practiceVoice = model.settings.builtInPracticeVoice
                 model.settings.builtInPracticeVoice = RealtimeService.defaultVoice
                 await capture("practice.png")
+                // The sheet on its own, so the practice pane is visible even when only AppKit view captures work.
+                await captureSheet("practice-sheet.png")
+                let wordCheckShown: Bool = {
+                    if case .checked = model.help.attemptCheck { return true }
+                    return false
+                }()
+                if !wordCheckShown { captureFailures.append("The practice preview shows no word check") }
                 NSApp.appearance = NSAppearance(named: .darkAqua)
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 await capture("practice-dark.png")
+                await captureSheet("practice-sheet-dark.png")
                 NSApp.appearance = NSAppearance(named: .aqua)
                 if let window = mainWindow { window.setContentSize(NSSize(width: 820, height: 700)) }
                 try? await Task.sleep(nanoseconds: 300_000_000)

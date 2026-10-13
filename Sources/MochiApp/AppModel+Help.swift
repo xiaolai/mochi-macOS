@@ -34,7 +34,7 @@ extension AppModel {
         }
         help.stage = help.english.isEmpty || help.recognizedThought != nil ? .thought : .english
         help.referencePitch = []
-        help.attemptPitch = []
+        help.clearAttempt()
         notice =
             cancelledReply
             ? String(localized: "Your pending reply was cancelled. You can retry it when you return.") : nil
@@ -157,7 +157,7 @@ extension AppModel {
                 help.expression = PracticeExpression(
                     conversationID: id, meaning: input, english: help.english, language: language(of: id))
                 help.referencePitch = []
-                help.attemptPitch = []
+                help.clearAttempt()
                 help.clarification = nil
                 help.stage = .english
             }
@@ -170,7 +170,7 @@ extension AppModel {
         if help.expression?.english != text {
             help.expression = nil
             help.referencePitch = []
-            help.attemptPitch = []
+            help.clearAttempt()
         }
         if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && help.stage == .thought {
             help.stage = .english
@@ -325,7 +325,7 @@ extension AppModel {
         }
         help.stage = .practice
         help.referencePitch = []
-        help.attemptPitch = []
+        help.clearAttempt()
         let root = store.root
         let reference = item.reference
         let attempt = item.attempts.last?.file
@@ -352,6 +352,8 @@ extension AppModel {
                     guard job.isCurrent() else { return }
                     failure = failure ?? error
                 }
+                await checkAttempt(name, of: item, job: job)
+                guard job.isCurrent() else { return }
             }
             if let failure { throw failure }
         }

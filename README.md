@@ -88,6 +88,8 @@ Every conversation has a language:
 
 **Help Me Say This** (⇧⌘H). When you get stuck, describe your thought in any language, get the words in the conversation's language, listen to them, and practise saying them in your own voice. Save the result to **My Expressions** to practise it again later. Saved expressions remember their language, so practising one continues in it.
 
+**What Mochi caught** (English, macOS 26 or later). After each practice attempt, Apple's speech recognition on your Mac checks which words of the sentence it heard: heard, heard as another word, not caught, or unclear, plus anything extra it heard. It is a hint, not a score: it also misses some words said well. The first check asks before downloading Apple's English speech model, if your Mac doesn't have it yet. Recordings checked this way stay on your Mac.
+
 New conversations start in the default language from **Settings → General**; changing it leaves existing conversations and templates as they are. Conversations from earlier versions of Mochi are English.
 
 Without a greeting of its own, a conversation opens with a standard greeting in its language. A Match Me conversation hasn't heard you yet, so it greets you in the language of Mochi's interface.
@@ -203,7 +205,7 @@ External control is off by default. The local connection is restricted to your m
 
 ## Data and backups
 
-Conversations, characters, templates, saved expressions, and practice recordings are stored locally. Conversation, transcription, and example-voice requests are processed by Codex.
+Conversations, characters, templates, saved expressions, and practice recordings are stored locally. Conversation, transcription, and example-voice requests are processed by Codex. Practice attempts are checked on your Mac by Apple's speech recognition and are not sent anywhere for it.
 
 Use **Export Library Backup…** to keep a portable copy of your library, and **Import Library Backup…** to restore or merge one.
 

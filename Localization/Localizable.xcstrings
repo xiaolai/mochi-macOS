@@ -1749,6 +1749,34 @@
         }
       }
     },
+    "Also heard: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほかに聞き取った語: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "그 밖에 들린 말: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还听到：%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "還聽到：%@"
+          }
+        }
+      }
+    },
     "An active conversation is required." : {
       "localizations" : {
         "ja" : {
@@ -1913,6 +1941,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "另一個 Mochi 仍在啟動中。請結束它，然後重新打開 Mochi。"
+          }
+        }
+      }
+    },
+    "Apple’s speech model is not installed on this Mac." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacにはAppleの音声モデルがインストールされていません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac에 Apple 음성 모델이 설치되어 있지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上没有安装 Apple 的语音模型。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這台 Mac 上沒有安裝 Apple 的語音模型。"
           }
         }
       }
@@ -4157,30 +4213,30 @@
         }
       }
     },
-    "Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text is voiced by OpenAI through the same sign-in. Practice attempts and pitch analysis stay on your Mac." : {
+    "Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text is voiced by OpenAI through the same sign-in. Practice attempts, pitch analysis and word checks stay on your Mac." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "会話のテキスト、コンテキスト、音声メッセージは、CodexのサインインによってOpenAIに送信されます。お手本のテキストも同じサインインによってOpenAIで音声化されます。練習の録音とピッチ分析はこのMac内に留まります。"
+            "value" : "会話のテキスト、コンテキスト、音声メッセージは、CodexのサインインによってOpenAIに送信されます。お手本のテキストも同じサインインによってOpenAIで音声化されます。練習の録音、ピッチ分析、語のチェックはこのMac内に留まります。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "대화 텍스트, 맥락 및 음성 메시지는 Codex 로그인을 통해 OpenAI로 전송됩니다. 예시 텍스트는 같은 로그인을 통해 OpenAI가 음성으로 변환합니다. 연습 시도와 음높이 분석은 사용자의 Mac에만 저장됩니다."
+            "value" : "대화 텍스트, 맥락 및 음성 메시지는 Codex 로그인을 통해 OpenAI로 전송됩니다. 예시 텍스트는 같은 로그인을 통해 OpenAI가 음성으로 변환합니다. 연습 시도, 음높이 분석 및 단어 확인은 사용자의 Mac에서만 이루어집니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "对话文本、上下文和语音消息会通过你的 Codex 登录发送给 OpenAI。示例文本由 OpenAI 通过同一登录进行配音。跟读练习和音高分析保留在你的 Mac 上。"
+            "value" : "对话文本、上下文和语音消息会通过你的 Codex 登录发送给 OpenAI。示例文本由 OpenAI 通过同一登录进行配音。跟读练习、音高分析和单词检查都保留在你的 Mac 上。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "對話文字、上下文和語音訊息會透過你的 Codex 登入傳送給 OpenAI。範例文字也透過同一登入由 OpenAI 產生語音。練習嘗試和音高分析會保留在你的 Mac 上。"
+            "value" : "對話文字、上下文和語音訊息會透過你的 Codex 登入傳送給 OpenAI。範例文字也透過同一登入由 OpenAI 產生語音。練習嘗試、音高分析和單詞檢查都會保留在你的 Mac 上。"
           }
         }
       }
@@ -5977,6 +6033,62 @@
         }
       }
     },
+    "Download Speech Model" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声モデルをダウンロード"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음성 모델 다운로드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载语音模型"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載語音模型"
+          }
+        }
+      }
+    },
+    "Downloading Apple’s speech model…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Appleの音声モデルをダウンロードしています…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple 음성 모델을 다운로드하는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载 Apple 的语音模型…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下載 Apple 的語音模型…"
+          }
+        }
+      }
+    },
     "Draft: %@" : {
       "localizations" : {
         "ja" : {
@@ -7069,6 +7181,34 @@
         }
       }
     },
+    "From Apple speech recognition on this Mac. It also misses some words said well, so treat this as a hint, not a score." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacのApple音声認識による結果です。正しく発音した語を聞き逃すこともあるため、採点ではなく目安としてご利用ください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac의 Apple 음성 인식 결과입니다. 잘 발음한 단어를 놓치기도 하므로 점수가 아니라 참고로만 보십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结果来自这台 Mac 上的 Apple 语音识别。它也会漏掉一些读得很好的词，所以请把它当作提示，而不是评分。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結果來自這台 Mac 上的 Apple 語音辨識。它也會漏掉一些唸得很好的詞，所以請把它當作提示，而不是評分。"
+          }
+        }
+      }
+    },
     "General" : {
       "localizations" : {
         "ja" : {
@@ -7233,6 +7373,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "問候語：%@"
+          }
+        }
+      }
+    },
+    "Heard" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取れた"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "들림"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听到了"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聽到了"
+          }
+        }
+      }
+    },
+    "Heard as another word" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の語として聞き取られた"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 단어로 들림"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听成了别的词"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聽成了別的詞"
           }
         }
       }
@@ -9452,6 +9648,34 @@
         }
       }
     },
+    "Mochi could not check this attempt. The attempt itself is saved." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiはこの練習を確認できませんでした。録音そのものは保存されています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 이번 연습을 확인하지 못했습니다. 녹음 자체는 저장되어 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 无法检查这次练习。录音本身已保存。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 無法檢查這次練習。錄音本身已儲存。"
+          }
+        }
+      }
+    },
     "Mochi could not complete that response. Please retry." : {
       "localizations" : {
         "ja" : {
@@ -9588,6 +9812,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mochi 無法安全啟動"
+          }
+        }
+      }
+    },
+    "Mochi did not catch any words. Speak a little closer to the microphone and try again." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiは語を聞き取れませんでした。マイクに少し近づいて、もう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 어떤 단어도 알아듣지 못했습니다. 마이크에 조금 더 가까이 대고 다시 시도하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 没有听到任何词。请离麦克风近一点，再试一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 沒有聽到任何詞。請離麥克風近一點，再試一次。"
           }
         }
       }
@@ -11212,6 +11464,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "沒有訊息"
+          }
+        }
+      }
+    },
+    "Not caught" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取れなかった"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "들리지 않음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没听到"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒聽到"
           }
         }
       }
@@ -15752,6 +16032,62 @@
         }
       }
     },
+    "Speech recognition is not available for this sentence." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この文には音声認識を使用できません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 문장에는 음성 인식을 사용할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个句子无法使用语音识别。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個句子無法使用語音辨識。"
+          }
+        }
+      }
+    },
+    "Speech recognition is not available on this Mac." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacでは音声認識を使用できません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac에서는 음성 인식을 사용할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 无法使用语音识别。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這台 Mac 無法使用語音辨識。"
+          }
+        }
+      }
+    },
     "Speech speed" : {
       "localizations" : {
         "ja" : {
@@ -18720,6 +19056,34 @@
         }
       }
     },
+    "To see which words Mochi caught, download Apple’s English speech model. It downloads once, from Apple." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiが聞き取った語を確認するには、Appleの英語音声モデルをダウンロードしてください。Appleから一度だけダウンロードされます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 알아들은 단어를 보려면 Apple 영어 음성 모델을 다운로드하십시오. Apple에서 한 번만 다운로드됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要查看 Mochi 听到了哪些词，请下载 Apple 的英语语音模型。它只需从 Apple 下载一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要查看 Mochi 聽到了哪些詞，請下載 Apple 的英語語音模型。它只需從 Apple 下載一次。"
+          }
+        }
+      }
+    },
     "Today" : {
       "localizations" : {
         "ja" : {
@@ -19332,6 +19696,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法取得 Mochi 的獨佔存取權。%@"
+          }
+        }
+      }
+    },
+    "Unclear" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不明瞭"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "불분명"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不确定"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不確定"
           }
         }
       }
@@ -20120,6 +20512,34 @@
         }
       }
     },
+    "What Mochi caught" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiが聞き取った語"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 알아들은 말"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 听到了什么"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 聽到了什麼"
+          }
+        }
+      }
+    },
     "What am I missing?" : {
       "localizations" : {
         "ja" : {
@@ -20452,6 +20872,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你要和誰談？需要說些什麼？"
+          }
+        }
+      }
+    },
+    "Word checks are available for English sentences only." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "語のチェックは英語の文でのみ利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단어 확인은 영어 문장에서만 사용할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "单词检查仅适用于英语句子。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "單詞檢查僅適用於英語句子。"
+          }
+        }
+      }
+    },
+    "Word checks need macOS 26 or later." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "語のチェックにはmacOS 26以降が必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단어 확인에는 macOS 26 이상이 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "单词检查需要 macOS 26 或更高版本。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "單詞檢查需要 macOS 26 或更新版本。"
+          }
+        }
+      }
+    },
+    "Words caught: %lld of %lld" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取れた語: %lld / %lld"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "알아들은 단어: %lld / %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听到的词：%lld / %lld"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聽到的詞：%lld / %lld"
           }
         }
       }

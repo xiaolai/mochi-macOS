@@ -279,6 +279,7 @@ struct PracticePane: View {
                     Label("Reference Options", systemImage: "ellipsis")
                 }.menuStyle(.borderlessButton).fixedSize().disabled(app.busy)
             }
+            if app.help.attemptCheck != .none { AttemptCheckView(app: app) }
             DisclosureGroup("Compare pitch · unscored", isExpanded: $pitchOpen) {
                 GroupBox {
                     VStack(alignment: .leading, spacing: 10) {

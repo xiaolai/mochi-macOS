@@ -8,7 +8,7 @@ final class PreviewLibraryTests: XCTestCase {
     @MainActor func testPreviewLibraryIsDiscardedOnQuit() async {
         let app = AppModel(
             demo: true, libraryRoot: nil, preferences: makePreferences(), speech: .unexpected, media: .silent,
-            applicationSupport: nil)
+            recognition: .absent, applicationSupport: nil)
         let root = app.store.root
         XCTAssertTrue(root.lastPathComponent.hasPrefix("mochi-preview-"))
         await waitUntil { FileManager.default.fileExists(atPath: root.path) }

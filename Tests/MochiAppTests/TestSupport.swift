@@ -19,6 +19,28 @@ extension SpeechServices {
             transcribe: { _, _ in throw refuse("transcription") })
     }
 }
+extension RecognitionServices {
+    /// As on a Mac older than macOS 26: no word check, and never a recognition or a download.
+    static var absent: RecognitionServices {
+        RecognitionServices(
+            availability: { _ in .unavailable(.olderMacOS) },
+            download: { _ in
+                XCTFail("Unexpected speech model download: set app.recognition")
+                throw AppFailure("No speech model in this test.")
+            },
+            recognize: { _, _ in
+                XCTFail("Unexpected recognition: set app.recognition")
+                throw AppFailure("No recognizer in this test.")
+            })
+    }
+    /// A recognizer that is ready and always returns `words`.
+    static func hearing(_ words: [RecognizedWord]) -> RecognitionServices {
+        var services = RecognitionServices.absent
+        services.availability = { _ in .ready }
+        services.recognize = { _, _ in words }
+        return services
+    }
+}
 extension MediaServices {
     /// Stopping and metering are harmless. Asking for the microphone or recording fails the test.
     static var silent: MediaServices {
@@ -62,13 +84,14 @@ extension XCTestCase {
     /// Pass `applicationSupport` without `root` to exercise the managed data folder and its migration.
     @MainActor func makeApp(
         demo: Bool = false, root: URL? = nil, preferences: UserDefaults? = nil,
-        speech: SpeechServices = .unexpected, media: MediaServices = .silent, applicationSupport: URL? = nil
+        speech: SpeechServices = .unexpected, media: MediaServices = .silent,
+        recognition: RecognitionServices = .absent, applicationSupport: URL? = nil
     ) -> AppModel {
         precondition(root != nil || demo || applicationSupport != nil, "A test must never open the real data folder.")
         let app = AppModel(
             demo: demo, libraryRoot: root ?? (demo ? makeTemporaryFolder() : nil),
             preferences: preferences ?? makePreferences(),
-            speech: speech, media: media, applicationSupport: applicationSupport)
+            speech: speech, media: media, recognition: recognition, applicationSupport: applicationSupport)
         app.audio.makePlayer = { _ in
             XCTFail("Unexpected playback: set app.audio.makePlayer")
             throw AppFailure("No speaker in this test.")

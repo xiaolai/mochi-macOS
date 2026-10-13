@@ -271,7 +271,10 @@ extension AppModel {
             else { return }
             help.expression?.attempts.append(Attempt(file: url.lastPathComponent))
             help.attemptPitch = pitch
+            help.attemptCheck = .none
             saveExpression()
+            if let item = help.expression { await checkAttempt(url.lastPathComponent, of: item, job: job) }
+            guard job.isCurrent() else { return }
             job.finish()
             notice =
                 pitch.contains(where: { $0.hz != nil })

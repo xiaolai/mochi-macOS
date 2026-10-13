@@ -1,5 +1,6 @@
 import Foundation
 import MochiCore
+import MochiKernel
 import MochiProviders
 
 /// True inside an XCTest process. Live services must never run there: a test that forgets a fake
@@ -7,7 +8,7 @@ import MochiProviders
 enum TestEnvironment {
     static let active = NSClassFromString("XCTestCase") != nil
     static func assertNotUnderTest(_ what: String) {
-        precondition(!active, "\(what) must not be used in tests. Pass fakes to AppModel(speech:media:).")
+        precondition(!active, "\(what) must not be used in tests. Pass fakes to AppModel(speech:media:recognition:).")
     }
 }
 
@@ -35,6 +36,22 @@ struct SpeechServices {
                 try await service.referenceAudio(text: text, root: root, force: force)
             },
             transcribe: { url, model in try await RealtimeService(model: model).transcribe(AudioFile.pcm(url)) })
+    }
+}
+
+/// On-device recognition of practice attempts, checked against the sentence being practised.
+struct RecognitionServices {
+    var availability: (ConversationLanguage) async -> WordRecognition.Availability
+    /// Downloads Apple's speech model; called only after the learner agreed.
+    var download: (ConversationLanguage) async throws -> Void
+    var recognize: (URL, ConversationLanguage) async throws -> [RecognizedWord]
+
+    static var live: RecognitionServices {
+        TestEnvironment.assertNotUnderTest("RecognitionServices.live")
+        return RecognitionServices(
+            availability: { await WordRecognition.availability(for: $0) },
+            download: { try await WordRecognition.download(for: $0) },
+            recognize: { try await WordRecognition.recognize($0, language: $1) })
     }
 }
 

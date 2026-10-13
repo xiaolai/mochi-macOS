@@ -67,7 +67,7 @@ struct SettingsView: View {
                 }
                 Section("Privacy") {
                     Text(
-                        "Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text is voiced by OpenAI through the same sign-in. Practice attempts and pitch analysis stay on your Mac."
+                        "Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text is voiced by OpenAI through the same sign-in. Practice attempts, pitch analysis and word checks stay on your Mac."
                     )
                     Text(
                         "Checking the connection sends a short text request. Recordings are sent only when you finish a voice message or choose to translate a recorded thought."
