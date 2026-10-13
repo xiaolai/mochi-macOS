@@ -1,6 +1,6 @@
 import Foundation
 
-public enum CoachingStyle: String, Codable, CaseIterable { case natural, gentle, direct }
+public enum CoachingStyle: String, Codable, CaseIterable, Sendable { case natural, gentle, direct }
 public struct ConversationPreferences: Codable, Equatable {
     public var speed: Double?
     public var coaching: CoachingStyle = .natural
