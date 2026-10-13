@@ -55,9 +55,13 @@ final class TranscriptionExperimentLiveTests: XCTestCase {
                 else { return nil }
                 return "\(row["arm"] ?? "")/\(row["id"] ?? "")/\(row["configuration"] ?? "")"
             })
+        // MOCHI_E1_CONFIGURATIONS (comma-separated names) limits the run to those configurations.
+        let only = environment["MOCHI_E1_CONFIGURATIONS"].map { Set($0.split(separator: ",").map(String.init)) }
+        let configurations = Self.configurations.filter { only?.contains($0.name) ?? true }
+        XCTAssertFalse(configurations.isEmpty, "MOCHI_E1_CONFIGURATIONS names no known configuration")
         var jobs: [([String: Any], Configuration)] = []
         for item in items {
-            for configuration in Self.configurations
+            for configuration in configurations
             where !done.contains("\(item["arm"] ?? "")/\(item["id"] ?? "")/\(configuration.name)") {
                 jobs.append((item, configuration))
             }
