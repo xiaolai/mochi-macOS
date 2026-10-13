@@ -11,7 +11,15 @@
         /// Ends a scripted run. A failed or incomplete run exits nonzero so it never looks clean to its launcher.
         private func finishRun(_ model: AppModel, passed: Bool) {
             if passed {
+                // AppKit ignores terminate while a window has a sheet attached, such as the preview's practice sheet.
+                for window in NSApp.windows { if let sheet = window.attachedSheet { window.endSheet(sheet) } }
                 NSApp.terminate(nil)
+                // A run that has still not quit is hung: fail loudly rather than wait for its launcher's timeout.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                    FileHandle.standardError.write(Data("The scripted run finished but Mochi did not quit.\n".utf8))
+                    model.discardTemporaryLibrary()
+                    exit(EXIT_FAILURE)
+                }
             } else {
                 model.discardTemporaryLibrary()
                 exit(EXIT_FAILURE)
