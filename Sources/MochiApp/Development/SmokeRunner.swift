@@ -12,11 +12,28 @@
         private func finishRun(_ model: AppModel, passed: Bool) {
             if passed {
                 // AppKit ignores terminate while a window has a sheet attached, such as the preview's practice sheet.
-                for window in NSApp.windows { if let sheet = window.attachedSheet { window.endSheet(sheet) } }
-                NSApp.terminate(nil)
+                // Close it through the state that presents it: a sheet ended in AppKit alone leaves that state set.
+                if model.practice { model.leavePractice() }
+                Task { @MainActor in
+                    for _ in 0..<50 where NSApp.windows.contains(where: { $0.attachedSheet != nil }) {
+                        try? await Task.sleep(nanoseconds: 100_000_000)
+                    }
+                    NSApp.terminate(nil)
+                }
                 // A run that has still not quit is hung: fail loudly rather than wait for its launcher's timeout.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-                    FileHandle.standardError.write(Data("The scripted run finished but Mochi did not quit.\n".utf8))
+                    let blocking = [
+                        NSApp.modalWindow.map { "modal window: \($0.title)" },
+                        NSApp.windows.compactMap(\.attachedSheet).isEmpty ? nil : "attached sheet",
+                        model.practice ? "practice open" : nil, model.busy ? "busy" : nil,
+                        model.customization.isPresented ? "customization open" : nil,
+                        model.history.managerOpen ? "history manager open" : nil,
+                        model.error.map { "error: \($0)" },
+                    ].compactMap { $0 }
+                    FileHandle.standardError.write(
+                        Data(
+                            "The scripted run finished but Mochi did not quit (\(blocking.joined(separator: "; "))).\n"
+                                .utf8))
                     model.discardTemporaryLibrary()
                     exit(EXIT_FAILURE)
                 }
