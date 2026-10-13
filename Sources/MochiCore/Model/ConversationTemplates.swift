@@ -306,6 +306,12 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
     /// changes no revision.
     public enum Category: Sendable { case general, languagePractice }
     public var category: Category? { Self.builtinNumbers[id].map { Self.definitions[$0 - 1].category } }
+    /// True for a built-in where Mochi plays a part in a scenario the user sets up, so Start Again is offered as a
+    /// button. Defined in code and never stored, like the category.
+    public var isRolePlay: Bool { Self.builtinNumbers[id].map { Self.definitions[$0 - 1].rolePlay } ?? false }
+    public static func isRolePlay(_ id: UUID?) -> Bool {
+        id.flatMap { builtinNumbers[$0] }.map { definitions[$0 - 1].rolePlay } ?? false
+    }
     /// Built-in templates are stored in English, since their revision hashes that text; they are shown translated.
     public var displayTitle: String { Self.builtinNumbers[id].flatMap(Self.localizedText)?.title ?? title }
     public var displayDescription: String {
@@ -427,6 +433,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         let category: Category
         var greeting = ""
         var phrases: [String] = []
+        var rolePlay = false
     }
     /// Every built-in, in order: its place is its number, which fixes its ID. Append only, so existing IDs and the
     /// revisions conversations recorded never change.
@@ -435,19 +442,19 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
             title: "Restaurant", description: "Order a meal and handle follow-up questions.", characterName: "Alex",
             instructions:
                 "You are Alex, a restaurant server. The user is a customer. Help them practise ordering a meal and asking about ingredients. Ask one natural question at a time. Stay in role; ask for missing preferences instead of inventing them.",
-            category: .languagePractice),
+            category: .languagePractice, rolePlay: true),
         Definition(
             title: "Hotel check-in", description: "Practise arrivals, reservations, and requests.",
             characterName: "Alex",
             instructions:
                 "You are Alex at a hotel reception desk. The user is a guest checking in. Practise a realistic check-in and special requests. Ask one question at a time. Ask for reservation details instead of inventing them.",
-            category: .languagePractice),
+            category: .languagePractice, rolePlay: true),
         Definition(
             title: "Job interview", description: "Practise explaining experience and answering questions.",
             characterName: "Alex",
             instructions:
                 "You are Alex, an interviewer. Ask the user what job they are preparing for, then conduct a realistic interview one question at a time. Ask follow-ups about their own answers; do not invent their experience.",
-            category: .languagePractice),
+            category: .languagePractice, rolePlay: true),
         Definition(
             title: "Vocabulary recall", description: "Recall words and use them in your own sentences.",
             characterName: "Mochi",
@@ -491,7 +498,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
                 "Help the user rehearse a conversation they are about to have, such as a difficult talk, a pitch, a negotiation or a request. Unless they have already said, first ask who they will be talking to, what they need to say, and how they expect that person to react. When you have enough, tell the user to begin whenever they are ready; if they start speaking to that person before then, take it as the start and answer in the role. Then play that person realistically, including reasonable pushback, and stay in the role until the user steps out of it. Do not invent facts about the user's situation; ask instead. When the user asks for feedback or to stop, step out of the role and give brief, specific feedback: what worked, one thing to try differently, and a possible opening line, in under about 60 words. Then offer to run it again. Speak in plain sentences, without lists, numbering or headings.",
             language: .match, category: .general,
             greeting: "Who will you be talking to, and what do you need to say?",
-            phrases: ["Push back harder.", "Let's start again.", "How did I do?"]),
+            phrases: ["Push back harder.", "Let's start again.", "How did I do?"], rolePlay: true),
         Definition(
             title: "Make a story with me", description: "Build a story together, one turn at a time.",
             characterName: nil,
@@ -507,7 +514,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
                 "Help the user develop a fictional character by interviewing them. Unless already given, ask for the character's name and one thing they want. From then on the user answers as the character and you are the interviewer, speaking to the character directly as you. Ask one open question at a time about their past, desires, fears, relationships and contradictions, and follow up on surprising answers. Never build a question on something they have not said, never answer for the character, and never invent facts about them. When the user asks to finish, give a character sketch of under about 60 words built only from their answers, then name one question still worth exploring. Speak in plain sentences, without lists, numbering or headings.",
             language: .match, category: .general,
             greeting: "Who is your character? Tell me their name and one thing they want.",
-            phrases: ["Ask about my past.", "Ask me something harder.", "Let's finish the interview."]),
+            phrases: ["Ask about my past.", "Ask me something harder.", "Let's finish the interview."], rolePlay: true),
         Definition(
             title: "Learn by teaching", description: "Explain a topic to a curious beginner to find the gaps.",
             characterName: nil,

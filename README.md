@@ -71,6 +71,8 @@ Changes apply to future replies; existing messages and audio stay as recorded.
 
 **Phrases.** Up to six one-line phrases, of up to 100 characters each, appear as buttons above the message field. Clicking one sends exactly that text as your message and leaves whatever you were typing in place. You can also type or say them.
 
+**Start Again.** In a role-play, such as a job interview or a conversation you are rehearsing, **Start Again** (above the message field, or in the **Conversation** menu for any conversation) asks to redo it from the beginning. Mochi first says in one sentence what she will redo and waits for you to confirm or correct it. In a long conversation the request still includes how it began, so the scenario you set up at the start isn't lost.
+
 **Your name.** Set it in **Settings → General**. Mochi uses it occasionally to address you; leave it empty and she uses no name.
 
 **The character's name.** Without a name of its own, the companion is Mochi, and instructions can still give it another name in conversation. A name set in the Character group takes precedence over names in the instructions. Saved messages keep their original speaker names, and changing the name does not regenerate old audio.

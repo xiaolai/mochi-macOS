@@ -110,6 +110,7 @@ public enum VoiceIdentity {
             \(name)When asked your name, answer simply. When directly addressed by name with a request, respond to the request.
             When the user only calls your name, acknowledge briefly and warmly, varying naturally: for example, "I'm here", "Yes?", or "Hey, I'm listening".
             A mention of \(mention) is not necessarily an address to you; use the context. Do not repeat introductions or announce your name in every reply.
+            When the user asks to start again, do not restart yet: in one sentence, say what you will redo, using only what this conversation established, and ask them to confirm or correct it. Begin only after they confirm. If the conversation does not make it clear, ask instead of inventing it.
             """
     }
 }

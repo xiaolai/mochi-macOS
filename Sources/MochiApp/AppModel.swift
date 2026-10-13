@@ -87,6 +87,8 @@ struct MessageDeletionUndo {
     @ObservationIgnored var speech: SpeechServices
     @ObservationIgnored var media: MediaServices
     @ObservationIgnored var recognition: RecognitionServices
+    /// Start Again messages sent since launch, so retrying one sends the same history.
+    @ObservationIgnored var restartMessageIDs: Set<UUID> = []
     @ObservationIgnored var playReply: ((String) -> Void)?
     /// Writes a reply's audio file; replaceable so a failed audio write can be tested while the library still saves.
     @ObservationIgnored var writeReplyAudio: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }

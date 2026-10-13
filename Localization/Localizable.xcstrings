@@ -8777,6 +8777,34 @@
         }
       }
     },
+    "Let's start again from the beginning." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初からやり直しましょう。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "처음부터 다시 시작해요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我们从头再来一遍吧。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我們從頭再來一遍吧。"
+          }
+        }
+      }
+    },
     "Let's start again." : {
       "localizations" : {
         "ja" : {
@@ -13596,6 +13624,34 @@
         }
       }
     },
+    "Redo this scenario from the beginning; Mochi checks the details with you first" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この場面を最初からやり直します。Mochiが先に内容を確認します"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 상황을 처음부터 다시 합니다. Mochi가 먼저 내용을 확인합니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从头重来这个情景；Mochi 会先和你确认细节"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "從頭重來這個情境；Mochi 會先和你確認細節"
+          }
+        }
+      }
+    },
     "Reference" : {
       "localizations" : {
         "ja" : {
@@ -16196,6 +16252,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "第一次開始說話時，會照原樣念出。留空則用對話語言說一句標準問候。"
+          }
+        }
+      }
+    },
+    "Start Again" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初からやり直す"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从头再来"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "從頭再來"
           }
         }
       }

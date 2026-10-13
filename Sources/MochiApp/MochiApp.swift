@@ -72,6 +72,8 @@ import SwiftUI
                     Button("Import Library Backup…", action: model.importLibraryBackup).disabled(
                         model.libraryTransfer != nil)
                     Divider()
+                    Button("Start Again", action: model.startAgain).disabled(
+                        !model.canStartAgain || model.automationModal)
                     Button("Help Me Say This", action: model.startHelp).keyboardShortcut(
                         "h", modifiers: [.command, .shift]
                     ).disabled(!model.canHelp || model.automationModal)

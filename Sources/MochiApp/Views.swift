@@ -370,9 +370,21 @@ struct WorkspaceView: View {
 
     /// The conversation's phrases, each sent as the user's message with one click; the composer keeps its draft.
     @ViewBuilder private var phraseChips: some View {
-        if let phrases = app.conversation?.phrases, !phrases.isEmpty {
+        let phrases = app.conversation?.phrases ?? []
+        if !phrases.isEmpty || app.isRolePlay {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
+                    if app.isRolePlay {
+                        Button(action: app.startAgain) {
+                            Label("Start Again", systemImage: "arrow.counterclockwise")
+                        }
+                        .buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.small)
+                        .disabled(!app.canStartAgain)
+                        .help("Redo this scenario from the beginning; Mochi checks the details with you first")
+                        #if MOCHI_DEVELOPMENT
+                            .background(ClickProbe("mochi-start-again-probe"))
+                        #endif
+                    }
                     ForEach(Array(phrases.enumerated()), id: \.offset) { index, phrase in
                         Button {
                             app.sendPhrase(phrase)

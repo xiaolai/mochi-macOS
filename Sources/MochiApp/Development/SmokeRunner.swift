@@ -839,6 +839,39 @@
                 } else {
                     captureFailures.append("No conversation could be started from a general built-in template")
                 }
+                // A role-play conversation shows Start Again; pressing it sends the restart request as the user's
+                // message, with the conversation so far as history.
+                var restartRequests: [(text: String, history: Int)] = []
+                model.speech.conversationReply = { _, request, callbacks in
+                    restartRequests.append((request.text, request.history.count))
+                    var reply = RealtimeAccumulator()
+                    reply.text = "We'll redo the interview for the job you named. Is that still right?"
+                    try callbacks.response(reply)
+                }
+                if let rolePlay = ConversationTemplate.builtins.first(where: { $0.title == "Job interview" }),
+                    (try? model.startTemplateSnapshot(rolePlay)) != nil
+                {
+                    model.draft = "A product manager role at a medical software company."
+                    model.send()
+                    let answered = await waitFor(3) { restartRequests.count == 1 && !model.busy }
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    await capture("conversation-start-again.png")
+                    let clicked = mainWindow.flatMap { click("mochi-start-again-probe", in: $0) }
+                    let restarted = await waitFor(3) { restartRequests.count == 2 && !model.busy }
+                    let checks: [String: Bool] = [
+                        "first_reply": answered, "button_shown": model.isRolePlay, "button_clicked": clicked != nil,
+                        "restart_sent": restarted,
+                        "restart_text": restartRequests.last?.text
+                            == String(localized: "Let's start again from the beginning."),
+                        "history_kept": restartRequests.last?.history == 2,
+                    ]
+                    for (check, passed) in checks.sorted(by: { $0.key < $1.key }) where !passed {
+                        captureFailures.append("Start Again check failed: \(check)")
+                    }
+                    await capture("conversation-start-again-sent.png")
+                } else {
+                    captureFailures.append("No conversation could be started from a role-play template")
+                }
                 model.speech.conversationReply = liveReply
                 model.newChat()
                 model.startHelp()

@@ -31,8 +31,21 @@ extension AppModel {
         guard !text.isEmpty else { return }
         submit(text, fromComposer: false)
     }
+    /// Start Again needs something to start again from: a message the model can read.
+    var canStartAgain: Bool {
+        canSendPhrase && conversation?.messages.contains { $0.role == "user" && $0.contextText != nil } == true
+    }
+    /// Whether the conversation was made from a role-play template, which shows Start Again as a button.
+    var isRolePlay: Bool { ConversationTemplate.isRolePlay(conversation?.sourceTemplateID) }
+    /// Asks to redo the conversation's exercise (plan W3). The request is the user's message, sent with the
+    /// conversation's opening as well as its latest messages, so a scenario set up long ago is still there. The
+    /// instructions make Mochi state the scenario and wait for the user to confirm it before beginning.
+    func startAgain() {
+        guard canStartAgain else { return }
+        submit(String(localized: "Let's start again from the beginning."), fromComposer: false, restart: true)
+    }
     /// Adds `text` as the user's message and asks for a reply. Nothing is added when the message cannot be saved.
-    private func submit(_ text: String, fromComposer: Bool) {
+    private func submit(_ text: String, fromComposer: Bool, restart: Bool = false) {
         guard !busy, !practice, writableConversation, libraryReadable, let id = selectedID else { return }
         if conversation?.characterNameNeedsReview == true {
             error =
@@ -44,13 +57,15 @@ extension AppModel {
             return
         }
         notice = nil
-        let history = conversation?.messages ?? []
+        let messages = conversation?.messages ?? []
+        let history = restart ? RestartHistory.select(messages) : messages
         error = nil
         let typed = draft
         let before = library.conversations.first { $0.id == id }
         // Cleared first, so the save that writes the message also writes the empty composer.
         if fromComposer { draft = "" }
-        guard append(Message(role: "user", text: text), to: id) else {
+        let message = Message(role: "user", text: text)
+        guard append(message, to: id) else {
             // Nothing is sent: the unsaved message leaves memory, so memory never holds a message the disk lacks,
             // and a typed draft returns to the composer. The save failure is already reported.
             if let before, let i = library.conversations.firstIndex(where: { $0.id == id }) {
@@ -59,6 +74,7 @@ extension AppModel {
             if fromComposer { draft = typed }
             return
         }
+        if restart { restartMessageIDs.insert(message.id) }
         requestReply(history: history, text: text, pcm: nil, audioFile: nil, conversationID: id)
     }
     var canRetry: Bool {
@@ -77,8 +93,12 @@ extension AppModel {
             let pcm =
                 try last.contextText == nil
                 ? last.audio.map { try AudioFile.pcm(store.root.appendingPathComponent($0)) } : nil
+            // A retried Start Again keeps its opening; the mark lives only until Mochi quits.
+            let earlier = Array(chat.messages.dropLast())
             requestReply(
-                history: Array(chat.messages.dropLast()), text: last.text, pcm: pcm, audioFile: last.audio,
+                history: restartMessageIDs.contains(last.id) ? RestartHistory.select(earlier) : earlier,
+                text: last.text,
+                pcm: pcm, audioFile: last.audio,
                 conversationID: chat.id, existingUserID: last.id)
         } catch {
             self.error = String(localized: "The saved recording could not be read. Record a new message to continue.")
