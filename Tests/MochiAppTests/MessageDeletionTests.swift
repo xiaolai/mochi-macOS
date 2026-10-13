@@ -1,4 +1,5 @@
 import MochiCore
+import MochiProviders
 import MochiTestSupport
 import XCTest
 
@@ -152,10 +153,10 @@ final class MessageDeletionTests: XCTestCase {
         app.append(message, to: id)
         let gate = TestGate()
         let started = expectation(description: "Transcription started")
-        app.speech.transcribe = { _, _ in
+        app.speech.transcribe = { _, _, _ in
             started.fulfill()
             await gate.wait()
-            return "Late text"
+            return TranscriptResult(text: "Late text")
         }
         app.retryTranscription(message.id)
         let job = try XCTUnwrap(app.transcripts.task(for: message.id))

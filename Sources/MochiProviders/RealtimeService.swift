@@ -7,6 +7,8 @@ public struct RealtimeService {
     public static let defaultModel = "gpt-realtime"
     public static let defaultVoice = RealtimeVoice.marin.rawValue
     public static let transcriptionModel = "gpt-4o-mini-transcribe"
+    /// Asks for each transcript token's log probability, kept as transcript evidence.
+    static let transcriptionInclude = ["item.input_audio_transcription.logprobs"]
     public var model: String
     public var voice: String
     public var options: OpenAIVoiceOptions
@@ -67,11 +69,11 @@ public struct RealtimeService {
     func sessionConfiguration(_ input: ConversationRequest, toolsEnabled: Bool) throws -> [String: Any] {
         var configuration: [String: Any] = [
             "type": "realtime", "instructions": input.resolvedInstructions,
-            "output_modalities": input.spoken ? ["audio"] : ["text"],
+            "output_modalities": input.spoken ? ["audio"] : ["text"], "include": Self.transcriptionInclude,
             "audio": [
                 "input": [
                     "format": ["type": "audio/pcm", "rate": 24000], "turn_detection": NSNull(),
-                    "transcription": ["model": Self.transcriptionModel],
+                    "transcription": ["model": input.transcriptionModel],
                 ], "output": try options.output(voice: voice),
             ],
         ]

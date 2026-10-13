@@ -2,18 +2,31 @@ import Foundation
 import MochiCore
 import MochiKernel
 
+/// A finished transcription: the trimmed text, and the transcriber's confidence in it when that came back whole.
+public struct TranscriptResult: Equatable, Sendable {
+    public var text: String
+    public var evidence: TranscriptEvidence?
+    public init(text: String, evidence: TranscriptEvidence? = nil) {
+        self.text = text
+        self.evidence = evidence
+    }
+}
 extension RealtimeService {
-    /// Transcribes one retained recording using the selected Realtime connection.
+    /// Transcribes one retained recording using the selected Realtime connection and `transcriptionModel`.
     /// With VAD disabled, commit starts transcription; no response.create is sent.
-    public func transcribe(_ pcm: Data) async throws -> String {
-        try await transcribe(pcm, credential: { try await token() }, connect: RealtimeChannel.live)
+    public func transcribe(_ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel) async throws
+        -> TranscriptResult
+    {
+        try await transcribe(
+            pcm, transcriptionModel: transcriptionModel, credential: { try await token() },
+            connect: RealtimeChannel.live)
     }
     /// Full transport lifecycle seam: request construction, deadlines and cancellation.
     func transcribe(
-        _ pcm: Data, credential: () async throws -> String,
-        connect: (URLRequest) -> RealtimeChannel,
+        _ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel,
+        credential: () async throws -> String, connect: (URLRequest) -> RealtimeChannel,
         timeoutNanoseconds: UInt64 = 60_000_000_000
-    ) async throws -> String {
+    ) async throws -> TranscriptResult {
         try Self.validateTranscriptionAudio(pcm)
         try Task.checkCancellation()
         let token = try await credential()
@@ -22,7 +35,8 @@ extension RealtimeService {
         defer { channel.close() }
         do {
             return try await RealtimeDeadline.run(nanoseconds: timeoutNanoseconds, close: channel.close) {
-                try await Self.transcribeTurn(pcm, send: channel.send, receive: channel.receive)
+                try await Self.transcribeTurn(
+                    pcm, transcriptionModel: transcriptionModel, send: channel.send, receive: channel.receive)
             }
         } catch is CancellationError { throw CancellationError() } catch is RealtimeTimeout {
             throw AppFailure("Transcription timed out. Your recording is saved; retry or add text.")
@@ -47,9 +61,9 @@ extension RealtimeService {
     }
     /// Same event path for real WebSockets and deterministic transport tests.
     static func transcribeTurn(
-        _ pcm: Data, send: ([String: Any]) async throws -> Void,
-        receive: () async throws -> [String: Any]
-    ) async throws -> String {
+        _ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel,
+        send: ([String: Any]) async throws -> Void, receive: () async throws -> [String: Any]
+    ) async throws -> TranscriptResult {
         try validateTranscriptionAudio(pcm)
         var accumulator = RealtimeAccumulator()
         func waitFor(_ type: String) async throws {
@@ -65,11 +79,11 @@ extension RealtimeService {
         try await send([
             "type": "session.update",
             "session": [
-                "type": "realtime", "output_modalities": ["text"],
+                "type": "realtime", "output_modalities": ["text"], "include": RealtimeService.transcriptionInclude,
                 "audio": [
                     "input": [
                         "format": ["type": "audio/pcm", "rate": 24000], "turn_detection": NSNull(),
-                        "transcription": ["model": RealtimeService.transcriptionModel],
+                        "transcription": ["model": transcriptionModel],
                     ]
                 ],
             ],
@@ -97,6 +111,6 @@ extension RealtimeService {
                 verbatim: accumulator.transcriptionError
                     ?? String(localized: "Transcription failed. Your recording is saved; retry or add text."))
         }
-        return accumulator.inputTranscript
+        return TranscriptResult(text: accumulator.inputTranscript, evidence: accumulator.inputEvidence)
     }
 }

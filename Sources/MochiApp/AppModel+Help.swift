@@ -102,7 +102,8 @@ extension AppModel {
         let url = store.root.appendingPathComponent(recording)
         runExclusive("Transcribe thought", progress: "Transcribing your thought…") { [weak self] job in
             guard let self else { return }
-            let text = try await transcribe(url, model)
+            // Thoughts are spoken in any language and keep no evidence; they use today's transcription model.
+            let text = try await transcribe(url, model, RealtimeService.transcriptionModel).text
             guard job.isCurrent() else { return }
             let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !clean.isEmpty else {
@@ -192,7 +193,11 @@ extension AppModel {
         if let current = help.expression, current.meaning != thought { help.expression?.meaning = thought }
         guard let saved = help.expression, !saved.english.isEmpty else { return false }
         if let index = library.expressions.firstIndex(where: { $0.id == saved.id }) {
-            library.expressions[index] = saved
+            // Practice saves its own fields only; review state is kept as stored, never restored from this copy.
+            var merged = saved
+            merged.review = library.expressions[index].review
+            help.expression?.review = merged.review
+            library.expressions[index] = merged
         } else {
             library.expressions.insert(saved, at: 0)
         }

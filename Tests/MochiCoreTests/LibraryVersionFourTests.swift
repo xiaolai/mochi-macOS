@@ -48,7 +48,8 @@ final class LibraryVersionFourTests: XCTestCase {
             (try FileManager.default.attributesOfItem(atPath: root.appendingPathComponent("\(v4).json").path)[
                 .posixPermissions] as? NSNumber)?.intValue, 0o600)
         XCTAssertEqual(try backups(root, v3), [], "Version 3 already has templates: no v3 copy")
-        XCTAssertEqual(try JSONDecoder().decode(Library.self, from: Data(contentsOf: store.file)).version, 4)
+        XCTAssertEqual(
+            try JSONDecoder().decode(Library.self, from: Data(contentsOf: store.file)).version, Library.currentVersion)
         try store.save(try store.load())
         XCTAssertEqual(try backups(root, v4).count, 1, "Later saves add no copies")
     }
@@ -104,7 +105,7 @@ final class LibraryVersionFourTests: XCTestCase {
         let root = folder()
         let store = LibraryStore(root: root)
         try store.prepare()
-        let future = Data(#"{"version":5,"conversations":[],"expressions":[]}"#.utf8)
+        let future = Data(#"{"version":\#(Library.currentVersion + 1),"conversations":[],"expressions":[]}"#.utf8)
         try future.write(to: store.file)
         XCTAssertThrowsError(try store.load())
         XCTAssertThrowsError(try store.save(Library()))

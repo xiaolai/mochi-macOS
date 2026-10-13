@@ -20,8 +20,8 @@ struct SpeechServices {
     var textReply: (RealtimeService, ConversationRequest) async throws -> String
     /// Spoken audio for exact text: (text, service, folder, regenerate).
     var referenceAudio: (String, RealtimeService, URL, Bool) async throws -> URL
-    /// Transcribes a saved recording: (file, model).
-    var transcribe: (URL, String) async throws -> String
+    /// Transcribes a saved recording: (file, session model, transcription model).
+    var transcribe: (URL, String, String) async throws -> TranscriptResult
 
     static var live: SpeechServices {
         TestEnvironment.assertNotUnderTest("SpeechServices.live")
@@ -35,7 +35,10 @@ struct SpeechServices {
             referenceAudio: { text, service, root, force in
                 try await service.referenceAudio(text: text, root: root, force: force)
             },
-            transcribe: { url, model in try await RealtimeService(model: model).transcribe(AudioFile.pcm(url)) })
+            transcribe: { url, model, transcriptionModel in
+                try await RealtimeService(model: model).transcribe(
+                    AudioFile.pcm(url), transcriptionModel: transcriptionModel)
+            })
     }
 }
 

@@ -47,6 +47,10 @@ public struct Message: Codable, Identifiable, Equatable {
     public var date = Date()
     public var transcriptionState: TranscriptionState?
     public var transcriptionError: String?
+    /// For a voice message: how it is transcribed. Set when recorded and never changed.
+    public var recording: RecordingMetadata?
+    /// The transcriber's confidence in `text`; nil when it has none, or the text was edited or typed.
+    public var transcriptEvidence: TranscriptEvidence?
     public init(role: String, text: String, audio: String? = nil, speakerName: String? = nil) {
         self.role = role
         self.text = text
@@ -64,7 +68,8 @@ public struct Message: Codable, Identifiable, Equatable {
     }
     private static let legacyLabels = ["Voice message (transcript unavailable)", "Voice message · awaiting transcript"]
     private enum CodingKeys: String, CodingKey {
-        case id, role, text, audio, date, transcriptionState, transcriptionError, speakerName
+        case id, role, text, audio, date, transcriptionState, transcriptionError, speakerName, recording
+        case transcriptEvidence
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -76,6 +81,8 @@ public struct Message: Codable, Identifiable, Equatable {
         date = try c.decode(Date.self, forKey: .date)
         transcriptionState = try c.decodeIfPresent(TranscriptionState.self, forKey: .transcriptionState)
         transcriptionError = try c.decodeIfPresent(String.self, forKey: .transcriptionError)
+        recording = try c.decodeIfPresent(RecordingMetadata.self, forKey: .recording)
+        transcriptEvidence = try c.decodeIfPresent(TranscriptEvidence.self, forKey: .transcriptEvidence)
         if role == "user", audio != nil, Self.legacyLabels.contains(text) {
             transcriptionState = text.contains("awaiting") ? .interrupted : .failed
             text = ""
@@ -183,6 +190,8 @@ public struct PracticeExpression: Codable, Identifiable {
     public var referenceKind: String = "Your voice"
     public var attempts: [Attempt] = []
     public var date = Date()
+    /// Spoken review; nil until the expression is enrolled.
+    public var review: ReviewState?
     public init(conversationID: UUID, meaning: String, english: String, language: ConversationLanguage) {
         self.conversationID = conversationID
         self.meaning = meaning
@@ -192,8 +201,9 @@ public struct PracticeExpression: Codable, Identifiable {
 }
 public struct Library: Codable {
     /// The format this version of Mochi writes. Version 4 added characters and each setup's personality, greeting,
-    /// phrases and voice; older Mochi refuses it rather than dropping them.
-    public static let currentVersion = 4
+    /// phrases and voice; version 5 added review state, recording metadata and transcript evidence. Older Mochi
+    /// refuses a newer format rather than dropping what it does not know.
+    public static let currentVersion = 5
     public var conversationTemplates: [ConversationTemplate] = []
     /// The user's own characters; the built-in ones are defined in code.
     public var characters: [ConversationCharacter] = []

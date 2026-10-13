@@ -1,4 +1,5 @@
 import MochiCore
+import MochiProviders
 import XCTest
 
 @testable import MochiApp
@@ -14,9 +15,9 @@ final class TranscriptRecoveryTests: XCTestCase {
         app.append(Message(role: "assistant", text: "Existing reply"), to: app.selectedID!)
         let count = app.conversation!.messages.count
 
-        app.speech.transcribe = { _, model in
+        app.speech.transcribe = { _, model, _ in
             XCTAssertEqual(model, app.settings.modelName)
-            return "Recovered thought"
+            return TranscriptResult(text: "Recovered thought")
         }
         app.retryTranscription(voice.id)
         await waitUntil { !app.transcribingMessageIDs.contains(voice.id) }
@@ -33,10 +34,10 @@ final class TranscriptRecoveryTests: XCTestCase {
         app.append(voice, to: app.selectedID!)
         let gate = TestGate()
         let started = expectation(description: "Recovery started")
-        app.speech.transcribe = { _, _ in
+        app.speech.transcribe = { _, _, _ in
             started.fulfill()
             await gate.wait()
-            return "Late recognition"
+            return TranscriptResult(text: "Late recognition")
         }
         app.retryTranscription(voice.id)
         let job = try XCTUnwrap(app.transcripts.task(for: voice.id))
@@ -57,10 +58,10 @@ final class TranscriptRecoveryTests: XCTestCase {
         app.append(voice, to: chatID)
         let gate = TestGate()
         let started = expectation(description: "Recovery started")
-        app.speech.transcribe = { _, _ in
+        app.speech.transcribe = { _, _, _ in
             started.fulfill()
             await gate.wait()
-            return "Late recognition"
+            return TranscriptResult(text: "Late recognition")
         }
         app.retryTranscription(voice.id)
         let job = try XCTUnwrap(app.transcripts.task(for: voice.id))
@@ -111,10 +112,10 @@ final class TranscriptRecoveryTests: XCTestCase {
         app.append(voice, to: app.selectedID!)
         let gate = TestGate()
         let started = expectation(description: "Recovery started")
-        app.speech.transcribe = { _, _ in
+        app.speech.transcribe = { _, _, _ in
             started.fulfill()
             await gate.wait()
-            return "Recovered"
+            return TranscriptResult(text: "Recovered")
         }
         app.speech.conversationReply = { _, _, _ in XCTFail("Reply must wait for recovery") }
         app.retryTranscription(voice.id)
@@ -238,11 +239,11 @@ final class TranscriptRecoveryTests: XCTestCase {
         let finished = expectation(description: "Recovery completed")
         let recovery = TestGate()
         let english = TestGate()
-        app.speech.transcribe = { _, _ in
+        app.speech.transcribe = { _, _, _ in
             started.fulfill()
             await recovery.wait()
             finished.fulfill()
-            return "Recovered"
+            return TranscriptResult(text: "Recovered")
         }
         app.speech.textReply = { _, _ in
             await english.wait()
@@ -272,10 +273,10 @@ final class TranscriptRecoveryTests: XCTestCase {
         app.append(voice, to: chatID)
         let gate = TestGate()
         let started = expectation(description: "Recovery started")
-        app.speech.transcribe = { _, _ in
+        app.speech.transcribe = { _, _, _ in
             started.fulfill()
             await gate.wait()
-            return "Late speech"
+            return TranscriptResult(text: "Late speech")
         }
         app.retryTranscription(voice.id)
         let job = try XCTUnwrap(app.transcripts.task(for: voice.id))

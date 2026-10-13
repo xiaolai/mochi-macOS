@@ -15,6 +15,8 @@ public final class LibraryStore {
     ]
     /// Names the copies of a version-3 library kept before its first version-4 save.
     public static let characterLibraryBackupPrefix = "library-before-character-library-v4"
+    /// Names the copies of a version-4 library kept before its first version-5 save.
+    public static let reviewLibraryBackupPrefix = "library-before-review-v5"
     private struct FileIdentity: Equatable {
         let device: Int32
         let inode: UInt64
@@ -238,6 +240,7 @@ public final class LibraryStore {
     private func keepMigrationBackups(of original: Data, version: Int, usesHelpOrTranscription: Bool) throws {
         if version < 3 { try keepUpgradeBackup(original, named: "library-before-character-templates-v3") }
         if version == 3 { try keepUpgradeBackup(original, named: Self.characterLibraryBackupPrefix) }
+        if version == 4 { try keepUpgradeBackup(original, named: Self.reviewLibraryBackupPrefix) }
         let instructionsBackup = root.appendingPathComponent("library-before-conversation-instructions.json")
         if !FileManager.default.fileExists(atPath: instructionsBackup.path) {
             try writeNewPrivateFile(original, to: instructionsBackup)

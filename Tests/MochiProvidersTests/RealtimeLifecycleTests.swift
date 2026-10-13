@@ -64,7 +64,7 @@ final class RealtimeLifecycleTests: XCTestCase {
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-session")
                 return socket.channel
             })
-        XCTAssertEqual(text, "Known speech")
+        XCTAssertEqual(text.text, "Known speech")
         XCTAssertGreaterThan(socket.closeCount, 0)
     }
     func testRecoveryDeadlineClosesSuspendedReceiveAndReportsTimeout() async throws {

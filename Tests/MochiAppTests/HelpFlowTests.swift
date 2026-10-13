@@ -1,5 +1,6 @@
 import MochiCore
 import MochiKernel
+import MochiProviders
 import MochiTestSupport
 import XCTest
 
@@ -87,9 +88,9 @@ final class HelpFlowTests: XCTestCase {
         app.editEnglish("Previous English")
         app.editThought()
         app.help.thoughtRecording = "thought.wav"
-        app.speech.transcribe = { _, model in
+        app.speech.transcribe = { _, model, _ in
             XCTAssertEqual(model, app.settings.modelName)
-            return "Recognized thought"
+            return TranscriptResult(text: "Recognized thought")
         }
         app.transcribeThought()
         await waitUntil { !app.busy }
@@ -117,7 +118,7 @@ extension HelpFlowTests {
         app.editEnglish("Existing English")
         app.editThought()
         app.help.thoughtRecording = "thought.wav"
-        app.speech.transcribe = { _, _ in "Recognized thought" }
+        app.speech.transcribe = { _, _, _ in TranscriptResult(text: "Recognized thought") }
         app.transcribeThought()
         await waitUntil { !app.busy }
         XCTAssertEqual(app.help.meaning, "Typed thought")

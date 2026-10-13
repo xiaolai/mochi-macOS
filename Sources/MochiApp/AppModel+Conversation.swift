@@ -114,6 +114,7 @@ extension AppModel {
         var userID = existingUserID
         if pcm != nil && userID == nil {
             var message = Message(role: "user", text: "", audio: audioFile)
+            message.recording = RecordingMetadata(model: RealtimeService.transcriptionModel)
             message.transcriptionState = .pending
             userID = message.id
             append(message, to: conversationID)
@@ -135,6 +136,10 @@ extension AppModel {
         let speakerName = chat?.displayCharacterName ?? "Mochi"
         let service = settings.conversationService(for: chat)
         let voiceID = pcm == nil ? nil : userID
+        // A voice message is transcribed with the model it was recorded with, also when its reply is retried.
+        let transcriptionModel =
+            userID.flatMap { id in chat?.messages.first(where: { $0.id == id })?.recording?.model }
+            ?? RealtimeService.transcriptionModel
         let reply = speech.conversationReply
         let operation = Task { [weak self] in
             guard let self else { return }
@@ -165,17 +170,19 @@ extension AppModel {
                         updateTranscript(
                             voiceID, chatID: conversationID,
                             text: reply.inputTranscript.isEmpty ? nil : reply.inputTranscript,
-                            state: reply.transcriptionState, error: reply.transcriptionError)
+                            evidence: reply.inputEvidence, state: reply.transcriptionState,
+                            error: reply.transcriptionError)
                     },
                     tool: { [weak self] name, args, _ in
                         guard let self, !Task.isCancelled, self.turn.epoch == token, self.selectedID == conversationID
                         else { throw CancellationError() }
                         return try self.tools.executeVoice(name, arguments: args, operationID: operationID)
                     })
-                let request = ConversationRequest(
+                var request = ConversationRequest(
                     history: history, text: text, pcm: pcm, spoken: audioFile != nil, instructions: instructions,
                     characterName: characterName, userName: userName, preferences: preferences,
                     personality: personality)
+                request.transcriptionModel = transcriptionModel
                 try await reply(service, request, callbacks)
             } catch {
                 // The deferred block marks a still-pending transcript as interrupted.
@@ -253,13 +260,19 @@ extension AppModel {
             error: String(localized: "Transcription was interrupted. Your recording is saved."))
     }
     /// False when the message is gone or the library could not be saved; the save failure is already reported.
+    /// A new `text` replaces the text and its evidence together: `evidence` when it is for exactly that text, else
+    /// none, as for an edit. Without a new text, both stay as they are.
     @discardableResult private func updateTranscript(
-        _ messageID: UUID, chatID: UUID, text: String?, state: TranscriptionState, error: String?
+        _ messageID: UUID, chatID: UUID, text: String?, evidence: TranscriptEvidence? = nil,
+        state: TranscriptionState, error: String?
     ) -> Bool {
         guard let ci = library.conversations.firstIndex(where: { $0.id == chatID && !$0.isDeleted && !$0.archived }),
             let mi = library.conversations[ci].messages.firstIndex(where: { $0.id == messageID })
         else { return false }
-        if let text { library.conversations[ci].messages[mi].text = text }
+        if let text {
+            library.conversations[ci].messages[mi].text = text
+            library.conversations[ci].messages[mi].transcriptEvidence = evidence?.text == text ? evidence : nil
+        }
         library.conversations[ci].messages[mi].transcriptionState = state
         library.conversations[ci].messages[mi].transcriptionError = error
         if let text, !text.isEmpty, !library.conversations[ci].customTitle,
@@ -281,19 +294,21 @@ extension AppModel {
         updateTranscript(messageID, chatID: chatID, text: nil, state: .pending, error: nil)
         let transcribe = speech.transcribe
         let model = settings.effectiveModelName
+        let transcriptionModel = message.recording?.model ?? RealtimeService.transcriptionModel
         let url = store.root.appendingPathComponent(file)
         let job = Task { [weak self] in
             guard let self else { return }
             defer { transcripts.finish(messageID, jobID) }
             do {
-                let text = try await transcribe(url, model)
+                let result = try await transcribe(url, model, transcriptionModel)
                 guard !Task.isCancelled, transcripts.isCurrent(messageID, jobID) else { return }
-                let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let clean = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !clean.isEmpty else {
                     throw AppFailure(
                         "No clear speech was recognized. Your recording is saved; add text or record again.")
                 }
-                updateTranscript(messageID, chatID: chatID, text: clean, state: .completed, error: nil)
+                updateTranscript(
+                    messageID, chatID: chatID, text: clean, evidence: result.evidence, state: .completed, error: nil)
             } catch {
                 guard !Task.isCancelled, transcripts.isCurrent(messageID, jobID) else { return }
                 MochiLog.failure(MochiLog.network, "Retry transcription", error)

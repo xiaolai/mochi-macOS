@@ -152,11 +152,25 @@ extension Library {
             throw AppFailure("The library contains duplicate message IDs.")
         }
         for chat in conversations { try chat.preferences.validate() }
+        for message in messages {
+            guard message.recording?.isValid ?? true else {
+                throw AppFailure("The library contains invalid recording details.")
+            }
+            if let evidence = message.transcriptEvidence {
+                guard evidence.isValid, evidence.text == message.text else {
+                    throw AppFailure("The library contains transcript evidence that does not match its text.")
+                }
+            }
+        }
+        guard expressions.allSatisfy({ $0.review?.isValid ?? true }) else {
+            throw AppFailure("The library contains invalid review state.")
+        }
         for name in referencedAudio {
             // The v4 backups are matched by their suffix too: an older library may name a recording with that prefix.
             guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"),
                 !name.hasPrefix("."), !name.hasPrefix("library-before-character-templates-v3"),
                 !(name.hasPrefix(LibraryStore.characterLibraryBackupPrefix) && name.hasSuffix(".json")),
+                !(name.hasPrefix(LibraryStore.reviewLibraryBackupPrefix) && name.hasSuffix(".json")),
                 !name.hasPrefix("library-unreadable-"), !LibraryStore.reservedNames.contains(name)
             else { throw AppFailure("The library contains an unsafe recording filename.") }
         }

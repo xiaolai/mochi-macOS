@@ -101,13 +101,15 @@ final class RealtimeTranscriptionTests: XCTestCase {
                 defer { index += 1 }
                 return events[index]
             })
-        XCTAssertEqual(text, "Recovered thought")
+        XCTAssertEqual(text.text, "Recovered thought")
+        XCTAssertNil(text.evidence, "No logprobs came back")
         XCTAssertFalse(sent.contains { $0["type"] as? String == "response.create" })
         XCTAssertEqual(sent.last?["type"] as? String, "input_audio_buffer.commit")
         let session = try XCTUnwrap(sent.first?["session"] as? [String: Any])
         let input = try XCTUnwrap((session["audio"] as? [String: Any])?["input"] as? [String: Any])
         XCTAssertTrue(input["turn_detection"] is NSNull)
         XCTAssertEqual((input["transcription"] as? [String: Any])?["model"] as? String, "gpt-4o-mini-transcribe")
+        XCTAssertEqual(session["include"] as? [String], ["item.input_audio_transcription.logprobs"])
         let chunks = sent.compactMap { $0["audio"] as? String }.compactMap { Data(base64Encoded: $0) }
         XCTAssertEqual(chunks.reduce(into: Data()) { $0.append($1) }, pcm)
     }
@@ -172,5 +174,73 @@ final class RealtimeTranscriptionTests: XCTestCase {
             _ = try await task.value
             XCTFail("Canceled recovery must not complete")
         } catch is CancellationError {} catch { XCTFail("Expected cancellation") }
+    }
+
+    // MARK: Transcript evidence (plan W4)
+
+    private func completed(_ transcript: String, logprobs: Any?) -> [[String: Any]] {
+        var done: [String: Any] = [
+            "type": "conversation.item.input_audio_transcription.completed", "item_id": "item",
+            "transcript": transcript,
+        ]
+        if let logprobs { done["logprobs"] = logprobs }
+        return [
+            ["type": "session.created"], ["type": "session.updated"],
+            ["type": "input_audio_buffer.committed", "item_id": "item"], done,
+        ]
+    }
+    private func run(_ events: [[String: Any]], model: String = RealtimeService.transcriptionModel) async throws
+        -> (TranscriptResult, [[String: Any]])
+    {
+        var sent: [[String: Any]] = []
+        var index = 0
+        let result = try await RealtimeService.transcribeTurn(
+            Data(repeating: 0, count: 4800), transcriptionModel: model, send: { sent.append($0) },
+            receive: {
+                defer { index += 1 }
+                return events[index]
+            })
+        return (result, sent)
+    }
+    private func token(_ text: String, _ logprob: Double) -> [String: Any] {
+        ["token": text, "logprob": logprob, "bytes": Array(text.utf8).map(Int.init)]
+    }
+
+    func testLogprobsCoveringTheTranscriptBecomeItsEvidence() async throws {
+        let (result, _) = try await run(
+            completed(" I go home.", logprobs: [token(" I", -0.01), token(" go", -1.2), token(" home.", -0.05)]))
+        XCTAssertEqual(result.text, "I go home.")
+        let evidence = try XCTUnwrap(result.evidence)
+        XCTAssertEqual(evidence.text, "I go home.")
+        XCTAssertEqual(evidence.pieces.map(\.end), [1, 4, 10])
+        XCTAssertEqual(evidence.pieces.map(\.logprob), [-0.01, -1.2, -0.05])
+    }
+    func testMalformedLogprobsKeepTheTranscriptWithoutEvidence() async throws {
+        let cases: [Any] = [
+            [token("I go", -0.1)],  // does not cover the transcript
+            [["token": "I go home.", "logprob": -0.1]],  // no bytes
+            [["token": "I go home.", "logprob": "low", "bytes": Array("I go home.".utf8).map(Int.init)]],
+            [["token": "x", "logprob": -0.1, "bytes": [300]]],  // not a byte
+            "not a list",
+        ]
+        for logprobs in cases {
+            let (result, _) = try await run(completed("I go home.", logprobs: logprobs))
+            XCTAssertEqual(result.text, "I go home.")
+            XCTAssertNil(result.evidence, "\(logprobs)")
+        }
+    }
+    func testTheRecordingsOwnTranscriptionModelIsUsed() async throws {
+        let (_, sent) = try await run(completed("Hi", logprobs: nil), model: "gpt-transcribe")
+        let session = try XCTUnwrap(sent.first?["session"] as? [String: Any])
+        let input = try XCTUnwrap((session["audio"] as? [String: Any])?["input"] as? [String: Any])
+        XCTAssertEqual((input["transcription"] as? [String: Any])?["model"] as? String, "gpt-transcribe")
+    }
+    func testConversationTurnsAskForLogprobsWithTheRequestsTranscriptionModel() throws {
+        var request = ConversationRequest(history: [], text: "")
+        request.transcriptionModel = "gpt-transcribe"
+        let session = try RealtimeService().sessionConfiguration(request, toolsEnabled: false)
+        XCTAssertEqual(session["include"] as? [String], ["item.input_audio_transcription.logprobs"])
+        let input = try XCTUnwrap((session["audio"] as? [String: Any])?["input"] as? [String: Any])
+        XCTAssertEqual((input["transcription"] as? [String: Any])?["model"] as? String, "gpt-transcribe")
     }
 }

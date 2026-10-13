@@ -39,6 +39,8 @@ public struct RealtimeAccumulator {
     public var text = ""
     public var audio = Data()
     public var inputTranscript = ""
+    /// The transcriber's confidence in `inputTranscript`; nil when its tokens did not come back whole.
+    public var inputEvidence: TranscriptEvidence?
     public var done = false
     public var transcriptionState: TranscriptionState = .pending
     public var transcriptionError: String?
@@ -51,6 +53,20 @@ public struct RealtimeAccumulator {
     public mutating func beginNextRound() {
         done = false
         separateNextText = !(text.last?.isWhitespace ?? true)
+    }
+    /// Evidence from a completed transcription's `logprobs`: each token's bytes and log probability. Anything
+    /// missing or malformed gives none; the transcript itself is kept either way.
+    static func evidence(text: String, raw: String, logprobs: Any?) -> TranscriptEvidence? {
+        guard let entries = logprobs as? [[String: Any]], !entries.isEmpty else { return nil }
+        var tokens: [(bytes: [UInt8], logprob: Double)] = []
+        for entry in entries {
+            guard let values = entry["bytes"] as? [NSNumber],
+                let logprob = (entry["logprob"] as? NSNumber)?.doubleValue,
+                values.allSatisfy({ (0...255).contains($0.intValue) })
+            else { return nil }
+            tokens.append((values.map { UInt8($0.intValue) }, logprob))
+        }
+        return TranscriptEvidence(text: text, raw: raw, tokens: tokens)
     }
     public mutating func accept(_ event: [String: Any]) throws {
         switch event["type"] as? String {
@@ -75,7 +91,9 @@ public struct RealtimeAccumulator {
                 inputItemID != nil && event["item_id"] as? String == inputItemID
             else { return }
             if event["type"] as? String == "conversation.item.input_audio_transcription.completed" {
-                inputTranscript = (event["transcript"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let raw = event["transcript"] as? String ?? ""
+                inputTranscript = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                inputEvidence = Self.evidence(text: inputTranscript, raw: raw, logprobs: event["logprobs"])
                 transcriptionState = inputTranscript.isEmpty ? .failed : .completed
                 if inputTranscript.isEmpty {
                     transcriptionError = "No clear speech was recognized. Your recording is saved."

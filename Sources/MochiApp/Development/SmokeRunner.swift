@@ -66,10 +66,10 @@
                     voice.transcriptionState = .failed
                     if let selected { model.append(voice, to: selected) }
                     var recoveryStarted = false
-                    model.speech.transcribe = { _, _ in
+                    model.speech.transcribe = { _, _, _ in
                         recoveryStarted = true
                         try? await Task.sleep(nanoseconds: 100_000_000)
-                        return "Late tray transcript"
+                        return TranscriptResult(text: "Late tray transcript")
                     }
                     model.retryTranscription(voice.id)
                     let startedDeadline = Date().addingTimeInterval(2)
@@ -929,9 +929,9 @@
                         Message(role: "assistant", text: "Take your time. What would help you decide?"), to: id)
                     try? await Task.sleep(nanoseconds: 300_000_000)
                     await capture("voice-recovery.png")
-                    model.speech.transcribe = { _, _ in
+                    model.speech.transcribe = { _, _, _ in
                         try await Task.sleep(nanoseconds: 900_000_000)
-                        return "I would like a little more time to think."
+                        return TranscriptResult(text: "I would like a little more time to think.")
                     }
                     model.retryTranscription(failed.id)
                     if await !waitFor(2, { model.transcribingMessageIDs.contains(failed.id) }) {
@@ -1386,12 +1386,18 @@
                     if !spoken.audio.isEmpty {
                         let recovered = try await service.transcribe(spoken.audio)
                         lines.append(
-                            "Standalone transcription recovery: \(!recovered.isEmpty ? "PASS" : "FAIL") (synthetic audio)"
+                            "Standalone transcription recovery: \(!recovered.text.isEmpty ? "PASS" : "FAIL") (synthetic audio)"
+                        )
+                        lines.append(
+                            "Standalone transcript evidence: \(recovered.evidence?.text == recovered.text ? "PASS" : "FAIL")"
                         )
                         let heard = try await service.reply(
                             ConversationRequest(history: [], text: "", pcm: spoken.audio))
                         lines.append(
                             "Synthetic audio input and transcription: \(!heard.inputTranscript.isEmpty && !heard.text.isEmpty ? "PASS" : "FAIL") (no microphone)"
+                        )
+                        lines.append(
+                            "Conversation turn transcript evidence: \(heard.inputEvidence?.text == heard.inputTranscript ? "PASS" : "FAIL")"
                         )
                     }
                 } catch { lines.append("Realtime: \(error.localizedDescription)") }

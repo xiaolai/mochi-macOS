@@ -16,6 +16,8 @@ public struct ConversationRequest {
     /// How the companion comes across, from the character the user set up.
     public var personality: String
     public var preferences: ConversationPreferences
+    /// The model that transcribes this turn's audio: the one a voice message was recorded with, when retried.
+    public var transcriptionModel = RealtimeService.transcriptionModel
     /// Test-only: replaces the resolved instructions, so a live audition can compare an earlier instruction text.
     var instructionsOverride: String?
     public init(
