@@ -67,12 +67,24 @@ public enum VoiceIdentity {
         switch preferences.coaching {
         case .natural: return "Speak only \(name)."
         case .gentle:
-            return
-                "Speak only \(name). Offer occasional gentle corrections of their \(name) when useful, without interrupting the conversation."
+            return "Speak only \(name). " + correctionRules(name)
+                + " Correct only now and then, when an error makes their meaning unclear or would sound clearly wrong"
+                + " to a listener, and do it by weaving the right form into your genuine reply, never as a separate lesson."
         case .direct:
-            return
-                "Speak only \(name). Offer concise direct corrections of significant \(name) errors, then continue the conversation."
+            return "Speak only \(name). " + correctionRules(name)
+                + " When they make a significant error, say the corrected words briefly, with a few words on why only"
+                + " if that helps, then reply to what they said."
         }
+    }
+    /// What gentle and direct coaching share: restraint, and asking rather than correcting a possible mishearing.
+    static func correctionRules(_ name: String) -> String {
+        "When the user or the conversation-specific instructions ask you not to correct them, do not correct at all."
+            + " Otherwise, correct their \(name) at most once per reply, choosing the error that most hurts"
+            + " understanding, and always also respond to what they said. Never also improve words that were"
+            + " already correct."
+            + " Leave accent, style choices and acceptable informal or spoken \(name) alone."
+            + " Their spoken turns reach you as automatic transcripts, which can contain recognition mistakes: when you"
+            + " are not sure what they said or meant, ask them instead of correcting."
     }
     /// A name as a JSON string, so its text can never read as instructions.
     private static func encoded(_ name: String) -> String {

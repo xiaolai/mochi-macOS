@@ -84,7 +84,7 @@ Every conversation has a language:
 - **A language to practise** — English, Chinese, Japanese, Korean, Spanish, French, German and more. Mochi speaks only that language, corrects it if you choose a coaching style, and Help Me Say This finds words in it.
 - **Match Me** — Mochi replies in whatever language you speak and switches when you do. There is nothing to practise, so there are no corrections and no Help Me Say This.
 
-**Coaching.** *Natural* discusses what you say without correcting it, *gentle* offers occasional corrections, and *direct* offers concise corrections of significant errors.
+**Coaching.** *Natural* discusses what you say without correcting it, *gentle* now and then works the right form into its reply, and *direct* briefly corrects significant errors. Gentle and direct correct at most one thing per reply, leave accent and casual speech alone, ask when they aren't sure what you said, and stop correcting if you or the conversation's instructions ask them to.
 
 **Help Me Say This** (⇧⌘H). When you get stuck, describe your thought in any language, get the words in the conversation's language, listen to them, and practise saying them in your own voice. Save the result to **My Expressions** to practise it again later. Saved expressions remember their language, so practising one continues in it.
 

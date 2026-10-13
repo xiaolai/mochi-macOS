@@ -20,8 +20,9 @@ final class ConversationLanguageTests: XCTestCase {
         XCTAssertTrue(prompt(.english).contains("Speak only English."), "English stays the default")
         XCTAssertTrue(prompt(.japanese).contains("Speak only Japanese."))
         XCTAssertFalse(prompt(.japanese).contains("English"))
-        XCTAssertTrue(prompt(.spanish, .direct).contains("significant Spanish errors"))
-        XCTAssertTrue(prompt(.french, .gentle).contains("gentle corrections of their French"))
+        XCTAssertTrue(prompt(.spanish, .direct).contains("correct their Spanish at most once per reply"))
+        XCTAssertTrue(prompt(.french, .gentle).contains("correct their French at most once per reply"))
+        XCTAssertFalse(prompt(.french, .gentle).contains("English"))
     }
 
     func testMatchingTheUserNeverFixesALanguageOrCorrects() {
