@@ -189,13 +189,14 @@ final class RealtimeTranscriptionTests: XCTestCase {
             ["type": "input_audio_buffer.committed", "item_id": "item"], done,
         ]
     }
-    private func run(_ events: [[String: Any]], model: String = RealtimeService.transcriptionModel) async throws
-        -> (TranscriptResult, [[String: Any]])
-    {
+    private func run(
+        _ events: [[String: Any]], model: String = RealtimeService.transcriptionModel, languages: [String] = []
+    ) async throws -> (TranscriptResult, [[String: Any]]) {
         var sent: [[String: Any]] = []
         var index = 0
         let result = try await RealtimeService.transcribeTurn(
-            Data(repeating: 0, count: 4800), transcriptionModel: model, send: { sent.append($0) },
+            Data(repeating: 0, count: 4800), transcriptionModel: model, languages: languages,
+            send: { sent.append($0) },
             receive: {
                 defer { index += 1 }
                 return events[index]
@@ -245,6 +246,20 @@ final class RealtimeTranscriptionTests: XCTestCase {
         let session = try XCTUnwrap(sent.first?["session"] as? [String: Any])
         let input = try XCTUnwrap((session["audio"] as? [String: Any])?["input"] as? [String: Any])
         XCTAssertEqual((input["transcription"] as? [String: Any])?["model"] as? String, "gpt-transcribe")
+    }
+    func testALanguageHintGoesAsLanguageForOneAndLanguagesForSeveral() async throws {
+        func transcription(_ languages: [String]) async throws -> NSDictionary {
+            let (_, sent) = try await run(completed("Hi", logprobs: nil), model: "gpt-transcribe", languages: languages)
+            let session = try XCTUnwrap(sent.first?["session"] as? [String: Any])
+            let input = try XCTUnwrap((session["audio"] as? [String: Any])?["input"] as? [String: Any])
+            return try XCTUnwrap(input["transcription"] as? NSDictionary)
+        }
+        let none = try await transcription([])
+        XCTAssertEqual(none, ["model": "gpt-transcribe"])
+        let one = try await transcription(["en"])
+        XCTAssertEqual(one, ["model": "gpt-transcribe", "language": "en"])
+        let several = try await transcription(["en", "zh"])
+        XCTAssertEqual(several, ["model": "gpt-transcribe", "languages": ["en", "zh"]])
     }
     func testConversationTurnsAskForLogprobsWithTheRequestsTranscriptionModel() throws {
         var request = ConversationRequest(history: [], text: "")

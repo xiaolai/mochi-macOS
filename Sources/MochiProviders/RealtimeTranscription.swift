@@ -12,18 +12,19 @@ public struct TranscriptResult: Equatable, Sendable {
     }
 }
 extension RealtimeService {
-    /// Transcribes one retained recording using the selected Realtime connection and `transcriptionModel`.
-    /// With VAD disabled, commit starts transcription; no response.create is sent.
-    public func transcribe(_ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel) async throws
-        -> TranscriptResult
-    {
+    /// Transcribes one retained recording using the selected Realtime connection and `transcriptionModel`, with an
+    /// optional language hint (`languages`, ISO 639-1). With VAD disabled, commit starts transcription; no
+    /// response.create is sent.
+    public func transcribe(
+        _ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel, languages: [String] = []
+    ) async throws -> TranscriptResult {
         try await transcribe(
-            pcm, transcriptionModel: transcriptionModel, credential: { try await token() },
+            pcm, transcriptionModel: transcriptionModel, languages: languages, credential: { try await token() },
             connect: RealtimeChannel.live)
     }
     /// Full transport lifecycle seam: request construction, deadlines and cancellation.
     func transcribe(
-        _ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel,
+        _ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel, languages: [String] = [],
         credential: () async throws -> String, connect: (URLRequest) -> RealtimeChannel,
         timeoutNanoseconds: UInt64 = 60_000_000_000
     ) async throws -> TranscriptResult {
@@ -36,7 +37,8 @@ extension RealtimeService {
         do {
             return try await RealtimeDeadline.run(nanoseconds: timeoutNanoseconds, close: channel.close) {
                 try await Self.transcribeTurn(
-                    pcm, transcriptionModel: transcriptionModel, send: channel.send, receive: channel.receive)
+                    pcm, transcriptionModel: transcriptionModel, languages: languages, send: channel.send,
+                    receive: channel.receive)
             }
         } catch is CancellationError { throw CancellationError() } catch is RealtimeTimeout {
             throw AppFailure("Transcription timed out. Your recording is saved; retry or add text.")
@@ -61,7 +63,7 @@ extension RealtimeService {
     }
     /// Same event path for real WebSockets and deterministic transport tests.
     static func transcribeTurn(
-        _ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel,
+        _ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel, languages: [String] = [],
         send: ([String: Any]) async throws -> Void, receive: () async throws -> [String: Any]
     ) async throws -> TranscriptResult {
         try validateTranscriptionAudio(pcm)
@@ -83,7 +85,8 @@ extension RealtimeService {
                 "audio": [
                     "input": [
                         "format": ["type": "audio/pcm", "rate": 24000], "turn_detection": NSNull(),
-                        "transcription": ["model": transcriptionModel],
+                        "transcription": RealtimeService.transcriptionFields(
+                            model: transcriptionModel, languages: languages),
                     ]
                 ],
             ],

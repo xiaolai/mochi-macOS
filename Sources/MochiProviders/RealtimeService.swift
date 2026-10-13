@@ -9,6 +9,16 @@ public struct RealtimeService {
     public static let transcriptionModel = "gpt-4o-mini-transcribe"
     /// Asks for each transcript token's log probability, kept as transcript evidence.
     static let transcriptionInclude = ["item.input_audio_transcription.logprobs"]
+    /// The transcription settings for a session: the model, and a language hint when one is given. One language goes
+    /// as `language`, which every transcription model accepts; several go as `languages`, which only `gpt-transcribe`
+    /// accepts (`gpt-4o-mini-transcribe` refuses it with HTTP 400, measured 2026-10-14).
+    static func transcriptionFields(model: String, languages: [String] = []) -> [String: Any] {
+        switch languages.count {
+        case 0: return ["model": model]
+        case 1: return ["model": model, "language": languages[0]]
+        default: return ["model": model, "languages": languages]
+        }
+    }
     public var model: String
     public var voice: String
     public var options: OpenAIVoiceOptions
@@ -73,7 +83,7 @@ public struct RealtimeService {
             "audio": [
                 "input": [
                     "format": ["type": "audio/pcm", "rate": 24000], "turn_detection": NSNull(),
-                    "transcription": ["model": input.transcriptionModel],
+                    "transcription": Self.transcriptionFields(model: input.transcriptionModel),
                 ], "output": try options.output(voice: voice),
             ],
         ]
