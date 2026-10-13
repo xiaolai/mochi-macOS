@@ -16,6 +16,17 @@ enum AttemptCheckStatus: Equatable {
     case failed
 }
 
+/// A spoken review of due expressions: the meaning is shown, the learner says it, then reveals and grades it.
+struct ReviewRun: Equatable {
+    /// Expressions in order; one graded Again comes back once more at the end.
+    var queue: [UUID]
+    var position = 0
+    var revealed = false
+    var repeated: Set<UUID> = []
+    var graded = 0
+    var current: UUID? { queue.indices.contains(position) ? queue[position] : nil }
+}
+
 /// Help Me Say This, as it is being worked on: the thought, its English, the example and the practice attempts.
 /// Each edit is written to the conversation's help draft through `persist`. Changes made inside `restoring` are
 /// not written one by one, so a half-restored draft never reaches the disk and a later single write covers them.
@@ -47,6 +58,8 @@ enum AttemptCheckStatus: Equatable {
     var referencePitch: [PitchPoint] = []
     var attemptPitch: [PitchPoint] = []
     var attemptCheck: AttemptCheckStatus = .none
+    /// Set while practice is a spoken review.
+    var review: ReviewRun?
     /// True while `restoring` runs.
     @ObservationIgnored private(set) var isRestoring = false
     /// Writes the help draft; `typing` lets typing in an existing draft be written after a pause.

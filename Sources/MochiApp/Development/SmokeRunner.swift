@@ -897,6 +897,44 @@
                 } else {
                     captureFailures.append("No conversation could be started from a role-play template")
                 }
+                // Spoken review: the meaning first with the words hidden, then revealed for grading.
+                if let chatID = model.selectedID {
+                    var due = PracticeExpression(
+                        conversationID: chatID, meaning: "I want to ask for a little more time to think.",
+                        english: "Could you give me a moment to think?", language: .english)
+                    due.review = ReviewState(
+                        due: Date().addingTimeInterval(-60), enrolled: Date().addingTimeInterval(-86400))
+                    // Only this item is due during the check, so one grade ends the review whatever earlier steps saved.
+                    let kept = model.library.expressions
+                    model.library.expressions = [due]
+                    model.openExpressions()
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    await capture("expressions-review.png")
+                    model.startReview()
+                    let opened = await waitFor(5) { model.help.review != nil && !model.busy }
+                    let queued = model.help.review?.queue == [due.id]
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    await captureSheet("review-prompt.png")
+                    model.revealReview()
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    await captureSheet("review-revealed.png")
+                    model.gradeReview(.good)
+                    let finished = await waitFor(5) { !model.practice && !model.busy }
+                    let checks: [String: Bool] = [
+                        "opened": opened, "queued_only_the_due_item": queued, "finished": finished,
+                        "graded": model.library.expressions.first(where: { $0.id == due.id })?.review?.box == 1,
+                        "back_to_expressions": model.showExpressions,
+                    ]
+                    for (check, passed) in checks.sorted(by: { $0.key < $1.key }) where !passed {
+                        captureFailures.append("Review check failed: \(check)")
+                    }
+                    model.library.expressions = kept
+                    if !model.save() { captureFailures.append("Review check could not restore the saved expressions") }
+                    model.showExpressions = false
+                    model.notice = nil
+                } else {
+                    captureFailures.append("No conversation for the review check")
+                }
                 model.speech.conversationReply = liveReply
                 model.newChat()
                 model.startHelp()

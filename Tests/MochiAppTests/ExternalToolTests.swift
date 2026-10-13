@@ -40,6 +40,9 @@ final class ExternalToolTests: XCTestCase {
         let saved = try call(
             "save_expression", changing(["conversation_id": id, "text": "Let me think.", "meaning": "Pause"]))
         let expressionID = try XCTUnwrap(saved["expression_id"] as? String)
+        XCTAssertNotNil(
+            app.library.expressions.first { $0.id.uuidString == expressionID }?.review,
+            "An expression saved by a tool joins spoken review like one saved in the app")
         _ = try call("search_expressions", ["conversation_id": id, "query": ""])
         _ = try call("search_all_expressions", ["query": "think"])
         let message = try XCTUnwrap(app.conversation?.messages.last?.id.uuidString)

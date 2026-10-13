@@ -57,19 +57,29 @@ struct PracticePane: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(app.help.stage == .practice ? "Practise Your Expression" : "Help Me Say This").font(.title2)
-                    .fontWeight(.semibold)
-                Spacer()
-                Text("Conversation paused").font(.caption).foregroundStyle(.secondary)
+                if let run = app.help.review {
+                    Text("Review").font(.title2).fontWeight(.semibold)
+                    Spacer()
+                    Text("\(run.position + 1) of \(run.queue.count)").font(.caption).foregroundStyle(.secondary)
+                        .monospacedDigit()
+                } else {
+                    Text(app.help.stage == .practice ? "Practise Your Expression" : "Help Me Say This").font(.title2)
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Text("Conversation paused").font(.caption).foregroundStyle(.secondary)
+                }
             }
-            HStack(spacing: 14) {
-                stage("1  Your thought", active: app.help.stage == .thought)
-                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                stage("2  Your Words", active: app.help.stage == .english)
-                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                stage("3  Optional practice", active: app.help.stage == .practice)
-            }.font(.caption)
+            if app.help.review == nil { stages }
         }.padding(24)
+    }
+    private var stages: some View {
+        HStack(spacing: 14) {
+            stage("1  Your thought", active: app.help.stage == .thought)
+            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+            stage("2  Your Words", active: app.help.stage == .english)
+            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+            stage("3  Optional practice", active: app.help.stage == .practice)
+        }.font(.caption)
     }
     private var activityFeedback: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -103,11 +113,20 @@ struct PracticePane: View {
                     Spacer()
                     Button("Listen & Practise", action: app.beginPractice).buttonStyle(.borderedProminent)
                         .disabled(app.busy || app.help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } else if app.help.review != nil {
+                    ReviewActions(app: app)
                 } else {
                     PracticeActions(app: app)
                 }
             }
-            if !app.help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let run = app.help.review {
+                Text(
+                    run.revealed
+                        ? "Again: you could not say it. Hard: you said it with effort. Good: you said it."
+                        : "Reveal when you have said it, or when you cannot remember it."
+                )
+                .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+            } else if !app.help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(
                     app.help.thoughtRecording != nil && !app.help.isSavedPractice
                         ? "Returning saves the expression and removes its thought recording. Practice is optional."
@@ -144,7 +163,9 @@ struct PracticePane: View {
             HStack {
                 Text("What you meant").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("Edit thought", action: app.editThought).buttonStyle(.link).disabled(app.busy)
+                if app.help.review == nil {
+                    Button("Edit thought", action: app.editThought).buttonStyle(.link).disabled(app.busy)
+                }
             }
             Text(app.help.meaning.isEmpty ? String(localized: "Your sentence") : app.help.meaning).font(
                 .callout
@@ -244,9 +265,32 @@ struct PracticePane: View {
             }
         }
     }
-    private var sentencePractice: some View {
+    @ViewBuilder private var sentencePractice: some View {
+        if let run = app.help.review, !run.revealed {
+            reviewPrompt
+        } else {
+            practiceDetails
+        }
+    }
+    /// Review asks for the expression before showing it.
+    private var reviewPrompt: some View {
         VStack(alignment: .leading, spacing: 12) {
-            englishEditor("Sentence in \(app.languageName)", lines: 2...4)
+            Text("How would you say this in \(app.languageName)?").font(.headline)
+            Text(
+                app.help.meaning.isEmpty
+                    ? "No meaning was saved with this expression. Reveal it, listen, then say it."
+                    : "Say it aloud, recording it if you like, then reveal it to compare."
+            ).font(.callout).foregroundStyle(.secondary)
+        }
+    }
+    private var practiceDetails: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if app.help.review != nil {
+                Text(verbatim: app.help.english).font(.title3).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                englishEditor("Sentence in \(app.languageName)", lines: 2...4)
+            }
             DisclosureGroup("Example voice: \(app.settings.practiceVoiceLabel)", isExpanded: $voiceDetailsOpen) {
                 VStack(alignment: .leading, spacing: 10) {
                     PracticeVoiceControls(app: app).disabled(app.busy)

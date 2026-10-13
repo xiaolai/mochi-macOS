@@ -419,7 +419,7 @@ import MochiKernel
                     ?? PracticeExpression(
                         conversationID: chatID, meaning: meaning, english: english, language: app.language(of: chatID))
                 if !candidate.expressions.contains(where: { $0.id == item.id }) {
-                    candidate.expressions.insert(item, at: 0)
+                    candidate.storeExpression(item)
                     try persist(candidate)
                 }
                 return success(["expression_id": item.id.uuidString])

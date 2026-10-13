@@ -679,30 +679,30 @@
         }
       }
     },
-    "%lld attempts" : {
+    "%lld attempts · %@" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "練習 %lld 回"
+            "value" : "練習 %lld 回 · %@"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "시도 %lld회"
+            "value" : "시도 %lld회 · %@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld 次跟读"
+            "value" : "%lld 次跟读 · %@"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld 次嘗試"
+            "value" : "%lld 次嘗試 · %@"
           }
         }
       }
@@ -759,6 +759,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 則訊息"
+          }
+        }
+      }
+    },
+    "%lld of %lld" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld / %lld"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld / %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld / %lld"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld / %lld"
           }
         }
       }
@@ -1661,6 +1689,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "加入逐字稿…"
+          }
+        }
+      }
+    },
+    "Again" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再来"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再來"
+          }
+        }
+      }
+    },
+    "Again: you could not say it. Hard: you said it with effort. Good: you said it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度：言えなかった。難しい：苦労して言えた。良い：言えた。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시: 말하지 못했어요. 어려움: 힘들게 말했어요. 좋음: 말했어요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再来：没能说出来。困难：费力说出来了。很好：说出来了。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再來：沒能說出來。困難：費力說出來了。很好：說出來了。"
           }
         }
       }
@@ -6117,6 +6201,34 @@
         }
       }
     },
+    "Due for review" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復習の時期です"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복습할 때가 됐어요"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该复习了"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "該複習了"
+          }
+        }
+      }
+    },
     "Duplicate…" : {
       "localizations" : {
         "ja" : {
@@ -6421,6 +6533,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "編碼後的範本太大。請縮短其文字。"
+          }
+        }
+      }
+    },
+    "End Review" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復習を終了"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복습 끝내기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束复习"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結束複習"
           }
         }
       }
@@ -6813,6 +6953,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "表達需要對話語言。此對話跟隨使用者的語言。"
+          }
+        }
+      }
+    },
+    "Expressions to review: %lld" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復習する表現: %lld"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복습할 표현: %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待复习的表达：%lld"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待複習的表達：%lld"
           }
         }
       }
@@ -7321,6 +7489,34 @@
         }
       }
     },
+    "Good" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "良い"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "좋음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "很好"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "很好"
+          }
+        }
+      }
+    },
     "Greeting" : {
       "localizations" : {
         "ja" : {
@@ -7373,6 +7569,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "問候語：%@"
+          }
+        }
+      }
+    },
+    "Hard" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "難しい"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "어려움"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "困难"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "困難"
           }
         }
       }
@@ -7681,6 +7905,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這個角色給人的感覺：性情、舉止、喜歡什麼。一起做什麼，請寫在範本的指示裡。"
+          }
+        }
+      }
+    },
+    "How would you say this in %@?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これを%@でどう言いますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이걸 %@로 어떻게 말할까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这句话用%@怎么说？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這句話用%@怎麼說？"
           }
         }
       }
@@ -11020,6 +11272,34 @@
         }
       }
     },
+    "Next review %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次の復習 %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 복습 %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下次复习 %@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下次複習 %@"
+          }
+        }
+      }
+    },
     "No %@" : {
       "localizations" : {
         "ja" : {
@@ -11468,6 +11748,34 @@
         }
       }
     },
+    "No meaning was saved with this expression. Reveal it, listen, then say it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この表現には意味が保存されていません。表示して聞いてから、言ってみましょう。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 표현에는 저장된 의미가 없어요. 보고 들은 다음 말해 보세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个表达没有保存意思。显示它，听一遍，再说出来。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個表達沒有儲存意思。顯示它，聽一遍，再說出來。"
+          }
+        }
+      }
+    },
     "No messages" : {
       "localizations" : {
         "ja" : {
@@ -11576,6 +11884,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未連線"
+          }
+        }
+      }
+    },
+    "Nothing to review today" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今日復習するものはありません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오늘은 복습할 것이 없어요"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今天没有要复习的"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今天沒有要複習的"
           }
         }
       }
@@ -14492,6 +14828,62 @@
         }
       }
     },
+    "Reveal" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示"
+          }
+        }
+      }
+    },
+    "Reveal when you have said it, or when you cannot remember it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "言えたら、または思い出せなかったら表示してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말했거나 기억나지 않으면 보기를 누르세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说出来后，或者想不起来时，点显示。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "說出來後，或者想不起來時，點顯示。"
+          }
+        }
+      }
+    },
     "Review" : {
       "localizations" : {
         "ja" : {
@@ -14516,6 +14908,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "檢查"
+          }
+        }
+      }
+    },
+    "Review finished: %lld graded." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復習が終わりました：%lld 件を評価。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복습을 마쳤어요: %lld개 평가."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复习完成：已评 %lld 条。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "複習完成：已評 %lld 則。"
           }
         }
       }
@@ -15104,6 +15524,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已儲存到「我的表達」。準備好時，用你自己的話說出這個想法。"
+          }
+        }
+      }
+    },
+    "Say it aloud, recording it if you like, then reveal it to compare." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "声に出して言ってみましょう（録音してもかまいません）。それから表示して比べましょう。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "소리 내어 말해 보세요. 원하면 녹음해도 돼요. 그다음 보기를 눌러 비교하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大声说出来（想录音也可以），然后显示出来对照。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大聲說出來（想錄音也可以），然後顯示出來對照。"
           }
         }
       }
@@ -16308,6 +16756,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開始對話"
+          }
+        }
+      }
+    },
+    "Start Review" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復習を始める"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복습 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始复习"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始複習"
           }
         }
       }

@@ -169,11 +169,7 @@ extension AppModel {
     @discardableResult private func finishHistoryChange(_ candidate: Library, affected: Set<UUID>) -> Bool {
         var next = candidate
         if practice, selectedID.map(affected.contains) == true, let item = help.expression, !item.english.isEmpty {
-            if let index = next.expressions.firstIndex(where: { $0.id == item.id }) {
-                next.expressions[index] = item
-            } else {
-                next.expressions.insert(item, at: 0)
-            }
+            next.storeExpression(item)
         }
         let selectedAffected = selectedID.map(affected.contains) ?? false
         if selectedAffected {

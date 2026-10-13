@@ -498,6 +498,7 @@ struct WorkspaceView: View {
                     description: Text("Save an expression while practising to return to it here."))
             } else {
                 List {
+                    reviewBanner
                     ForEach(app.library.expressions) { expression in
                         HStack {
                             VStack(alignment: .leading, spacing: 5) {
@@ -505,7 +506,8 @@ struct WorkspaceView: View {
                                 if !expression.meaning.isEmpty {
                                     Text(expression.meaning).font(.callout).foregroundStyle(.secondary)
                                 }
-                                Text("\(expression.attempts.count) attempts").font(.caption).foregroundStyle(.secondary)
+                                Text("\(expression.attempts.count) attempts · \(Self.reviewLabel(expression.review))")
+                                    .font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Button("Practise") { app.openExpression(expression) }
@@ -514,6 +516,22 @@ struct WorkspaceView: View {
                 }.listStyle(.inset)
             }
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    private var reviewBanner: some View {
+        let due = app.dueExpressionCount
+        return HStack {
+            Label(
+                due == 0 ? "Nothing to review today" : "Expressions to review: \(due)",
+                systemImage: "clock.arrow.circlepath")
+            Spacer()
+            Button("Start Review", action: app.startReview).buttonStyle(.borderedProminent)
+                .disabled(!app.canStartReview)
+        }.padding(.vertical, 6)
+    }
+    /// When an expression comes up for review: due now, or the day it is due.
+    static func reviewLabel(_ review: ReviewState?) -> String {
+        guard let review, review.due > Date() else { return String(localized: "Due for review") }
+        return String(localized: "Next review \(review.due.formatted(date: .abbreviated, time: .omitted))")
     }
 }
 
@@ -612,6 +630,38 @@ struct PracticeActions: View {
             Spacer(minLength: 2)
             Button("Resume Conversation", action: app.resume).buttonStyle(.borderedProminent).keyboardShortcut(
                 .cancelAction)
+        }
+    }
+}
+/// The review footer: record and replay, then reveal, then grade.
+struct ReviewActions: View {
+    @Bindable var app: AppModel
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: app.toggleRecord) {
+                Label(
+                    app.turn.activity == .recording ? "Finish (\(app.recordingSeconds)s)" : "Record Attempt",
+                    systemImage: app.turn.activity == .recording ? "stop.fill" : "mic")
+            }.disabled(app.busy && app.turn.activity != .recording)
+            if let file = app.help.expression?.attempts.last?.file {
+                Button {
+                    app.play(file)
+                } label: {
+                    Label("Play Attempt", systemImage: "play.fill")
+                }
+                .labelStyle(.iconOnly).help("Play Latest Attempt").disabled(app.busy)
+            }
+            Spacer(minLength: 2)
+            Button("End Review", action: app.endReview).keyboardShortcut(.cancelAction)
+            if app.help.review?.revealed == true {
+                Button("Again") { app.gradeReview(.again) }.disabled(app.busy)
+                Button("Hard") { app.gradeReview(.hard) }.disabled(app.busy)
+                Button("Good") { app.gradeReview(.good) }.buttonStyle(.borderedProminent).disabled(app.busy)
+                    .keyboardShortcut(.defaultAction)
+            } else {
+                Button("Reveal", action: app.revealReview).buttonStyle(.borderedProminent).disabled(app.busy)
+                    .keyboardShortcut(.defaultAction)
+            }
         }
     }
 }

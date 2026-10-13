@@ -359,6 +359,7 @@ struct MessageDeletionUndo {
             removeUnreferencedRecording(temporary)
         }
         help.isSavedPractice = false
+        help.review = nil
         turn.resume()
     }
     /// A cancellable job that owns the turn. `isCurrent()` turns false once Stop or a newer job supersedes it;

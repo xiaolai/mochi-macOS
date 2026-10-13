@@ -192,15 +192,7 @@ extension AppModel {
         let thought = help.meaning.trimmingCharacters(in: .whitespacesAndNewlines)
         if let current = help.expression, current.meaning != thought { help.expression?.meaning = thought }
         guard let saved = help.expression, !saved.english.isEmpty else { return false }
-        if let index = library.expressions.firstIndex(where: { $0.id == saved.id }) {
-            // Practice saves its own fields only; review state is kept as stored, never restored from this copy.
-            var merged = saved
-            merged.review = library.expressions[index].review
-            help.expression?.review = merged.review
-            library.expressions[index] = merged
-        } else {
-            library.expressions.insert(saved, at: 0)
-        }
+        help.expression?.review = library.storeExpression(saved).review
         persistHelpDraft()
         return save()
     }

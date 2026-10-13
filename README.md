@@ -92,6 +92,8 @@ Every conversation has a language:
 
 **What Mochi caught** (English, macOS 26 or later). After each practice attempt, Apple's speech recognition on your Mac checks which words of the sentence it heard: heard, heard as another word, not caught, or unclear, plus anything extra it heard. It is a hint, not a score: it also misses some words said well. The first check asks before downloading Apple's English speech model, if your Mac doesn't have it yet. Recordings checked this way stay on your Mac.
 
+**Review.** Saved expressions come back for spoken review: the day after you save one, then after 2, 4, 8, 16 and 32 days as you keep getting it right. **My Expressions → Start Review** shows each due expression's meaning with its words hidden. Say it, recording it if you like, then reveal it, listen to the example, and grade yourself: *Again* starts it over and brings it back once more in the same review, *Hard* keeps its gap, *Good* lengthens it. Expressions saved before review existed are due straight away.
+
 New conversations start in the default language from **Settings → General**; changing it leaves existing conversations and templates as they are. Conversations from earlier versions of Mochi are English.
 
 Without a greeting of its own, a conversation opens with a standard greeting in its language. A Match Me conversation hasn't heard you yet, so it greets you in the language of Mochi's interface.
