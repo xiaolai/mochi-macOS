@@ -229,6 +229,17 @@ final class RealtimeTranscriptionTests: XCTestCase {
             XCTAssertNil(result.evidence, "\(logprobs)")
         }
     }
+    func testRoundingAboveZeroCountsAsCertainButALargerValueIsMalformed() async throws {
+        // gpt-transcribe's own shape: some logprobs a rounding step above 0.
+        let rounded: [[String: Any]] = [
+            token("I", -0.2), token(" go", 9.1552734375e-05), token(" home.", 3.0517578125e-05),
+        ]
+        let (result, _) = try await run(completed("I go home.", logprobs: rounded))
+        XCTAssertEqual(result.evidence?.pieces.map(\.logprob), [-0.2, 0, 0])
+        let (malformed, _) = try await run(completed("I go home.", logprobs: [token("I go home.", 0.01)]))
+        XCTAssertEqual(malformed.text, "I go home.")
+        XCTAssertNil(malformed.evidence, "A logprob well above 0 is not rounding")
+    }
     func testTheRecordingsOwnTranscriptionModelIsUsed() async throws {
         let (_, sent) = try await run(completed("Hi", logprobs: nil), model: "gpt-transcribe")
         let session = try XCTUnwrap(sent.first?["session"] as? [String: Any])

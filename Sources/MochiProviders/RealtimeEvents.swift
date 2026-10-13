@@ -54,6 +54,9 @@ public struct RealtimeAccumulator {
         done = false
         separateNextText = !(text.last?.isWhitespace ?? true)
     }
+    /// A log probability is at most 0, but `gpt-transcribe` sends some just above it from rounding (a fifth of its
+    /// tokens, at most 1.1e-4, over 531 tokens on 2026-10-14). Those count as 0; anything further above is malformed.
+    static let logprobRoundingTolerance = 0.001
     /// Evidence from a completed transcription's `logprobs`: each token's bytes and log probability. Anything
     /// missing or malformed gives none; the transcript itself is kept either way.
     static func evidence(text: String, raw: String, logprobs: Any?) -> TranscriptEvidence? {
@@ -62,9 +65,10 @@ public struct RealtimeAccumulator {
         for entry in entries {
             guard let values = entry["bytes"] as? [NSNumber],
                 let logprob = (entry["logprob"] as? NSNumber)?.doubleValue,
+                logprob <= logprobRoundingTolerance,
                 values.allSatisfy({ (0...255).contains($0.intValue) })
             else { return nil }
-            tokens.append((values.map { UInt8($0.intValue) }, logprob))
+            tokens.append((values.map { UInt8($0.intValue) }, min(logprob, 0)))
         }
         return TranscriptEvidence(text: text, raw: raw, tokens: tokens)
     }
