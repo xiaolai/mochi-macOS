@@ -274,9 +274,11 @@ struct WorkspaceView: View {
                 }
             } else {
                 ScrollViewReader { proxy in
+                    let dividers = TranscriptTimeline.dividerIDs(app.conversation?.messages ?? [])
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             ForEach(app.conversation?.messages ?? []) { message in
+                                if dividers.contains(message.id) { TimeDivider(date: message.date) }
                                 messageView(message, sidebarMatchID: sidebarMatchID).id(message.id)
                             }
                             Color.clear.frame(height: 1).id("bottom")
@@ -362,7 +364,9 @@ struct WorkspaceView: View {
                     }
                 }
                 .background(
-                    isUser ? Color.accentColor : Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
+                    isUser ? Color.accentColor : Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 18)
+                )
+                .help(message.date.formatted(date: .complete, time: .shortened))
 
             }
             if !isUser { Spacer(minLength: 60) }
@@ -596,6 +600,30 @@ private struct SidebarChatRow: View {
 private struct TitleBarScrollEdge: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) { content.scrollEdgeEffectStyle(.hard, for: .top) } else { content }
+    }
+}
+
+/// When a stretch of the conversation began, centred above its first message.
+struct TimeDivider: View {
+    let date: Date
+    var body: some View {
+        // "Today" becomes "Yesterday" at midnight while the conversation stays open.
+        TimelineView(.everyMinute) { context in
+            Text(Self.text(for: date, now: context.date))
+                .font(.caption).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity).padding(.top, 4)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+    static func text(for date: Date, now: Date, calendar: Calendar = .current, locale: Locale = .current) -> String {
+        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        let time = date.formatted(style.hour().minute())
+        switch TranscriptTimeline.label(for: date, now: now, calendar: calendar) {
+        case .today: return String(localized: "Today \(time)")
+        case .yesterday: return String(localized: "Yesterday \(time)")
+        case .thisWeek: return date.formatted(style.weekday(.wide).hour().minute())
+        case .older: return date.formatted(style.year().month(.abbreviated).day().hour().minute())
+        }
     }
 }
 
