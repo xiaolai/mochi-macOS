@@ -124,11 +124,11 @@ class ReleaseTests(unittest.TestCase):
 
     def test_distribution_gate_rejects_probes_and_provider_symbols(self):
         release.validate_distribution_symbols("normal app", "normal helper")
-        for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "MOCHI_INSTANCE_EVENTS_DIR", "MOCHI_INSTANCE_TEST_ID", "--preview", "native-smoke", "mochi-instance-", "MOCHI_E2E_LIBRARY_ROOT", "mochi.e2e.command", "SingleInstanceE2E", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer", "ComposerGeometryProbe", "mochi-composer-geometry-probe", "ClickProbe", "mochi-phrase-chip-probe"):
+        for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "MOCHI_INSTANCE_EVENTS_DIR", "MOCHI_INSTANCE_TEST_ID", "--preview", "native-smoke", "mochi-instance-", "MOCHI_E2E_LIBRARY_ROOT", "mochi.e2e.command", "SingleInstanceE2E", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer", "ComposerGeometryProbe", "mochi-composer-geometry-probe", "ClickProbe", "mochi-phrase-chip-probe", "--hands-free-smoke-test", "RecordedStreamFeeder"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols(probe,"normal")
         for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal",symbol)
-        for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray"):
+        for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray", "smokeHandsFree", "smokeBargeIn"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",symbol)
         calls=[]
         def run(args, **kwargs):

@@ -27,6 +27,7 @@ struct SettingsView: View {
                     Text("Existing conversations and templates keep their own language.").font(.callout)
                         .foregroundStyle(.secondary)
                 }
+                TalkingSection(settings: app.settings)
                 Section("Connection") {
                     LabeledContent("Sign-in", value: "Codex")
                     Text("Sign in through Codex on this Mac, then check the connection here.").font(.callout)
@@ -70,7 +71,10 @@ struct SettingsView: View {
                         "Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text is voiced by OpenAI through the same sign-in. Practice attempts, pitch analysis and word checks stay on your Mac."
                     )
                     Text(
-                        "Checking the connection sends a short text request. Recordings are sent only when you finish a voice message, choose Transcribe for a recorded thought, or choose to translate a recorded thought."
+                        "Checking the connection sends a short text request. In press to send, recordings are sent only when you finish a voice message, choose Transcribe for a recorded thought, or choose to translate a recorded thought."
+                    )
+                    Text(
+                        "Hands-free, audio stays on your Mac until it hears speech. From just before that until Mochi judges your turn has ended, pauses included, the audio is sent to OpenAI. Hands-free practice attempts are judged on your Mac and stay there."
                     )
                     Text(
                         "Library backups include conversations and practice audio, not sign-in credentials. Provider processing and retention follow your account settings."
@@ -95,4 +99,37 @@ struct SettingsView: View {
         if let error = app.error, app.errorTab == tab { Text(error).font(.callout).foregroundStyle(.red) }
     }
 
+}
+
+/// How the learner hands a spoken turn to Mochi.
+struct TalkingSection: View {
+    @Bindable var settings: PreferencesStore
+
+    var body: some View {
+        Section("Talking") {
+            Picker("Talking mode", selection: $settings.talkingMode) {
+                Text("Press to send").tag(TalkingMode.pressToSend)
+                Text("Hands-free").tag(TalkingMode.handsFree)
+            }
+            if settings.talkingMode == .pressToSend {
+                Toggle("Start listening after Mochi replies", isOn: $settings.listenAfterReply)
+                Text("Press the microphone to start a voice message and press again to send it.").font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker("How long Mochi waits for you to finish", selection: $settings.listeningPatience) {
+                    Text("Patient").tag(ListeningPatience.patient)
+                    Text("Balanced").tag(ListeningPatience.balanced)
+                    Text("Quick").tag(ListeningPatience.quick)
+                }
+                Picker("Stop listening after silence", selection: $settings.listeningSilenceLimit) {
+                    ForEach(ListeningSilenceLimit.allCases, id: \.self) { limit in
+                        Text("\(limit.rawValue) min").tag(limit)
+                    }
+                }
+                Text(
+                    "Mochi keeps listening, sends each turn when you finish, and stops speaking when you talk over her. Help Me Say This thoughts are still recorded with a press."
+                ).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
 }

@@ -55,6 +55,8 @@ struct PetSituation: Equatable {
     var failing = false
     /// The pet has just appeared.
     var arriving = false
+    /// Hands-free listening has the microphone open.
+    var listening = false
 
     var pose: PetPose {
         switch activity {
@@ -62,7 +64,7 @@ struct PetSituation: Equatable {
         case .requestingPermission: return .waiting
         case .generating: return greeting ? .waving : .running
         case .playing: return paused ? .idle : speaking ? .jumping : .review
-        case .idle: return failing ? .failed : arriving ? .waving : .idle
+        case .idle: return failing ? .failed : arriving ? .waving : listening ? .review : .idle
         }
     }
 }

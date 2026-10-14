@@ -9,7 +9,7 @@
     /// Compiled only into development builds; the release gate rejects their strings and symbols.
     extension AppDelegate {
         /// Ends a scripted run. A failed or incomplete run exits nonzero so it never looks clean to its launcher.
-        private func finishRun(_ model: AppModel, passed: Bool) {
+        func finishRun(_ model: AppModel, passed: Bool) {
             if passed {
                 // AppKit ignores terminate while a window has a sheet attached, such as the preview's practice sheet.
                 // Close it through the state that presents it: a sheet ended in AppKit alone leaves that state set.
@@ -43,7 +43,7 @@
             }
         }
         /// Writes required evidence; a failure is reported on stderr and fails the run.
-        private func writeEvidence(_ data: Data, to url: URL) -> Bool {
+        func writeEvidence(_ data: Data, to url: URL) -> Bool {
             do {
                 try data.write(to: url, options: .atomic)
                 return true

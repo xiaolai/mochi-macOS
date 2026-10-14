@@ -763,6 +763,34 @@
         }
       }
     },
+    "%lld min" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld분"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 分钟"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 分鐘"
+          }
+        }
+      }
+    },
     "%lld of %lld" : {
       "localizations" : {
         "ja" : {
@@ -2421,6 +2449,34 @@
         }
       }
     },
+    "Balanced" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보통"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适中"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "適中"
+          }
+        }
+      }
+    },
     "Brainstorm with me" : {
       "localizations" : {
         "ja" : {
@@ -3093,30 +3149,30 @@
         }
       }
     },
-    "Checking the connection sends a short text request. Recordings are sent only when you finish a voice message, choose Transcribe for a recorded thought, or choose to translate a recorded thought." : {
+    "Checking the connection sends a short text request. In press to send, recordings are sent only when you finish a voice message, choose Transcribe for a recorded thought, or choose to translate a recorded thought." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "接続を確認すると、短いテキストリクエストが送信されます。録音が送信されるのは、音声メッセージを終了したとき、録音した言いたいことで「文字起こし」を選択したとき、または録音した言いたいことの翻訳を選択したときだけです。"
+            "value" : "接続を確認すると、短いテキストリクエストが送信されます。「押して送信」では、録音が送信されるのは、音声メッセージを終了したとき、録音した言いたいことで「文字起こし」を選択したとき、または録音した言いたいことの翻訳を選択したときだけです。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "연결을 확인하면 짧은 텍스트 요청이 전송됩니다. 녹음은 음성 메시지를 완료하거나, 녹음된 생각에 대해 받아쓰기를 선택하거나, 녹음된 생각을 번역하도록 선택한 경우에만 전송됩니다."
+            "value" : "연결을 확인하면 짧은 텍스트 요청이 전송됩니다. 눌러서 보내기에서는 음성 메시지를 완료하거나, 녹음된 생각에 대해 받아쓰기를 선택하거나, 녹음된 생각을 번역하도록 선택한 경우에만 녹음이 전송됩니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "检查连接时会发送一条简短的文本请求。只有在你完成语音消息、为已录制的想法选择“转写”，或选择翻译已录制的想法时，才会发送录音。"
+            "value" : "检查连接时会发送一条简短的文本请求。在“按键发送”模式下，只有在你完成语音消息、为已录制的想法选择“转写”，或选择翻译已录制的想法时，才会发送录音。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "檢查連線時會傳送一則簡短的文字要求。只有在你完成語音訊息、為已錄下的想法選擇「轉錄」，或選擇翻譯已錄下的想法時，才會傳送錄音。"
+            "value" : "檢查連線時會傳送一則簡短的文字要求。在「按鍵傳送」模式下，只有在你完成語音訊息、為已錄下的想法選擇「轉錄」，或選擇翻譯已錄下的想法時，才會傳送錄音。"
           }
         }
       }
@@ -7573,6 +7629,62 @@
         }
       }
     },
+    "Hands-free" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ハンズフリー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "핸즈프리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "免按键"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "免按鍵"
+          }
+        }
+      }
+    },
+    "Hands-free, audio stays on your Mac until it hears speech. From just before that until Mochi judges your turn has ended, pauses included, the audio is sent to OpenAI. Hands-free practice attempts are judged on your Mac and stay there." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ハンズフリーでは、Macが話し声を聞き取るまで音声はMacの中にとどまります。その少し前から、Mochiが話し終わったと判断するまでの音声は、途中の間も含めてOpenAIに送信されます。ハンズフリーの練習はMac上で判断され、このMacにのみ保存されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "핸즈프리에서는 Mac이 말소리를 듣기 전까지 오디오가 Mac에만 남아 있습니다. 그 직전부터 Mochi가 말이 끝났다고 판단할 때까지의 오디오는 중간의 멈춤을 포함해 OpenAI로 전송됩니다. 핸즈프리 연습은 Mac에서 판단되며 이 Mac에만 저장됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "免按键模式下，在 Mac 听到说话之前，音频只保留在 Mac 上。从说话前的片刻起，到 Mochi 判断你说完为止，这段音频（包括其中的停顿）会发送给 OpenAI。免按键的跟读在 Mac 上判断，并且只保存在这台 Mac 上。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "免按鍵模式下，在 Mac 聽到說話之前，音訊只保留在 Mac 上。從說話前的片刻起，到 Mochi 判斷你說完為止，這段音訊（包括其中的停頓）會傳送給 OpenAI。免按鍵的練習在 Mac 上判斷，並且只保留在這台 Mac 上。"
+          }
+        }
+      }
+    },
     "Hard" : {
       "localizations" : {
         "ja" : {
@@ -7653,6 +7765,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "聽成了別的詞"
+          }
+        }
+      }
+    },
+    "Hearing you · sending as you speak" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞いています · 話しながら送信中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "듣는 중 · 말하는 동안 전송 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在听你说 · 边说边发送"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在聽你說 · 邊說邊傳送"
+          }
+        }
+      }
+    },
+    "Hearing your attempt · stays on this Mac" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "練習を聞いています · このMacにのみ保存"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시도를 듣는 중 · 이 Mac에만 저장"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在听你跟读 · 仅保存在这台 Mac 上"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在聽你練習 · 僅保留在這台 Mac 上"
           }
         }
       }
@@ -7849,6 +8017,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "我表現得怎麼樣？"
+          }
+        }
+      }
+    },
+    "How long Mochi waits for you to finish" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話し終えるのを待つ長さ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말을 마칠 때까지 Mochi가 기다리는 시간"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 等你说完的时间"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 等你說完的時間"
           }
         }
       }
@@ -9309,6 +9505,90 @@
         }
       }
     },
+    "Listening paused · microphone off" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取りを一時停止中 · マイクはオフ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "듣기 일시 정지됨 · 마이크 꺼짐"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聆听已暂停 · 麦克风已关闭"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聆聽已暫停 · 麥克風已關閉"
+          }
+        }
+      }
+    },
+    "Listening stopped: %@ The microphone button records one message at a time until you start listening again." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取りを停止しました：%@ 聞き取りを再開するまで、マイクボタンは1回に1件のメッセージを録音します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "듣기가 중지되었습니다: %@ 다시 듣기를 시작할 때까지 마이크 버튼은 메시지를 한 번에 하나씩 녹음합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聆听已停止：%@ 在你重新开始聆听之前，麦克风按钮每次录制一条消息。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聆聽已停止：%@ 在你重新開始聆聽之前，麥克風按鈕每次錄製一則訊息。"
+          }
+        }
+      }
+    },
+    "Listening · audio is sent only once you speak" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取り中 · 話し始めてから音声を送信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "듣는 중 · 말을 시작해야 오디오가 전송됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在聆听 · 只有你开口后才会发送音频"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在聆聽 · 只有你開口後才會傳送音訊"
+          }
+        }
+      }
+    },
     "Local control belongs to another user." : {
       "localizations" : {
         "ja" : {
@@ -9669,6 +9949,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跟隨我的語言"
+          }
+        }
+      }
+    },
+    "Menus can’t tell number-pad keys from the same keys above the letters. Choose another key." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メニューではテンキーと文字キーの上にある同じキーを区別できません。別のキーを選んでください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메뉴는 숫자 키패드의 키와 글자 위쪽의 같은 키를 구분하지 못합니다. 다른 키를 선택하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜单无法区分数字小键盘上的键和字母键上方的相同按键。请选择其他按键。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選單無法區分數字鍵盤上的按鍵和字母鍵上方的相同按鍵。請選擇其他按鍵。"
           }
         }
       }
@@ -10040,6 +10348,34 @@
         }
       }
     },
+    "Mochi could not start listening in time. Check your connection; press to send still works." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiは時間内に聞き取りを開始できませんでした。接続を確認してください。押して送信は引き続き使えます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 제때 듣기를 시작하지 못했습니다. 연결을 확인하십시오. 눌러서 보내기는 계속 사용할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 未能及时开始聆听。请检查网络连接；按键发送仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 未能及時開始聆聽。請檢查網路連線；按鍵傳送仍可使用。"
+          }
+        }
+      }
+    },
     "Mochi couldn’t save your library" : {
       "localizations" : {
         "ja" : {
@@ -10292,6 +10628,34 @@
         }
       }
     },
+    "Mochi keeps listening, sends each turn when you finish, and stops speaking when you talk over her. Help Me Say This thoughts are still recorded with a press." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiは聞き続け、話し終えるたびに送信し、あなたが話しかけると話すのをやめます。「言い方を教えて」の考えは引き続きボタンを押して録音します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi는 계속 듣고, 말을 마칠 때마다 전송하며, 당신이 끼어들어 말하면 말하기를 멈춥니다. 말하기 도우미의 생각은 여전히 버튼을 눌러 녹음합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 会一直聆听，你每说完一段就发送；她说话时你一开口，她就会停下。“帮我说出来”的想法仍需按键录制。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 會一直聆聽，你每說完一段就傳送；她說話時你一開口，她就會停下。「幫我說出來」的想法仍需按鍵錄製。"
+          }
+        }
+      }
+    },
     "Mochi returned an empty response. Please retry." : {
       "localizations" : {
         "ja" : {
@@ -10372,6 +10736,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mochi © 2026 HANDO K.K. 依 Mochi 角色授權條款使用。"
+          }
+        }
+      }
+    },
+    "Mochi · listening" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi · 聞き取り中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi · 듣는 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi · 正在聆听"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi · 正在聆聽"
           }
         }
       }
@@ -11832,6 +12224,34 @@
         }
       }
     },
+    "No microphone is available. Check Sound settings and retry." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用できるマイクがありません。「サウンド」設定を確認して再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용할 수 있는 마이크가 없습니다. 사운드 설정을 확인하고 다시 시도하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可用的麦克风。请检查“声音”设置，然后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有可用的麥克風。請檢查「聲音」設定，然後重試。"
+          }
+        }
+      }
+    },
     "Not caught" : {
       "localizations" : {
         "ja" : {
@@ -12276,6 +12696,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "點餐並應對後續問題。"
+          }
+        }
+      }
+    },
+    "Patient" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゆっくり"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "느긋하게"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "耐心"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "耐心"
           }
         }
       }
@@ -13176,6 +13624,62 @@
         }
       }
     },
+    "Press the microphone to start a voice message and press again to send it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクを押して音声メッセージを始め、もう一度押して送信します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마이크를 눌러 음성 메시지를 시작하고 다시 눌러 전송하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下麦克风开始录制语音消息，再按一次发送。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下麥克風開始錄製語音訊息，再按一次傳送。"
+          }
+        }
+      }
+    },
+    "Press to send" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "押して送信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "눌러서 보내기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按键发送"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按鍵傳送"
+          }
+        }
+      }
+    },
     "Preview" : {
       "localizations" : {
         "ja" : {
@@ -13396,6 +13900,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "再強硬點反駁我。"
+          }
+        }
+      }
+    },
+    "Quick" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すばやく"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빠르게"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速"
           }
         }
       }
@@ -15948,6 +16480,118 @@
         }
       }
     },
+    "Send Message" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッセージを送信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지 보내기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送消息"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "傳送訊息"
+          }
+        }
+      }
+    },
+    "Send Now" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今すぐ送信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금 보내기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即发送"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即傳送"
+          }
+        }
+      }
+    },
+    "Send what you have said now" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容を今すぐ送信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금까지 말한 내용을 지금 보내기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即发送你已说的内容"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即傳送你已說的內容"
+          }
+        }
+      }
+    },
+    "Send what you have said now (%@)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容を今すぐ送信（%@）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금까지 말한 내용을 지금 보내기 (%@)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即发送你已说的内容（%@）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即傳送你已說的內容（%@）"
+          }
+        }
+      }
+    },
     "Send “%@”" : {
       "localizations" : {
         "ja" : {
@@ -15972,6 +16616,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "傳送「%@」"
+          }
+        }
+      }
+    },
+    "Sending your turn…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容を送信中…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말한 내용을 보내는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在发送你说的话…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在傳送你說的話…"
           }
         }
       }
@@ -16788,6 +17460,34 @@
         }
       }
     },
+    "Start Listening" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取りを開始"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "듣기 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始聆听"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始聆聽"
+          }
+        }
+      }
+    },
     "Start Review" : {
       "localizations" : {
         "ja" : {
@@ -16840,6 +17540,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開始語音對話"
+          }
+        }
+      }
+    },
+    "Start listening after Mochi replies" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiの返事の後に聞き取りを開始"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 답한 후 듣기 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 回复后开始聆听"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 回覆後開始聆聽"
+          }
+        }
+      }
+    },
+    "Start or Stop Listening" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取りを開始/停止"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "듣기 시작 또는 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始或停止聆听"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始或停止聆聽"
           }
         }
       }
@@ -16928,6 +17684,34 @@
         }
       }
     },
+    "Stop Listening" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取りを停止"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "듣기 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止聆听"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止聆聽"
+          }
+        }
+      }
+    },
     "Stop Preview" : {
       "localizations" : {
         "ja" : {
@@ -16952,6 +17736,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停止預覽"
+          }
+        }
+      }
+    },
+    "Stop listening after silence" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無音が続いたら聞き取りを停止"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "무음이 지속되면 듣기 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静音多久后停止聆听"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "靜音多久後停止聆聽"
+          }
+        }
+      }
+    },
+    "Stopped listening after %lld min of silence. Start listening again when you’re ready." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld分間無音だったため、聞き取りを停止しました。準備ができたら聞き取りを再開してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld분 동안 무음이어서 듣기를 중지했습니다. 준비되면 다시 듣기를 시작하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静音 %lld 分钟后已停止聆听。准备好后请重新开始聆听。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "靜音 %lld 分鐘後已停止聆聽。準備好後請重新開始聆聽。"
+          }
+        }
+      }
+    },
+    "Stopped listening after silence · microphone off" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無音のため聞き取りを停止 · マイクはオフ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "무음으로 듣기 중지됨 · 마이크 꺼짐"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "因静音已停止聆听 · 麦克风已关闭"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "因靜音已停止聆聽 · 麥克風已關閉"
           }
         }
       }
@@ -17176,6 +18044,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用任何語言和 %@ 聊天。\n回覆會跟隨你說的語言。"
+          }
+        }
+      }
+    },
+    "Talking" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話し方"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话方式"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "說話方式"
+          }
+        }
+      }
+    },
+    "Talking mode" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話すモード"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 모드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话模式"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "說話模式"
           }
         }
       }
@@ -18216,6 +19140,62 @@
         }
       }
     },
+    "The listening connection ended." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取りの接続が切れました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "듣기 연결이 끊어졌습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聆听连接已中断。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聆聽連線已中斷。"
+          }
+        }
+      }
+    },
+    "The listening connection ended. Check your connection; press to send still works." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞き取りの接続が切れました。接続を確認してください。押して送信は引き続き使えます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "듣기 연결이 끊어졌습니다. 연결을 확인하십시오. 눌러서 보내기는 계속 사용할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聆听连接已中断。请检查网络连接；按键发送仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聆聽連線已中斷。請檢查網路連線；按鍵傳送仍可使用。"
+          }
+        }
+      }
+    },
     "The local control socket path is too long." : {
       "localizations" : {
         "ja" : {
@@ -18240,6 +19220,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本機控制 socket 路徑太長。"
+          }
+        }
+      }
+    },
+    "The microphone changed or stopped." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクが変更されたか停止しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마이크가 변경되었거나 중지되었습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麦克风已更改或停止。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麥克風已變更或停止。"
           }
         }
       }
@@ -18748,30 +19756,30 @@
         }
       }
     },
-    "These shortcuts work in every app. Press Talk to Mochi once to start a voice message and again to send it, or hold it down while you speak and let go to send." : {
+    "These shortcuts work in every app, except Send Now, which works while Mochi is in front. Press Talk to Mochi once to start a voice message and again to send it, or hold it down while you speak and let go to send. Hands-free, Talk to Mochi starts listening." : {
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这些快捷键在任何应用中都可使用。按一次“和 Mochi 说话”开始语音消息，再按一次发送；也可以在说话时按住它，松开即发送。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "這些快速鍵在任何應用程式中都可使用。按一次「和 Mochi 說話」開始語音訊息，再按一次傳送；也可以在說話時按住它，放開即傳送。"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "これらのショートカットはどのアプリでも使えます。「Mochiに話しかける」を1回押すと音声メッセージを開始し、もう1回押すと送信します。話している間押し続け、離して送信することもできます。"
+            "value" : "これらのショートカットはどのアプリでも使えます。ただし「今すぐ送信」はMochiが前面にあるときだけ使えます。「Mochiに話しかける」を1回押すと音声メッセージを開始し、もう一度押すと送信します。話している間押し続け、離して送信することもできます。ハンズフリーでは、「Mochiに話しかける」で聞き取りを開始します。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이 단축키는 모든 앱에서 작동합니다. 'Mochi에게 말하기'를 한 번 누르면 음성 메시지를 시작하고 다시 누르면 보냅니다. 말하는 동안 누르고 있다가 떼면 보낼 수도 있습니다."
+            "value" : "이 단축키는 모든 앱에서 작동하지만, '지금 보내기'는 Mochi가 앞에 있을 때만 작동합니다. 'Mochi에게 말하기'를 한 번 누르면 음성 메시지를 시작하고 다시 누르면 보냅니다. 말하는 동안 누르고 있다가 떼면 보낼 수도 있습니다. 핸즈프리에서는 'Mochi에게 말하기'가 듣기를 시작합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除“立即发送”只在 Mochi 位于前台时可用外，这些快捷键在任何应用中都可使用。按一次“和 Mochi 说话”开始语音消息，再按一次发送；也可以说话时按住，松开即发送。免按键模式下，“和 Mochi 说话”会开始聆听。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除「立即傳送」只在 Mochi 位於前景時可用外，這些快速鍵在任何應用程式中都可使用。按一次「和 Mochi 說話」開始語音訊息，再按一次傳送；也可以說話時按住，放開即傳送。免按鍵模式下，「和 Mochi 說話」會開始聆聽。"
           }
         }
       }
@@ -20540,6 +21548,34 @@
         }
       }
     },
+    "Unknown value." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不明な値です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "알 수 없는 값입니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知的值。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知的值。"
+          }
+        }
+      }
+    },
     "Unknown voice." : {
       "localizations" : {
         "ja" : {
@@ -22192,6 +23228,62 @@
         }
       }
     },
+    "Your turn could not be saved because the disk is full, so Mochi did not reply to it. Free some space, then speak again." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ディスクがいっぱいで話した内容を保存できなかったため、Mochiは返事をしませんでした。空き容量を確保してから、もう一度話してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "디스크가 가득 차서 말한 내용을 저장할 수 없어 Mochi가 답하지 않았습니다. 공간을 확보한 후 다시 말하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "磁盘已满，无法保存你说的话，因此 Mochi 没有回复。请释放一些空间，然后再说一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "磁碟已滿，無法儲存你說的話，因此 Mochi 沒有回覆。請釋放一些空間，然後再說一次。"
+          }
+        }
+      }
+    },
+    "Your turn could not be saved, so Mochi did not reply to it. Check the disk, then speak again." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容を保存できなかったため、Mochiは返事をしませんでした。ディスクを確認してから、もう一度話してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말한 내용을 저장할 수 없어 Mochi가 답하지 않았습니다. 디스크를 확인한 후 다시 말하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存你说的话，因此 Mochi 没有回复。请检查磁盘，然后再说一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法儲存你說的話，因此 Mochi 沒有回覆。請檢查磁碟，然後再說一次。"
+          }
+        }
+      }
+    },
     "Your typed thought is kept. Choose how to use these words." : {
       "localizations" : {
         "ja" : {
@@ -22248,58 +23340,58 @@
         }
       }
     },
-    "Your voice message could not be saved, so it was not sent. Check the disk and the data folder, then record it again." : {
+    "Your voice message could not be saved, so Mochi did not reply to it. Check the disk and the data folder, then record it again." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音声メッセージを保存できなかったため、送信されませんでした。ディスクとデータフォルダを確認してから、もう一度録音してください。"
+            "value" : "音声メッセージを保存できなかったため、Mochi は返信しませんでした。ディスクとデータフォルダを確認してから、もう一度録音してください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "음성 메시지를 저장할 수 없어 전송되지 않았습니다. 디스크와 데이터 폴더를 확인한 다음 다시 녹음하세요."
+            "value" : "음성 메시지를 저장할 수 없어 Mochi가 답하지 않았습니다. 디스크와 데이터 폴더를 확인한 다음 다시 녹음하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法保存你的语音消息，因此没有发送。请检查磁盘和数据文件夹，然后重新录制。"
+            "value" : "无法保存你的语音消息，因此 Mochi 没有回复。请检查磁盘和数据文件夹，然后重新录制。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無法儲存你的語音訊息，因此沒有傳送。請檢查磁碟和資料檔案夾，然後重新錄製。"
+            "value" : "無法儲存你的語音訊息，因此 Mochi 沒有回覆。請檢查磁碟和資料檔案夾，然後重新錄製。"
           }
         }
       }
     },
-    "Your voice message could not be saved, so it was not sent. Its recording is kept in the data folder as “%@”." : {
+    "Your voice message could not be saved, so Mochi did not reply to it. Its recording is kept in the data folder as “%@”." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音声メッセージを保存できなかったため、送信されませんでした。録音はデータフォルダに「%@」として保存されています。"
+            "value" : "音声メッセージを保存できなかったため、Mochi は返信しませんでした。録音はデータフォルダに「%@」として保存されています。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "음성 메시지를 저장할 수 없어 전송되지 않았습니다. 녹음은 데이터 폴더에 “%@”(으)로 보관되어 있습니다."
+            "value" : "음성 메시지를 저장할 수 없어 Mochi가 답하지 않았습니다. 녹음은 데이터 폴더에 “%@”(으)로 보관되어 있습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法保存你的语音消息，因此没有发送。录音已保留在数据文件夹中，名为“%@”。"
+            "value" : "无法保存你的语音消息，因此 Mochi 没有回复。录音已保留在数据文件夹中，名为“%@”。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無法儲存你的語音訊息，因此沒有傳送。錄音已保留在資料檔案夾中，名為「%@」。"
+            "value" : "無法儲存你的語音訊息，因此 Mochi 沒有回覆。錄音已保留在資料檔案夾中，名為「%@」。"
           }
         }
       }

@@ -39,6 +39,10 @@ struct MessageDeletionUndo {
     @ObservationIgnored var talkPress: (time: Date, request: UUID?)?
     /// The request that started the recording now running: the turn of its microphone permission step.
     @ObservationIgnored var recordingRequest: UUID?
+    /// The reply audio playing for the first time, which an interruption may cut; nil once it ends or stops.
+    @ObservationIgnored var unheardReply: String?
+    /// The recording that started by itself after a reply; it is discarded if Mochi is locked or hidden meanwhile.
+    @ObservationIgnored var unattendedRecording: UUID?
     /// The instructions or template sheet, and the drafts it edits.
     var customization = CustomizationSheet()
     var externalControlEnabled: Bool {
@@ -93,7 +97,30 @@ struct MessageDeletionUndo {
     var greetingActive = false
     @ObservationIgnored var recordingNow: () -> Date = Date.init
     @ObservationIgnored var recordingSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
-    var turn = TurnMachine()
+    var turn = TurnMachine() {
+        didSet { if oldValue.activity != turn.activity { listeningTurnChanged(to: turn.activity) } }
+    }
+    /// Hands-free listening's state; the microphone follows it.
+    var listening = ListeningMachine()
+    /// Set when a listening session failed: the microphone button records one message at a time until listening
+    /// is started again.
+    var handsFreeFallback = false
+    /// True while the screen is locked.
+    var screenLocked = false
+    /// True while the workspace is minimized, closed to the menu bar, or Mochi is hidden.
+    var workspaceHidden = false
+    /// True while an open or save panel covers the workspace.
+    var panelOpen = false
+    @ObservationIgnored var listeningServices: ListeningServices
+    @ObservationIgnored let listeningRuntime = ListeningRuntime()
+    /// The Start Listening request waiting for microphone permission.
+    var listeningRequest: UUID?
+    @ObservationIgnored var listeningNow: () -> Date = Date.init
+    @ObservationIgnored var listeningSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
+    /// Writes a hands-free turn's recording; replaceable so a failed write can be tested.
+    @ObservationIgnored var writeListeningTurn: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
+    /// Shows whether the microphone is open for listening, in the menu bar; set by the app delegate.
+    @ObservationIgnored var listeningIndicator: ((Bool) -> Void)?
     /// Any new error starts without a settings tab; `report(_:in:)` names the tab whose action caused it.
     var error: String? { didSet { errorTab = nil } }
     /// The Settings tab whose action set `error`, which is the only tab that shows it.
@@ -160,6 +187,16 @@ struct MessageDeletionUndo {
     static let quietWarningDelay: Double = 2
     @ObservationIgnored private var exclusiveTask: (token: UUID, task: Task<Void, Never>)?
     @ObservationIgnored var chooseFile: @MainActor (PanelRequest) -> URL? = FilePanels.choose
+    /// Shows an open or save panel; hands-free listening pauses while it is up, as it does for a sheet.
+    func presentPanel(_ request: PanelRequest) -> URL? {
+        panelOpen = true
+        refreshListeningConditions()
+        defer {
+            panelOpen = false
+            refreshListeningConditions()
+        }
+        return chooseFile(request)
+    }
     var conversation: Conversation? { library.conversations.first { $0.id == selectedID } }
     var writableConversation: Bool { conversation.map { !$0.archived && !$0.isDeleted } ?? false }
     var visibleChats: [Conversation] {
@@ -186,6 +223,7 @@ struct MessageDeletionUndo {
             return speaking
                 ? String(localized: "\(displayCharacterName) is speaking") : String(localized: "Playing your recording")
         case .idle:
+            if let listeningStatus { return listeningStatus }
             return practice
                 ? String(localized: "Conversation paused · microphone off")
                 : String(localized: "Ready when you are · microphone off")
@@ -194,7 +232,9 @@ struct MessageDeletionUndo {
     /// - Parameter applicationSupport: where the managed library lives when `libraryRoot` is nil; tests pass a temporary folder.
     init(
         demo: Bool = false, libraryRoot: URL? = nil, preferences: UserDefaults? = nil, speech: SpeechServices? = nil,
-        media: MediaServices? = nil, recognition: RecognitionServices? = nil, applicationSupport: URL? = nil
+        media: MediaServices? = nil, recognition: RecognitionServices? = nil,
+        listeningServices: ListeningServices? = nil,
+        applicationSupport: URL? = nil
     ) {
         InstanceEvidence.record("model-created")
         assert(!TestEnvironment.active || preferences != nil, "Tests must give AppModel isolated preferences.")
@@ -205,6 +245,7 @@ struct MessageDeletionUndo {
         self.media = media ?? .live(audio)
         self.speech = speech ?? .live
         self.recognition = recognition ?? .live
+        self.listeningServices = listeningServices ?? .live(StreamingCapture())
         settings = PreferencesStore(
             preferences ?? (demo ? UserDefaults(suiteName: AppIdentity.bundleIdentifier + ".preview")! : .standard),
             importLegacy: !demo && libraryRoot == nil, allowExternalControl: !demo)
@@ -230,6 +271,13 @@ struct MessageDeletionUndo {
         libraryController.open(managedIn: managed ? support : nil, isolated: libraryRoot != nil) { [weak self] in
             self?.libraryOpened()
         }
+        // Choosing press to send ends listening at once, running or awaiting permission, so no queued audio slips out.
+        settings.talkingModeChanged = { [weak self] mode in
+            guard let self, mode == .pressToSend, listening.isOn || listeningRequest != nil else { return }
+            stopListening()
+        }
+        routeSpeechThroughListening()
+        observeListeningConditions()
     }
     /// Preview launches create a fresh library each time; remove it so previews leave nothing behind.
     func discardTemporaryLibrary() {
@@ -296,7 +344,9 @@ struct MessageDeletionUndo {
     }
     /// False when the library could not be saved; the failure is already reported.
     @discardableResult func stop() -> Bool {
+        // Playback ends first, so stopping listening has no reply left to move off the listening engine.
         let unfinishedRecording = cancelTurn()
+        stopListening()
         transcripts.cancelAll()
         for ci in library.conversations.indices {
             for mi in library.conversations[ci].messages.indices
@@ -330,6 +380,7 @@ struct MessageDeletionUndo {
     }
     /// Ends whatever owns the turn and returns the unfinished recording, if any, for the caller to discard.
     private func cancelTurn() -> URL? {
+        unheardReply = nil
         deferredToolAction = nil
         greetingActive = false
         let recording = media.stopRecording()

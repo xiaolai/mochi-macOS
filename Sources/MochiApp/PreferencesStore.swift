@@ -76,6 +76,25 @@ import MochiProviders
             }
         }
     }
+    /// Press to send or hands-free; press to send unless the learner chooses otherwise.
+    var talkingMode: TalkingMode {
+        didSet {
+            defaults.set(talkingMode.rawValue, forKey: "talkingMode")
+            if talkingMode != oldValue { talkingModeChanged?(talkingMode) }
+        }
+    }
+    /// Told at once when the talking mode changes, before any observer runs.
+    @ObservationIgnored var talkingModeChanged: ((TalkingMode) -> Void)?
+    /// In press to send, open the microphone after a reply plays, as after a greeting. Off by default.
+    var listenAfterReply: Bool { didSet { defaults.set(listenAfterReply, forKey: "listenAfterReply") } }
+    /// How long hands-free waits for the learner to finish a turn.
+    var listeningPatience: ListeningPatience {
+        didSet { defaults.set(listeningPatience.rawValue, forKey: "listeningPatience") }
+    }
+    /// How long hands-free stays open in silence.
+    var listeningSilenceLimit: ListeningSilenceLimit {
+        didSet { defaults.set(listeningSilenceLimit.rawValue, forKey: "listeningSilenceMinutes") }
+    }
     var practiceVoiceLabel: String {
         "\(RealtimeVoice(rawValue: builtInPracticeVoice)?.name ?? RealtimeService.defaultVoice.capitalized) · Codex voice"
     }
@@ -126,6 +145,14 @@ import MochiProviders
         conversationVoiceOptions = options("conversationVoiceOptions")
         practiceVoiceOptions = options("practiceVoiceOptions")
         externalControlEnabled = allowExternalControl && defaults.bool(forKey: "externalControlEnabled")
+        talkingMode = Self.stored(defaults, "talkingMode", TalkingMode.init(rawValue:)) ?? .pressToSend
+        listenAfterReply = defaults.bool(forKey: "listenAfterReply")
+        listeningPatience =
+            Self.stored(defaults, "listeningPatience", ListeningPatience.init(rawValue:)) ?? .patient
+        listeningSilenceLimit =
+            Self.stored(
+                defaults, "listeningSilenceMinutes", { (minutes: Int) in ListeningSilenceLimit(rawValue: minutes) })
+            ?? .twoMinutes
         petVisible = defaults.bool(forKey: "desktopPetVisible")
         petFollowsPointer = defaults.bool(forKey: "desktopPetFollowsPointer")
         if let point = defaults.array(forKey: "desktopPetOrigin") as? [Double], point.count == 2,
@@ -177,6 +204,15 @@ import MochiProviders
     func practiceService(voice: String? = nil, options: OpenAIVoiceOptions? = nil) -> RealtimeService {
         RealtimeService(
             model: effectiveModelName, voice: voice ?? builtInPracticeVoice, options: options ?? practiceVoiceOptions)
+    }
+    /// A stored choice, or nil when there is none; a stored value this version does not know is logged and ignored.
+    private static func stored<Raw, Value>(_ defaults: UserDefaults, _ key: String, _ make: (Raw) -> Value?) -> Value? {
+        guard let raw = defaults.object(forKey: key) else { return nil }
+        if let raw = raw as? Raw, let value = make(raw) { return value }
+        MochiLog.failure(
+            MochiLog.app, "Stored preference \(key) was rejected; using the default", AppFailure("Unknown value."),
+            level: .default)
+        return nil
     }
     private static func trimmed(_ value: String) -> String? {
         let text = value.trimmingCharacters(in: .whitespacesAndNewlines)

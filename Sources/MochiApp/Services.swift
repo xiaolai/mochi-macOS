@@ -8,7 +8,9 @@ import MochiProviders
 enum TestEnvironment {
     static let active = NSClassFromString("XCTestCase") != nil
     static func assertNotUnderTest(_ what: String) {
-        precondition(!active, "\(what) must not be used in tests. Pass fakes to AppModel(speech:media:recognition:).")
+        precondition(
+            !active,
+            "\(what) must not be used in tests. Pass fakes to AppModel(speech:media:recognition:listeningServices:).")
     }
 }
 
@@ -81,6 +83,43 @@ struct MediaServices {
             recordingActive: { audio.isRecording },
             recordingInterrupted: { audio.recordingInterrupted },
             recordingFinished: { audio.recordingFinished })
+    }
+}
+
+/// One hands-free turn's connection: audio goes in, the API's judgement of the turn comes out.
+protocol ListeningLine: AnyObject, Sendable {
+    var signals: AsyncThrowingStream<ListeningSignal, Error> { get }
+    func append(_ pcm: Data)
+    func close()
+    /// Audio the connection has actually sent, which may trail what was appended.
+    var sentBytes: Int { get }
+}
+extension ListeningSession: ListeningLine {}
+
+/// Hands-free listening: the streaming microphone and the session that judges each turn.
+struct ListeningServices {
+    /// Starts delivering 24 kHz mono 16-bit PCM on the main actor; the second closure is called if capture stops
+    /// by itself.
+    var startCapture: @MainActor (@escaping @MainActor (Data) -> Void, @escaping @MainActor () -> Void) throws -> Void
+    var stopCapture: @MainActor () -> Void
+    /// True while the microphone is in use for listening.
+    var capturing: @MainActor () -> Bool
+    /// Opens a session: (turn detection, session model).
+    var openSession: (TurnDetection, String) async throws -> any ListeningLine
+    /// A player for Mochi's speech through the listening microphone's echo canceller, so the learner can interrupt
+    /// it; nil plays it the ordinary way. The closure reports the end: reached (`true`) or cut off (`false`).
+    var makePlayer:
+        @MainActor (URL, @escaping @MainActor (any PlaybackPlayer, Bool) -> Void) throws -> (any PlaybackPlayer)? =
+            { _, _ in nil }
+
+    @MainActor static func live(_ capture: StreamingCapture) -> ListeningServices {
+        TestEnvironment.assertNotUnderTest("ListeningServices.live")
+        return ListeningServices(
+            startCapture: { try capture.start(deliver: $0, interrupted: $1) },
+            stopCapture: { capture.stop() },
+            capturing: { capture.isRunning },
+            openSession: { detection, model in try await ListeningSession.open(model: model, detection: detection) },
+            makePlayer: { url, finished in try capture.player(url, finished: finished) })
     }
 }
 

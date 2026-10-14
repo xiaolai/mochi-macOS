@@ -148,12 +148,12 @@ extension AppModel {
                 if let kept = keepUnsentRecording(audioFile) {
                     error = String(
                         localized:
-                            "Your voice message could not be saved, so it was not sent. Its recording is kept in the data folder as “\(kept)”."
+                            "Your voice message could not be saved, so Mochi did not reply to it. Its recording is kept in the data folder as “\(kept)”."
                     )
                 } else {
                     error = String(
                         localized:
-                            "Your voice message could not be saved, so it was not sent. Check the disk and the data folder, then record it again."
+                            "Your voice message could not be saved, so Mochi did not reply to it. Check the disk and the data folder, then record it again."
                     )
                 }
                 return
@@ -285,14 +285,28 @@ extension AppModel {
             action?()
             return
         }
+        unheardReply = filename
         if let playReply {
             playReply(filename)
             action?()
         } else if let action {
             play(filename, mochi: true, afterPlayback: action, afterPlaybackFailure: action)
+        } else if settings.talkingMode == .pressToSend && settings.listenAfterReply && !listening.isOn,
+            let id = selectedID
+        {
+            play(filename, mochi: true, afterPlayback: { [weak self] in self?.listenAfterReply(in: id) })
         } else {
             play(filename, mochi: true)
         }
+    }
+    /// Start Listening After Mochi Replies, in press to send: the microphone opens as it does after a greeting.
+    private func listenAfterReply(in id: UUID) {
+        // Never unattended: not while the screen is locked, Mochi is hidden, or a sheet or My Expressions covers
+        // the conversation.
+        guard selectedID == id, !practice, !busy, writableConversation, !listening.isOn,
+            settings.talkingMode == .pressToSend, settings.listenAfterReply, listeningBlockers.isEmpty
+        else { return }
+        beginRecording(forMeaning: false, unattended: true)
     }
     private func interruptPendingTranscript(_ messageID: UUID, chatID: UUID) {
         guard
@@ -381,6 +395,11 @@ extension AppModel {
     }
     func toggleConversationVoice() {
         guard !practice, writableConversation, libraryReadable else { return }
+        // Hands-free, the button turns listening on and off; while listening is on it always turns it off.
+        if handsFree || listening.isOn, turn.activity != .recording {
+            toggleListening()
+            return
+        }
         if turn.activity != .recording, !greetingActive, conversation?.characterNameNeedsReview == true {
             error = String(localized: "Review the character name in Conversation Instructions before recording.")
             return
@@ -391,11 +410,16 @@ extension AppModel {
             return
         }
         guard !busy || turn.activity == .recording else { return }
-        guard turn.activity != .recording, let chat = conversation, chat.greetsBeforeRecording, let id = selectedID
-        else {
+        guard turn.activity != .recording, let chat = conversation, chat.greetsBeforeRecording else {
             beginRecording(forMeaning: false)
             return
         }
+        speakGreeting(chat) { [weak self] in self?.beginRecording(forMeaning: false) }
+    }
+    /// Speaks the conversation's greeting, then runs `afterGreeting` if the conversation is still open and writable.
+    /// Hands-free passes nil: listening resumes by itself once the greeting has played.
+    func speakGreeting(_ chat: Conversation, afterGreeting: (() -> Void)?) {
+        let id = chat.id
         let token = turn.begin(.requestingPermission)
         greetingActive = true
         error = nil
@@ -442,6 +466,8 @@ extension AppModel {
                     if let pattern = greeting.pattern { settings.recentGreetings = recent + [pattern] }
                     task = nil
                     _ = turn.finish(generationToken)
+                    // A greeting heard for the first time can be interrupted and cut like any reply.
+                    unheardReply = url.lastPathComponent
                     play(
                         url.lastPathComponent, mochi: true,
                         afterPlayback: { [weak self] in
@@ -449,7 +475,7 @@ extension AppModel {
                                 self.writableConversation
                             else { return }
                             self.greetingActive = false
-                            self.beginRecording(forMeaning: false)
+                            afterGreeting?()
                         })
                 } catch {
                     guard (error as? AppFailure)?.underlying is ReferenceSpeech.Mismatch else {

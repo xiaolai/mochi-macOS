@@ -220,7 +220,7 @@ extension AppModel {
     }
     func exportChats(_ ids: Set<UUID>, json: Bool = false) {
         let count = library.conversations.filter { ids.contains($0.id) }.count
-        guard count > 0, let url = chooseFile(.exportTranscript(count: count, json: json)) else { return }
+        guard count > 0, let url = presentPanel(.exportTranscript(count: count, json: json)) else { return }
         exportChats(ids, json: json, to: url)
     }
     func exportChats(_ ids: Set<UUID>, json: Bool, to url: URL) {
@@ -239,7 +239,7 @@ extension AppModel {
         }
     }
     func exportLibraryBackup() {
-        guard libraryReadable, libraryTransfer == nil, let url = chooseFile(.exportBackup) else { return }
+        guard libraryReadable, libraryTransfer == nil, let url = presentPanel(.exportBackup) else { return }
         exportLibraryBackup(to: url)
     }
     @discardableResult func exportLibraryBackup(to url: URL) -> Task<Void, Never>? {
@@ -262,7 +262,7 @@ extension AppModel {
         }
     }
     func importLibraryBackup() {
-        guard libraryReadable, libraryTransfer == nil, let url = chooseFile(.importBackup) else { return }
+        guard libraryReadable, libraryTransfer == nil, let url = presentPanel(.importBackup) else { return }
         importLibraryBackup(from: url)
     }
     @discardableResult func importLibraryBackup(from url: URL) -> Task<Void, Never>? {

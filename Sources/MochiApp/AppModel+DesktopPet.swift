@@ -61,7 +61,9 @@ extension AppModel {
         switch plan {
         case .workspace: revealWorkspace?()
         case .microphone: toggleConversationVoice()
-        case .pause: audio.togglePause()
+        case .pause:
+            audio.togglePause()
+            if listening.isOn { syncListening() }
         case .busy: break
         }
         return plan
@@ -74,7 +76,22 @@ extension AppModel {
         switch action {
         case .togglePet:
             if pressed { petVisible.toggle() }
+        case .listen:
+            if pressed { toggleListening() }
+        case .sendNow:
+            if pressed { sendNow() }
         case .talk:
+            // Hands-free, Talk to Mochi starts listening instead of recording one message.
+            if handsFree {
+                guard pressed else { return }
+                // Only ever starts: while Mochi plays or thinks, listening starts and waits for it to finish.
+                if !canQuickTalk {
+                    quickTalk()
+                } else if listening.canStart && listeningRequest == nil {
+                    startListening()
+                }
+                return
+            }
             if pressed {
                 let outcome = quickTalk()
                 // A press that asked for the microphone owns that request, including one that skipped the greeting.

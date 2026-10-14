@@ -57,6 +57,21 @@ extension MediaServices {
             meter: { -80 })
     }
 }
+extension ListeningServices {
+    /// Capturing or opening a listening session fails the test; stopping is harmless.
+    static var absent: ListeningServices {
+        ListeningServices(
+            startCapture: { _, _ in
+                XCTFail("Unexpected listening capture: set app.listeningServices")
+                throw AppFailure("No microphone in this test.")
+            },
+            stopCapture: {}, capturing: { false },
+            openSession: { _, _ in
+                XCTFail("Unexpected listening session: set app.listeningServices")
+                throw AppFailure("No listening session in this test.")
+            })
+    }
+}
 /// A player that starts at once and finishes only when the test says so.
 final class TestPlayer: PlaybackPlayer {
     var duration: TimeInterval = 5
@@ -85,13 +100,15 @@ extension XCTestCase {
     @MainActor func makeApp(
         demo: Bool = false, root: URL? = nil, preferences: UserDefaults? = nil,
         speech: SpeechServices = .unexpected, media: MediaServices = .silent,
-        recognition: RecognitionServices = .absent, applicationSupport: URL? = nil
+        recognition: RecognitionServices = .absent, listeningServices: ListeningServices = .absent,
+        applicationSupport: URL? = nil
     ) -> AppModel {
         precondition(root != nil || demo || applicationSupport != nil, "A test must never open the real data folder.")
         let app = AppModel(
             demo: demo, libraryRoot: root ?? (demo ? makeTemporaryFolder() : nil),
             preferences: preferences ?? makePreferences(),
-            speech: speech, media: media, recognition: recognition, applicationSupport: applicationSupport)
+            speech: speech, media: media, recognition: recognition, listeningServices: listeningServices,
+            applicationSupport: applicationSupport)
         app.audio.makePlayer = { _ in
             XCTFail("Unexpected playback: set app.audio.makePlayer")
             throw AppFailure("No speaker in this test.")

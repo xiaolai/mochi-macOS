@@ -74,6 +74,9 @@ import SwiftUI
                     Divider()
                     Button("Start Again", action: model.startAgain).disabled(
                         !model.canStartAgain || model.automationModal)
+                    Button(model.listeningMenuTitle, action: model.toggleListening).disabled(
+                        !model.listening.isOn && !model.canStartListening)
+                    SendNowCommand(app: model)
                     Button("Help Me Say This", action: model.startHelp).keyboardShortcut(
                         "h", modifiers: [.command, .shift]
                     ).disabled(!model.canHelp || model.automationModal)
@@ -98,16 +101,58 @@ import SwiftUI
         /// Development runs perform their scripted actions once per launch.
         var ran = false
     #endif
+    /// Observers that pause hands-free listening while the screen is locked or the workspace is out of sight.
+    private var listeningObservers: [(NotificationCenter, NSObjectProtocol)] = []
     func attachWindow(_ window: NSWindow, model: AppModel) {
         tray.attach(window, model: model)
+        observeListeningConditions(window, model: model)
         #if MOCHI_DEVELOPMENT
             instanceE2E.attach(window, tray: tray)
         #endif
         SingleInstanceController.shared.revealWorkspace = { [weak self] in self?.tray.showWindow() }
     }
+    private func observeListeningConditions(_ window: NSWindow, model: AppModel) {
+        for (center, observer) in listeningObservers { center.removeObserver(observer) }
+        // Each change pauses listening at once, not on the next observation pass, so no queued audio slips through.
+        let hidden = { [weak window, weak model] in
+            // Closed to the menu bar, the window is ordered out: not visible, though neither hidden nor minimized.
+            model?.workspaceHidden =
+                NSApp.isHidden || window.map { $0.isMiniaturized || !$0.isVisible } ?? true
+            model?.refreshListeningConditions()
+        }
+        tray.visibilityChanged = hidden
+        let local = NotificationCenter.default
+        let distributed = DistributedNotificationCenter.default()
+        listeningObservers =
+            [
+                NSApplication.didHideNotification, NSApplication.didUnhideNotification,
+                NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification,
+                // Posted when a window is ordered in or out, including the first time the workspace appears.
+                NSWindow.didChangeOcclusionStateNotification,
+            ].map { name in
+                (
+                    local,
+                    local.addObserver(forName: name, object: nil, queue: .main) { _ in MainActor.assumeIsolated(hidden)
+                    }
+                )
+            }
+            + [("com.apple.screenIsLocked", true), ("com.apple.screenIsUnlocked", false)].map { name, locked in
+                (
+                    distributed,
+                    distributed.addObserver(forName: Notification.Name(name), object: nil, queue: .main) {
+                        [weak model] _ in
+                        MainActor.assumeIsolated {
+                            model?.screenLocked = locked
+                            model?.refreshListeningConditions()
+                        }
+                    }
+                )
+            }
+    }
     func attachModel(_ model: AppModel) {
         guard self.model !== model else { return }
         self.model = model
+        model.listeningIndicator = { [weak self] in self?.tray.showListening($0) }
         model.revealWorkspace = { [weak self] in self?.tray.showWindow() }
         model.configureAutomation()
         model.configureShortcuts()
@@ -124,6 +169,9 @@ import SwiftUI
                 return
             }
             if CommandLine.arguments.contains("--smoke-test") { smoke(model) }
+            if CommandLine.arguments.contains("--hands-free-smoke-test") {
+                if CommandLine.arguments.contains("--barge-in") { smokeBargeIn(model) } else { smokeHandsFree(model) }
+            }
             if CommandLine.arguments.contains("--tray-smoke-test")
                 || CommandLine.arguments.contains("--single-instance-smoke-test")
             {
@@ -201,6 +249,7 @@ enum DevelopmentLaunch {
         #if MOCHI_DEVELOPMENT
             let smoke = [
                 "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "--tools-probe", "--probe",
+                "--hands-free-smoke-test",
             ]
             guard smoke.contains(where: CommandLine.arguments.contains) else { return }
             var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
@@ -213,10 +262,27 @@ enum DevelopmentLaunch {
         #if MOCHI_DEVELOPMENT
             return [
                 "--preview", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "--tools-probe",
-                "--probe",
+                "--probe", "--hands-free-smoke-test",
             ].contains { CommandLine.arguments.contains($0) }
         #else
             return false
         #endif
+    }
+}
+
+/// Send Now, with the shortcut recorded for it in Settings; it works only while Mochi is in front.
+private struct SendNowCommand: View {
+    let app: AppModel
+    var body: some View {
+        // A shortcut with a problem (a number-pad key, a clash) is not installed: the menu would answer other keys.
+        if let shortcut = app.settings.shortcuts[.sendNow], let key = shortcut.keyEquivalent,
+            app.shortcuts.problems[.sendNow] == nil, !Shortcut.keypadKeys.contains(Int(shortcut.keyCode))
+        {
+            Button(ShortcutAction.sendNow.title, action: app.sendNow).keyboardShortcut(
+                key, modifiers: shortcut.eventModifiers
+            ).disabled(!app.canSendNow)
+        } else {
+            Button(ShortcutAction.sendNow.title, action: app.sendNow).disabled(!app.canSendNow)
+        }
     }
 }

@@ -144,7 +144,7 @@ struct KeyboardShortcutsSection: View {
                 for action in ShortcutAction.allCases { app.setShortcut(action.defaultShortcut, for: action) }
             }.disabled(app.settings.shortcuts == ShortcutAction.defaults)
             Text(
-                "These shortcuts work in every app. Press Talk to Mochi once to start a voice message and again to send it, or hold it down while you speak and let go to send."
+                "These shortcuts work in every app, except Send Now, which works while Mochi is in front. Press Talk to Mochi once to start a voice message and again to send it, or hold it down while you speak and let go to send. Hands-free, Talk to Mochi starts listening."
             ).font(.callout).foregroundStyle(.secondary)
             if !app.shortcuts.enabled {
                 Text("Shortcuts are saved but stay off in the preview.").font(.caption).foregroundStyle(.secondary)

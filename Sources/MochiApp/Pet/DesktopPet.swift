@@ -159,7 +159,8 @@ import MochiCore
         let situation = PetSituation(
             activity: model.turn.activity, speaking: model.speaking, paused: model.audio.paused,
             greeting: model.greetingActive, failing: now < failedUntil,
-            arriving: now.timeIntervalSince(arrived) < PetPose.waving.cycle)
+            arriving: now.timeIntervalSince(arrived) < PetPose.waving.cycle,
+            listening: model.listening.microphoneOpen)
         if situation.pose != pose {
             pose = situation.pose
             poseStarted = now

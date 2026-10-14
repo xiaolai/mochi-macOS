@@ -62,10 +62,10 @@ def check_binary(path, *, run=subprocess.run):
 
 
 def validate_distribution_symbols(app_strings, helper_symbols, app_symbols=""):
-    for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "MOCHI_INSTANCE_EVENTS_DIR", "MOCHI_INSTANCE_TEST_ID", "--preview", "native-smoke", "mochi-instance-", "MOCHI_E2E_LIBRARY_ROOT", "mochi.e2e.command", "SingleInstanceE2E", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer", "ComposerGeometryProbe", "mochi-composer-geometry-probe", "ClickProbe", "mochi-phrase-chip-probe"):
+    for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "MOCHI_INSTANCE_EVENTS_DIR", "MOCHI_INSTANCE_TEST_ID", "--preview", "native-smoke", "mochi-instance-", "MOCHI_E2E_LIBRARY_ROOT", "mochi.e2e.command", "SingleInstanceE2E", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer", "ComposerGeometryProbe", "mochi-composer-geometry-probe", "ClickProbe", "mochi-phrase-chip-probe", "--hands-free-smoke-test", "RecordedStreamFeeder"):
         if probe in app_strings:
             raise ValueError("Development probes cannot ship in the distribution app")
-    for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray"):
+    for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray", "smokeHandsFree", "smokeBargeIn"):
         if symbol in app_symbols:
             raise ValueError("Development probe symbols cannot ship in the distribution app")
     for retired in ("OPENAI_API_KEY",):

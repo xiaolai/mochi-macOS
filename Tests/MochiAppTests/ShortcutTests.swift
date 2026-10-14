@@ -70,6 +70,45 @@ final class ShortcutTests: XCTestCase {
         XCTAssertTrue(center.problems.isEmpty, "A removed shortcut leaves no stale problem")
     }
 
+    @MainActor func testSendNowIsNeverRegisteredAsAGlobalShortcut() {
+        let keys = FakeHotKeys()
+        let center = ShortcutCenter(system: keys.system, enabled: true)
+        center.bindings = { ShortcutAction.defaults }
+        center.menuShortcuts = { [(ShortcutAction.sendNow.title, ShortcutAction.sendNow.defaultShortcut)] }
+        center.apply()
+        XCTAssertEqual(
+            Set(keys.registered.values),
+            [ShortcutAction.talk, .togglePet, .listen].map(\.defaultShortcut).reduce(into: Set()) { $0.insert($1) })
+        XCTAssertNil(keys.registered[ShortcutCenter.id(for: .sendNow)])
+        XCTAssertTrue(center.problems.isEmpty, "Send Now's own menu item is not a clash")
+        XCTAssertNil(center.conflict(ShortcutAction.sendNow.defaultShortcut, for: .sendNow))
+        XCTAssertEqual(
+            center.conflict(ShortcutAction.sendNow.defaultShortcut, for: .talk),
+            "Already used for Send Now.", "A global shortcut cannot take Send Now's keys")
+        // A number-pad key would also answer its top-row twin through the menu.
+        let keypadOne = Shortcut(keyCode: UInt16(kVK_ANSI_Keypad1), modifiers: [.option, .command])
+        XCTAssertNotNil(center.conflict(keypadOne, for: .sendNow))
+        XCTAssertNil(center.conflict(keypadOne, for: .talk), "A global hot key tells the keys apart")
+        // Buttons take shortcuts outside the menus too: ⌘Return sends a typed message.
+        XCTAssertEqual(
+            center.conflict(Shortcut(keyCode: UInt16(kVK_Return), modifiers: [.command]), for: .sendNow),
+            "Mochi already uses this shortcut for Send Message.")
+    }
+
+    @MainActor func testASavedNumberPadSendNowShortcutIsReportedAndNotRegistered() {
+        let keys = FakeHotKeys()
+        let center = ShortcutCenter(system: keys.system, enabled: true)
+        let keypadOne = Shortcut(keyCode: UInt16(kVK_ANSI_Keypad1), modifiers: [.option, .command])
+        var bindings = ShortcutAction.defaults
+        bindings[.sendNow] = keypadOne
+        center.bindings = { bindings }
+        center.menuShortcuts = { [] }
+        center.apply()
+        XCTAssertNotNil(center.problems[.sendNow], "Shown in Settings so the learner can choose another key")
+        XCTAssertFalse(keys.registered.values.contains(keypadOne))
+        XCTAssertNil(center.problems[.talk])
+    }
+
     @MainActor func testRecordingSuspendsEveryShortcutAndRestoresThem() {
         let keys = FakeHotKeys()
         let center = ShortcutCenter(system: keys.system, enabled: true)
@@ -174,13 +213,17 @@ final class ShortcutTests: XCTestCase {
         let defaults = makePreferences()
         let talk = Shortcut(keyCode: UInt16(kVK_ANSI_M), modifiers: [.control, .option, .command])
         let pet = Shortcut(keyCode: UInt16(kVK_ANSI_H), modifiers: [.control, .option, .command])
+        let listen = Shortcut(keyCode: UInt16(kVK_ANSI_L), modifiers: [.control, .option, .command])
+        let sendNow = Shortcut(keyCode: UInt16(kVK_Return), modifiers: [.option, .command])
         let first = PreferencesStore(defaults, importLegacy: false, allowExternalControl: false)
-        XCTAssertEqual(first.shortcuts, [.talk: talk, .togglePet: pet])
+        XCTAssertEqual(first.shortcuts, [.talk: talk, .togglePet: pet, .listen: listen, .sendNow: sendNow])
         XCTAssertEqual(first.shortcuts, ShortcutAction.defaults)
         first.shortcuts[.talk] = optionCommandM
         first.shortcuts[.togglePet] = nil
         let second = PreferencesStore(defaults, importLegacy: false, allowExternalControl: false)
-        XCTAssertEqual(second.shortcuts, [.talk: optionCommandM], "A removed shortcut does not come back")
+        XCTAssertEqual(
+            second.shortcuts, [.talk: optionCommandM, .listen: listen, .sendNow: sendNow],
+            "A removed shortcut does not come back")
         second.shortcuts = ShortcutAction.defaults
         XCTAssertNil(defaults.object(forKey: ShortcutAction.talk.preferenceKey), "Defaults are not stored")
         XCTAssertNil(defaults.object(forKey: ShortcutAction.togglePet.preferenceKey))

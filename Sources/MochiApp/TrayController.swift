@@ -24,6 +24,8 @@ import SwiftUI
     private weak var previousDelegate: NSWindowDelegate?
     private weak var model: AppModel?
     private(set) var petItem: NSMenuItem?
+    /// Told when the workspace window is ordered out or shown here, which posts no notification of its own.
+    var visibilityChanged: (() -> Void)?
 
     func install() {
         guard statusItem == nil else { return }
@@ -97,12 +99,14 @@ import SwiftUI
         guard sender === window else { return true }
         guard finishWork() else { return false }
         sender.orderOut(nil)
+        visibilityChanged?()
         return false
     }
 
     @objc func closeToTray() {
         guard finishWork() else { return }
         window?.orderOut(nil)
+        visibilityChanged?()
         // Hide settings and attached panels too, while retaining the status item.
         NSApp.hide(nil)
         NSApp.setActivationPolicy(.accessory)
@@ -132,6 +136,7 @@ import SwiftUI
         NSApp.unhide(nil)
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
+        visibilityChanged?()
         // Since macOS 14, activation is cooperative: the request is honoured when it follows the user's own input,
         // such as a click on the menu bar icon or the desktop Mochi, whose window never activates the app itself.
         NSApp.activate()
@@ -155,6 +160,25 @@ import SwiftUI
         if previousDelegate?.responds(to: selector) == true { return previousDelegate }
         return super.forwardingTarget(for: selector)
     }
+
+    /// Shows in the menu bar whether hands-free listening has the microphone open.
+    func showListening(_ listening: Bool) {
+        guard let button = statusItem?.button, (button.image === Self.listeningIcon) != listening else { return }
+        button.image = listening ? Self.listeningIcon : Self.icon()
+        button.setAccessibilityLabel(listening ? String(localized: "Mochi · listening") : "Mochi")
+    }
+    /// The icon with a dot beside it while Mochi is listening.
+    static let listeningIcon: NSImage = {
+        let base = icon()
+        let image = NSImage(size: NSSize(width: 24, height: 18), flipped: true) { _ in
+            base.draw(in: NSRect(x: 0, y: 0, width: 20, height: 18))
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: NSRect(x: 18, y: 1, width: 6, height: 6)).fill()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }()
 
     /// Mochi contour only, drawn as a template so macOS supplies the menu-bar color.
     static func icon() -> NSImage {

@@ -6,6 +6,7 @@ import MochiKernel
 extension AppModel {
     var microphoneLabel: String {
         if turn.activity == .recording { return String(localized: "Finish Recording") }
+        if handsFree || listening.isOn { return listeningMenuTitle }
         if greetingActive { return String(localized: "Skip Greeting and Start Recording") }
         return conversation?.greetsBeforeRecording == false
             ? String(localized: "Record Voice Message") : String(localized: "Start Voice Conversation")
@@ -18,6 +19,8 @@ extension AppModel {
     func togglePlayback(_ file: String, mochi: Bool = false) {
         if playbackFile == file && turn.activity == .playing {
             audio.togglePause()
+            // A paused reply does not keep the listening microphone open.
+            if listening.isOn { syncListening() }
             return
         }
         play(file, mochi: mochi)
@@ -26,6 +29,7 @@ extension AppModel {
     /// recordings and the Help draft alone.
     func stopPlayback() {
         guard turn.activity == .playing else { return }
+        unheardReply = nil
         deferredToolAction = nil
         greetingActive = false
         audio.stop()
@@ -35,6 +39,8 @@ extension AppModel {
     }
     func seekPlayback(_ file: String, to seconds: Double, mochi: Bool = false) {
         guard seconds.isFinite else { return }
+        // Once the learner moves around in a reply, how far it played no longer says how much of it was heard.
+        if file == unheardReply { unheardReply = nil }
         if playbackFile != file { play(file, mochi: mochi) }
         guard playbackFile == file else { return }
         audio.seek(to: seconds)
@@ -45,12 +51,14 @@ extension AppModel {
     ) {
         guard !busy || turn.activity == .playing else { return }
         if afterPlayback == nil { greetingActive = false }
+        if file != unheardReply { unheardReply = nil }
         audio.stop()
         playbackFile = nil
         let token = turn.begin(.playing)
         speaking = mochi
         let finished: () -> Void = { [weak self] in
             guard let self, self.turn.epoch == token else { return }
+            if self.unheardReply == file { self.unheardReply = nil }
             self.playbackFile = nil
             self.speaking = false
             _ = self.turn.finish(token)
@@ -73,6 +81,8 @@ extension AppModel {
                     afterPlayback?()
                 })
             playbackFile = file
+            // Whether the learner can interrupt depends on where the audio now plays, known only from here.
+            if listening.isOn { syncListening() }
         } catch {
             playbackFile = nil
             fail(error, token: token, context: "Play audio", settingsTab: settingsTab)
@@ -90,10 +100,16 @@ extension AppModel {
     var canRecordAttempt: Bool { !help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     func toggleRecord() {
         guard practice || writableConversation else { return }
+        if practice && (handsFree || listening.isOn) && turn.activity != .recording {
+            toggleListening()
+            return
+        }
         guard !practice || turn.activity == .recording || canRecordAttempt else { return }
         beginRecording(forMeaning: false)
     }
-    func beginRecording(forMeaning: Bool) {
+    /// `unattended` recordings start without a press, so they re-check the listening blockers once permission is
+    /// granted: the screen may have locked or Mochi been hidden while it was asked for.
+    func beginRecording(forMeaning: Bool, unattended: Bool = false) {
         if turn.activity == .recording {
             finishRecording()
             return
@@ -102,9 +118,19 @@ extension AppModel {
         recordingMeaning = forMeaning
         if practice && !recordingMeaning { ensureExpression() }
         let token = turn.begin(.requestingPermission)
+        let origin = selectedID
         task = Task {
             let allowed = await media.permission()
             guard !Task.isCancelled, turn.epoch == token else { return }
+            // Everything that allowed it to start by itself must still hold once permission is granted.
+            if unattended
+                && (!listeningBlockers.isEmpty || !settings.listenAfterReply || settings.talkingMode != .pressToSend
+                    || listening.isOn || selectedID != origin)
+            {
+                recordingMeaning = false
+                _ = turn.finish(token)
+                return
+            }
             guard allowed else {
                 recordingMeaning = false
                 _ = turn.finish(token)
@@ -125,6 +151,7 @@ extension AppModel {
                 _ = turn.finish(token)
                 _ = turn.startRecording()
                 recordingRequest = token
+                unattendedRecording = unattended ? token : nil
                 recordingSeconds = 0
                 lastAudibleRecordingTime = 0
                 recordingWarning = nil
@@ -186,6 +213,16 @@ extension AppModel {
         )
     }
     func finishRecording() {
+        // A recording that started by itself is never sent from behind a sheet, a lock or a hidden window, even when
+        // it finishes before any observer has seen the change.
+        if let unattended = unattendedRecording, recordingRequest == unattended, turn.activity == .recording,
+            !listeningBlockers.isEmpty
+        {
+            unattendedRecording = nil
+            MochiLog.audio.notice("Discarded the recording that started after a reply: Mochi was covered or hidden")
+            cancelRecording()
+            return
+        }
         // A recorder that already stopped (time limit, disconnect, failure) is judged by its reported outcome,
         // never by elapsed time; Finish can be pressed before that outcome or the clock's next tick arrives.
         if turn.activity == .recording, !media.recordingActive() {
@@ -265,7 +302,7 @@ extension AppModel {
                 notice = String(localized: "Your thought is recorded locally. Listen, then choose Transcribe.")
             })
     }
-    private func finishPracticeAttempt(_ url: URL) {
+    func finishPracticeAttempt(_ url: URL) {
         runExclusive("Analyse practice attempt") { [weak self] job in
             guard let self else { return }
             guard
@@ -278,6 +315,9 @@ extension AppModel {
                 removeUnreferencedRecording(url.lastPathComponent)
                 return
             }
+            // Editing the sentence drops its expression; the take belongs to the sentence practised now. Hands-free
+            // listening goes on across the edit, so this is the ordinary case there, not a corner one.
+            ensureExpression()
             help.expression?.attempts.append(Attempt(file: url.lastPathComponent))
             help.attemptPitch = pitch
             help.attemptCheck = .none

@@ -58,11 +58,13 @@ struct HotKeySystem {
         var problems: [ShortcutAction: String] = [:]
         if !suspended {
             for (action, shortcut) in bindings() {
-                // A shortcut that was free when recorded can clash later, after a layout or menu change.
+                // A shortcut that was free when recorded can clash later, after a layout or menu change. App-only
+                // shortcuts are checked too, as one saved by an earlier version may be one menus cannot hold.
                 if let conflict = conflict(shortcut, for: action) {
                     problems[action] = conflict
                     continue
                 }
+                guard action.isGlobal else { continue }
                 let status = system.register(shortcut, Self.id(for: action))
                 guard status != noErr else { continue }
                 problems[action] =
@@ -81,11 +83,22 @@ struct HotKeySystem {
     /// Why `shortcut` cannot be used for `action`, or nil when it can.
     func conflict(_ shortcut: Shortcut, for action: ShortcutAction) -> String? {
         if let problem = shortcut.problem { return problem }
+        // An app-only shortcut works through its menu item, which would also answer the top-row key.
+        if !action.isGlobal && Shortcut.keypadKeys.contains(Int(shortcut.keyCode)) {
+            return String(
+                localized: "Menus can’t tell number-pad keys from the same keys above the letters. Choose another key.")
+        }
         if let other = bindings().first(where: { $0.key != action && $0.value == shortcut })?.key {
             return String(localized: "Already used for \(other.title).")
         }
         if system.reserved().contains(shortcut) { return String(localized: "macOS already uses this shortcut.") }
-        if let command = menuShortcuts().first(where: { $0.shortcut == shortcut }) {
+        // An app-only action's own menu item carries its shortcut; that is not a clash.
+        if let command = Self.viewShortcuts().first(where: { $0.shortcut == shortcut }) {
+            return String(localized: "Mochi already uses this shortcut for \(command.title).")
+        }
+        if let command = menuShortcuts().first(where: {
+            $0.shortcut == shortcut && (action.isGlobal || $0.title != action.title)
+        }) {
             return String(localized: "Mochi already uses this shortcut for \(command.title).")
         }
         return nil
@@ -97,6 +110,14 @@ struct HotKeySystem {
     static func action(for id: UInt32) -> ShortcutAction? {
         let index = Int(id) - 1
         return ShortcutAction.allCases.indices.contains(index) ? ShortcutAction.allCases[index] : nil
+    }
+
+    /// Shortcuts that buttons in Mochi's windows take, outside any menu.
+    static func viewShortcuts() -> [(title: String, shortcut: Shortcut)] {
+        let commandReturn = Shortcut(keyCode: UInt16(kVK_Return), modifiers: [.command])
+        return [
+            (String(localized: "Send Message"), commandReturn), (String(localized: "Find the Words"), commandReturn),
+        ]
     }
 
     /// The key equivalents in Mochi's menus, as shortcuts on the current keyboard layout.

@@ -22,6 +22,11 @@ extension AVAudioPlayer: PlaybackPlayer {}
     @ObservationIgnored private var recorder: AVAudioRecorder?
     @ObservationIgnored private var player: (any PlaybackPlayer)?
     @ObservationIgnored var makePlayer: (URL) throws -> any PlaybackPlayer = { try AVAudioPlayer(contentsOf: $0) }
+    /// Consulted first: a player for audio that must play somewhere other than `makePlayer`'s, or nil.
+    @ObservationIgnored var routedPlayer: ((URL) throws -> (any PlaybackPlayer)?)?
+    /// True while the audio playing came from `routedPlayer`.
+    @ObservationIgnored private(set) var playingRouted = false
+    @ObservationIgnored private var playingURL: URL?
     @ObservationIgnored private var completion: (() -> Void)?
     @ObservationIgnored private var failure: (() -> Void)?
     /// Set when the recorder reports an error or the microphone it started on disconnects.
@@ -100,7 +105,10 @@ extension AVAudioPlayer: PlaybackPlayer {}
     }
     func play(url: URL, rate: Float = 1, failed: (() -> Void)? = nil, completed: @escaping () -> Void) throws {
         stop()
-        let p = try makePlayer(url)
+        let routed = try routedPlayer?(url)
+        let p = try routed ?? makePlayer(url)
+        playingRouted = routed != nil
+        playingURL = url
         (p as? AVAudioPlayer)?.delegate = self
         p.enableRate = true
         p.rate = rate
@@ -121,6 +129,8 @@ extension AVAudioPlayer: PlaybackPlayer {}
             }
         }
     }
+    /// The playing position now, read from the player rather than the 100 ms clock.
+    var elapsed: Double { player?.currentTime ?? position }
     func togglePause() {
         guard let player else { return }
         if paused {
@@ -142,7 +152,33 @@ extension AVAudioPlayer: PlaybackPlayer {}
         player.currentTime = min(max(0, seconds), player.duration)
         position = player.currentTime
     }
+    /// Moves routed audio to `makePlayer`'s player at the same position, paused if it was, with the same completion,
+    /// so whatever the routed player held (the listening microphone's engine) can be let go.
+    func moveToOrdinaryPlayer() {
+        guard playingRouted, let routed = player, let url = playingURL else { return }
+        let time = routed.currentTime
+        playingRouted = false
+        do {
+            let ordinary = try makePlayer(url)
+            (ordinary as? AVAudioPlayer)?.delegate = self
+            ordinary.enableRate = true
+            ordinary.rate = routed.rate
+            ordinary.currentTime = time
+            // Swapped before the routed player stops, so nothing it reports late is taken for this playback.
+            player = ordinary
+            routed.stop()
+            guard paused || ordinary.play() else { throw AppFailure("This audio file could not be played.") }
+        } catch {
+            MochiLog.failure(MochiLog.audio, "Move playback off the listening engine", error)
+            routed.stop()
+            let callback = failure ?? completion
+            stop()
+            callback?()
+        }
+    }
     private func resetPlayback() {
+        playingRouted = false
+        playingURL = nil
         playbackClock?.cancel()
         playbackClock = nil
         position = 0

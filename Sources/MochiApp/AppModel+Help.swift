@@ -245,7 +245,7 @@ extension AppModel {
     }
     var canImportReference: Bool { !busy && !help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     func importReference() {
-        guard canImportReference, let source = chooseFile(.importReference) else { return }
+        guard canImportReference, let source = presentPanel(.importReference) else { return }
         importReference(from: source)
     }
     func importReference(from source: URL) {

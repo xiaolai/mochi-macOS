@@ -410,12 +410,16 @@ struct WorkspaceView: View {
             phraseChips
             HStack(alignment: .bottom, spacing: 12) {
                 Button(action: app.toggleConversationVoice) {
-                    Image(systemName: app.turn.activity == .recording ? "stop.circle.fill" : "mic.fill")
-                        .font(.system(size: 18))
+                    Image(
+                        systemName: app.turn.activity == .recording
+                            ? "stop.circle.fill" : app.listeningSymbol ?? "mic.fill"
+                    )
+                    .font(.system(size: 18))
                 }.buttonStyle(.borderless)
                     .help(app.microphoneLabel)
                     .accessibilityLabel(app.microphoneLabel)
-                    .disabled(app.busy && app.turn.activity != .recording && !app.greetingActive)
+                    .disabled(
+                        app.busy && app.turn.activity != .recording && !app.greetingActive && !app.listening.isOn)
                 Button(action: app.startHelp) {
                     Image(systemName: "waveform.badge.plus").font(.system(size: 18))
                 }.buttonStyle(.borderless)
@@ -445,12 +449,14 @@ struct WorkspaceView: View {
             .padding(12)
             .fieldFrame(cornerRadius: 24, focused: composerFocused)
             if app.turn.activity == .recording { RecordingFeedback(app: app) }
+            if app.listening.isOn { SendNowButton(app: app) }
             HStack(spacing: 5) {
                 if app.turn.activity == .generating || app.turn.activity == .requestingPermission {
                     ProgressView().controlSize(.mini)
                 } else {
-                    Image(systemName: app.turn.activity == .recording ? "record.circle" : "mic.slash").foregroundStyle(
-                        app.turn.activity == .recording ? .red : .secondary)
+                    let open = app.turn.activity == .recording || app.listening.microphoneOpen
+                    Image(systemName: app.turn.activity == .recording ? "record.circle" : open ? "ear" : "mic.slash")
+                        .foregroundStyle(open ? .red : .secondary)
                 }
                 Text(app.status).lineLimit(1)
                 Spacer(minLength: 4)
@@ -630,16 +636,40 @@ struct PracticeActions: View {
         }
     }
 }
+/// Ends the spoken turn at once. Shown while hands-free listening is on: Mochi can judge a pause mid-sentence as the
+/// end of a turn, or wait at the end of one, and this is the learner's own say (plan E5).
+struct SendNowButton: View {
+    @Bindable var app: AppModel
+    var body: some View {
+        Button(action: app.sendNow) {
+            Label(ShortcutAction.sendNow.title, systemImage: "paperplane")
+        }
+        .controlSize(.small)
+        .disabled(!app.canSendNow)
+        .help(
+            app.settings.shortcuts[.sendNow].map { Text("Send what you have said now (\($0.display))") }
+                ?? Text("Send what you have said now")
+        )
+        .accessibilityIdentifier("send-now")
+    }
+}
 /// Records an attempt and replays the latest one; shared by practice and review.
 struct AttemptControls: View {
     @Bindable var app: AppModel
     var body: some View {
         let recording = app.turn.activity == .recording
-        Button(action: app.toggleRecord) {
-            Label(
-                recording ? "Finish (\(app.recordingSeconds)s)" : "Record Attempt",
-                systemImage: recording ? "stop.fill" : "mic")
-        }.disabled(!recording && (app.busy || !app.canRecordAttempt))
+        if !recording && (app.handsFree || app.listening.isOn) {
+            Button(action: app.toggleRecord) {
+                Label(app.listeningMenuTitle, systemImage: app.listeningSymbol ?? "ear")
+            }.disabled(!app.listening.isOn && !app.canStartListening)
+            if app.listening.isOn { SendNowButton(app: app) }
+        } else {
+            Button(action: app.toggleRecord) {
+                Label(
+                    recording ? "Finish (\(app.recordingSeconds)s)" : "Record Attempt",
+                    systemImage: recording ? "stop.fill" : "mic")
+            }.disabled(!recording && (app.busy || !app.canRecordAttempt))
+        }
         if let file = app.help.expression?.attempts.last?.file {
             Button {
                 app.play(file)
