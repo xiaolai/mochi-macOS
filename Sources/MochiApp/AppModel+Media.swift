@@ -86,8 +86,11 @@ extension AppModel {
         }
         beginRecording(forMeaning: true)
     }
+    /// Practice records an attempt only at a sentence to practise.
+    var canRecordAttempt: Bool { !help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     func toggleRecord() {
         guard practice || writableConversation else { return }
+        guard !practice || turn.activity == .recording || canRecordAttempt else { return }
         beginRecording(forMeaning: false)
     }
     func beginRecording(forMeaning: Bool) {
@@ -229,12 +232,13 @@ extension AppModel {
                 work.cancel()
             }
         } catch {
-            removeUnreferencedRecording(url.lastPathComponent)
+            // A superseded job cleans up quietly, so it cannot replace the current operation's error.
+            removeUnreferencedRecording(url.lastPathComponent, reportsFailure: job.isCurrent())
             guard job.isCurrent() else { return nil }
             throw AppFailure(verbatim: AppFailure.message(for: error, fallback: fallback), underlying: error)
         }
         guard job.isCurrent() else {
-            removeUnreferencedRecording(url.lastPathComponent)
+            removeUnreferencedRecording(url.lastPathComponent, reportsFailure: false)
             return nil
         }
         return value
@@ -269,6 +273,11 @@ extension AppModel {
                     url, job: job, fallback: "This attempt could not be read. Record it again.",
                     { try AudioFile.pitch($0) })
             else { return }
+            // The sentence was cleared while recording: there is no expression to keep the take in.
+            guard canRecordAttempt else {
+                removeUnreferencedRecording(url.lastPathComponent)
+                return
+            }
             help.expression?.attempts.append(Attempt(file: url.lastPathComponent))
             help.attemptPitch = pitch
             help.attemptCheck = .none

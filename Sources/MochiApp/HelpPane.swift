@@ -91,7 +91,7 @@ struct PracticePane: View {
                         ProgressView().controlSize(.small)
                         Text(app.help.progress ?? app.status).font(.callout)
                         Spacer()
-                        Button("Cancel", action: app.cancelHelpWork)
+                        Button("Cancel") { app.cancelHelpWork() }
                     }
                 }
             }
@@ -197,55 +197,63 @@ struct PracticePane: View {
                     Button("Review the Words", action: app.reviewEnglish).disabled(app.busy)
                 }
             }
-            if let file = app.help.thoughtRecording {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recorded thought · saved on this Mac").font(.caption).foregroundStyle(.secondary)
-                    HStack {
-                        Button {
-                            app.play(file)
-                        } label: {
-                            Label("Listen", systemImage: "play.fill")
-                        }.disabled(app.busy)
-                        Button("Transcribe", action: app.transcribeThought).disabled(app.busy)
-                        Spacer()
-                        Button("Discard recording", action: app.discardThoughtRecording).disabled(app.busy)
-                    }
-                    if let warning = app.recordingWarning {
-                        Label(warning, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
-                    }
-                    Text(
-                        "Transcribe sends this recording to OpenAI. Check the words before finding the right ones to say."
-                    ).font(
-                        .caption
-                    ).foregroundStyle(.secondary)
-                }.padding(12).background(
-                    Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-            }
-            if let recognized = app.help.recognizedThought {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recognized words").font(.headline)
-                    Text(recognized).textSelection(.enabled)
-                    Text("Your typed thought is kept. Choose how to use these words.").font(.caption).foregroundStyle(
-                        .secondary)
-                    HStack {
-                        Button("Add to thought") { app.useRecognizedThought(replace: false) }
-                        Button("Replace thought") { app.useRecognizedThought(replace: true) }
-                        Button("Keep typed thought") { app.help.recognizedThought = nil }
-                    }.disabled(app.busy)
-                }.padding(12).background(
-                    Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10)
-                ).id("recognized-thought")
-            }
-            DisclosureGroup("I already have a sentence in \(app.languageName)") {
-                HStack {
-                    TextField("Sentence in \(app.languageName)", text: $directEnglish).textFieldStyle(.roundedBorder)
-                        .disabled(
-                            app.busy)
-                    Button("Review") { app.editEnglish(directEnglish.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                        .disabled(app.busy || directEnglish.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }.padding(.top, 8)
-            }.font(.callout)
+            if let file = app.help.thoughtRecording { thoughtRecordingCard(file) }
+            if let recognized = app.help.recognizedThought { recognizedThoughtCard(recognized) }
+            directSentence
         }
+    }
+    /// A recorded thought, kept on this Mac until it is transcribed or discarded.
+    private func thoughtRecordingCard(_ file: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Recorded thought · saved on this Mac").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button {
+                    app.play(file)
+                } label: {
+                    Label("Listen", systemImage: "play.fill")
+                }.disabled(app.busy)
+                Button("Transcribe", action: app.transcribeThought).disabled(app.busy)
+                Spacer()
+                Button("Discard recording", action: app.discardThoughtRecording).disabled(app.busy)
+            }
+            if let warning = app.recordingWarning {
+                Label(warning, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+            }
+            Text(
+                "Transcribe sends this recording to OpenAI. Check the words before finding the right ones to say."
+            ).font(
+                .caption
+            ).foregroundStyle(.secondary)
+        }.padding(12).background(
+            Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+    }
+    /// The words recognised in a recorded thought, offered alongside the typed thought.
+    private func recognizedThoughtCard(_ recognized: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Recognized words").font(.headline)
+            Text(recognized).textSelection(.enabled)
+            Text("Your typed thought is kept. Choose how to use these words.").font(.caption).foregroundStyle(
+                .secondary)
+            HStack {
+                Button("Add to thought") { app.useRecognizedThought(replace: false) }
+                Button("Replace thought") { app.useRecognizedThought(replace: true) }
+                Button("Keep typed thought") { app.help.recognizedThought = nil }
+            }.disabled(app.busy)
+        }.padding(12).background(
+            Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10)
+        ).id("recognized-thought")
+    }
+    /// A sentence the learner already has, reviewed without translating a thought.
+    private var directSentence: some View {
+        DisclosureGroup("I already have a sentence in \(app.languageName)") {
+            HStack {
+                TextField("Sentence in \(app.languageName)", text: $directEnglish).textFieldStyle(.roundedBorder)
+                    .disabled(
+                        app.busy)
+                Button("Review") { app.editEnglish(directEnglish.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                    .disabled(app.busy || directEnglish.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }.padding(.top, 8)
+        }.font(.callout)
     }
     private var englishReview: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -275,22 +283,36 @@ struct PracticePane: View {
     /// Review asks for the expression before showing it.
     private var reviewPrompt: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("How would you say this in \(app.languageName)?").font(.headline)
+            Text("How would you say this in \(app.practiceLanguageName)?").font(.headline)
             Text(
                 app.help.meaning.isEmpty
                     ? "No meaning was saved with this expression. Reveal it, listen, then say it."
                     : "Say it aloud, recording it if you like, then reveal it to compare."
             ).font(.callout).foregroundStyle(.secondary)
         }
+        #if MOCHI_DEVELOPMENT
+            .background(ClickProbe("mochi-review-prompt-probe"))
+        #endif
     }
     private var practiceDetails: some View {
         VStack(alignment: .leading, spacing: 12) {
             if app.help.review != nil {
                 Text(verbatim: app.help.english).font(.title3).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    #if MOCHI_DEVELOPMENT
+                        .background(ClickProbe("mochi-review-words-probe"))
+                    #endif
             } else {
-                englishEditor("Sentence in \(app.languageName)", lines: 2...4)
+                englishEditor("Sentence in \(app.practiceLanguageName)", lines: 2...4)
             }
+            referenceControls
+            if app.help.attemptCheck != .none { AttemptCheckView(app: app) }
+            pitchComparison
+        }
+    }
+    /// The example voice, the saved example and the ways to make or replace it.
+    private var referenceControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
             DisclosureGroup("Example voice: \(app.settings.practiceVoiceLabel)", isExpanded: $voiceDetailsOpen) {
                 VStack(alignment: .leading, spacing: 10) {
                     PracticeVoiceControls(app: app).disabled(app.busy)
@@ -323,38 +345,40 @@ struct PracticePane: View {
                     Label("Reference Options", systemImage: "ellipsis")
                 }.menuStyle(.borderlessButton).fixedSize().disabled(app.busy)
             }
-            if app.help.attemptCheck != .none { AttemptCheckView(app: app) }
-            DisclosureGroup("Compare pitch · unscored", isExpanded: $pitchOpen) {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 14) {
-                            Label("Reference", systemImage: "minus").foregroundStyle(Color.accentColor)
-                            Label("Your attempt", systemImage: "minus").foregroundStyle(.orange)
-                            Spacer()
-                            Text(app.demo ? "Illustrative preview" : "Unscored").foregroundStyle(.secondary)
-                        }.font(.caption)
-                        if !app.help.referencePitch.isEmpty || !app.help.attemptPitch.isEmpty {
-                            PitchChart(
-                                reference: app.help.referencePitch, attempt: app.help.attemptPitch,
-                                normalized: normalized,
-                                smoothed: smoothPitch
-                            ).frame(height: 150)
-                        } else {
-                            Text("Add a reference and record an attempt to compare pitch.")
-                                .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 85)
-                        }
-                        HStack {
-                            Text("Semitones · seconds").foregroundStyle(.secondary)
-                            Spacer()
-                            Toggle("Smooth curves", isOn: $smoothPitch).toggleStyle(.checkbox)
-                                .help("Light display smoothing; turn off to inspect original pitch samples")
-                            Toggle("Center each voice", isOn: $normalized).toggleStyle(.checkbox)
-                        }.font(.caption)
-                    }.padding(6)
-                }
-                Text("Contours are not word-aligned. Gaps represent unvoiced sound.")
-                    .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+    /// The reference and attempt pitch contours, side by side and unscored.
+    private var pitchComparison: some View {
+        DisclosureGroup("Compare pitch · unscored", isExpanded: $pitchOpen) {
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 14) {
+                        Label("Reference", systemImage: "minus").foregroundStyle(Color.accentColor)
+                        Label("Your attempt", systemImage: "minus").foregroundStyle(.orange)
+                        Spacer()
+                        Text(app.demo ? "Illustrative preview" : "Unscored").foregroundStyle(.secondary)
+                    }.font(.caption)
+                    if !app.help.referencePitch.isEmpty || !app.help.attemptPitch.isEmpty {
+                        PitchChart(
+                            reference: app.help.referencePitch, attempt: app.help.attemptPitch,
+                            normalized: normalized,
+                            smoothed: smoothPitch
+                        ).frame(height: 150)
+                    } else {
+                        Text("Add a reference and record an attempt to compare pitch.")
+                            .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 85)
+                    }
+                    HStack {
+                        Text("Semitones · seconds").foregroundStyle(.secondary)
+                        Spacer()
+                        Toggle("Smooth curves", isOn: $smoothPitch).toggleStyle(.checkbox)
+                            .help("Light display smoothing; turn off to inspect original pitch samples")
+                        Toggle("Center each voice", isOn: $normalized).toggleStyle(.checkbox)
+                    }.font(.caption)
+                }.padding(6)
             }
+            Text("Contours are not word-aligned. Gaps represent unvoiced sound.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }

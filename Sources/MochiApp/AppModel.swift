@@ -87,8 +87,6 @@ struct MessageDeletionUndo {
     @ObservationIgnored var speech: SpeechServices
     @ObservationIgnored var media: MediaServices
     @ObservationIgnored var recognition: RecognitionServices
-    /// Start Again messages sent since launch, so retrying one sends the same history.
-    @ObservationIgnored var restartMessageIDs: Set<UUID> = []
     @ObservationIgnored var playReply: ((String) -> Void)?
     /// Writes a reply's audio file; replaceable so a failed audio write can be tested while the library still saves.
     @ObservationIgnored var writeReplyAudio: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
@@ -245,16 +243,20 @@ struct MessageDeletionUndo {
         } else if library.conversations.isEmpty && libraryReadable {
             library.conversations = [freshConversation()]
         }
+        restoreSelection()
+        // A first launch writes its library at once, so the data folder never holds only caches.
+        if libraryReadable && !demo && !FileManager.default.fileExists(atPath: store.file.path) { save() }
+    }
+    /// Selects the library's saved conversation (or the first active one), shows the list it is in, and restores its draft.
+    private func restoreSelection() {
         selectedID =
             library.selectedConversationID.flatMap { id in
                 library.conversations.contains(where: { $0.id == id }) ? id : nil
             } ?? library.history(in: .active).first?.id
         if let chat = conversation {
             history.scope = chat.isDeleted ? .deleted : chat.archived ? .archived : .active
-            draft = chat.draft
         }
-        // A first launch writes its library at once, so the data folder never holds only caches.
-        if libraryReadable && !demo && !FileManager.default.fileExists(atPath: store.file.path) { save() }
+        draft = conversation?.draft ?? ""
     }
     @discardableResult func save() -> Bool { libraryController.save() }
     func scheduleSave() { libraryController.scheduleSave() }
@@ -269,14 +271,7 @@ struct MessageDeletionUndo {
             guard libraryReadable else { return }
             error = nil
             if library.conversations.isEmpty { library.conversations = [freshConversation()] }
-            selectedID =
-                library.selectedConversationID.flatMap { id in
-                    library.conversations.contains(where: { $0.id == id }) ? id : nil
-                } ?? library.history(in: .active).first?.id
-            if let chat = conversation {
-                history.scope = chat.isDeleted ? .deleted : chat.archived ? .archived : .active
-            }
-            draft = conversation?.draft ?? ""
+            restoreSelection()
             notice = String(
                 localized: "Restored the earlier copy of your library. The unreadable file was kept in the data folder."
             )
@@ -323,13 +318,15 @@ struct MessageDeletionUndo {
         _ = cancelTurn()
     }
     /// Unlike Stop, leaves transcriptions running and does not force a save.
-    func cancelHelpWork() {
+    /// Ends work in progress and keeps the help draft; returns whether a draft was saved.
+    @discardableResult func cancelHelpWork() -> Bool {
         if !practice && task != nil && turn.activity == .generating {
             notice = String(localized: "Your pending reply was cancelled. You can retry it when you return.")
         }
         let recording = cancelTurn()
-        persistHelpDraft()
+        let kept = persistHelpDraft()
         removeUnreferencedRecording(recording?.lastPathComponent)
+        return kept
     }
     /// Ends whatever owns the turn and returns the unfinished recording, if any, for the caller to discard.
     private func cancelTurn() -> URL? {
@@ -406,11 +403,13 @@ struct MessageDeletionUndo {
         if task == owned.task { task = nil }
         exclusiveTask = nil
     }
-    func removeUnreferencedRecording(_ name: String?) {
+    /// Deletes a recording nothing refers to. A failure is logged, and shown unless `reportsFailure` is false.
+    func removeUnreferencedRecording(_ name: String?, reportsFailure: Bool = true) {
         do {
             try libraryController.removeUnreferencedRecording(name, protected: messageDeletionUndo?.message.audio)
         } catch {
             MochiLog.failure(MochiLog.library, "Remove discarded recording", error, level: .info)
+            guard reportsFailure else { return }
             self.error = String(
                 localized: "Could not remove the discarded recording. Reveal the data folder in Settings to review it.")
         }

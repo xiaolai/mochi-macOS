@@ -497,40 +497,49 @@ struct WorkspaceView: View {
                     "No Saved Expressions", systemImage: "bookmark",
                     description: Text("Save an expression while practising to return to it here."))
             } else {
-                List {
-                    reviewBanner
-                    ForEach(app.library.expressions) { expression in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(expression.english).font(.body)
-                                if !expression.meaning.isEmpty {
-                                    Text(expression.meaning).font(.callout).foregroundStyle(.secondary)
-                                }
-                                Text("\(expression.attempts.count) attempts · \(Self.reviewLabel(expression.review))")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button("Practise") { app.openExpression(expression) }
-                        }.padding(.vertical, 5)
-                    }
-                }.listStyle(.inset)
+                // Due counts and labels depend on the time; the list re-reads them each minute, so they turn over at
+                // midnight while it stays open.
+                TimelineView(.everyMinute) { context in
+                    expressionList(at: context.date)
+                }
             }
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    private var reviewBanner: some View {
-        let due = app.dueExpressionCount
+    private func expressionList(at now: Date) -> some View {
+        List {
+            reviewBanner(at: now)
+            ForEach(app.library.expressions) { expression in
+                HStack {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(expression.english).font(.body)
+                        if !expression.meaning.isEmpty {
+                            Text(expression.meaning).font(.callout).foregroundStyle(.secondary)
+                        }
+                        Text(
+                            "\(expression.attempts.count) attempts · \(Self.reviewLabel(expression.review, at: now))"
+                        )
+                        .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Practise") { app.openExpression(expression) }
+                }.padding(.vertical, 5)
+            }
+        }.listStyle(.inset)
+    }
+    private func reviewBanner(at now: Date) -> some View {
+        let due = app.dueExpressionCount(at: now)
         return HStack {
             Label(
                 due == 0 ? "Nothing to review today" : "Expressions to review: \(due)",
                 systemImage: "clock.arrow.circlepath")
             Spacer()
             Button("Start Review", action: app.startReview).buttonStyle(.borderedProminent)
-                .disabled(!app.canStartReview)
+                .disabled(!app.canStartReview(at: now))
         }.padding(.vertical, 6)
     }
     /// When an expression comes up for review: due now, or the day it is due.
-    static func reviewLabel(_ review: ReviewState?) -> String {
-        guard let review, review.due > Date() else { return String(localized: "Due for review") }
+    static func reviewLabel(_ review: ReviewState?, at now: Date = Date()) -> String {
+        guard let review, review.due > now else { return String(localized: "Due for review") }
         return String(localized: "Next review \(review.due.formatted(date: .abbreviated, time: .omitted))")
     }
 }
@@ -608,19 +617,7 @@ struct PracticeActions: View {
     @Bindable var app: AppModel
     var body: some View {
         HStack(spacing: 10) {
-            Button(action: app.toggleRecord) {
-                Label(
-                    app.turn.activity == .recording ? "Finish (\(app.recordingSeconds)s)" : "Record Attempt",
-                    systemImage: app.turn.activity == .recording ? "stop.fill" : "mic")
-            }.disabled(app.busy && app.turn.activity != .recording)
-            if let file = app.help.expression?.attempts.last?.file {
-                Button {
-                    app.play(file)
-                } label: {
-                    Label("Play Attempt", systemImage: "play.fill")
-                }
-                .labelStyle(.iconOnly).help("Play Latest Attempt").disabled(app.busy)
-            }
+            AttemptControls(app: app)
             Button {
                 if app.saveExpression() { app.notice = "Saved to My Expressions." }
             } label: {
@@ -633,24 +630,32 @@ struct PracticeActions: View {
         }
     }
 }
+/// Records an attempt and replays the latest one; shared by practice and review.
+struct AttemptControls: View {
+    @Bindable var app: AppModel
+    var body: some View {
+        let recording = app.turn.activity == .recording
+        Button(action: app.toggleRecord) {
+            Label(
+                recording ? "Finish (\(app.recordingSeconds)s)" : "Record Attempt",
+                systemImage: recording ? "stop.fill" : "mic")
+        }.disabled(!recording && (app.busy || !app.canRecordAttempt))
+        if let file = app.help.expression?.attempts.last?.file {
+            Button {
+                app.play(file)
+            } label: {
+                Label("Play Attempt", systemImage: "play.fill")
+            }
+            .labelStyle(.iconOnly).help("Play Latest Attempt").disabled(app.busy)
+        }
+    }
+}
 /// The review footer: record and replay, then reveal, then grade.
 struct ReviewActions: View {
     @Bindable var app: AppModel
     var body: some View {
         HStack(spacing: 10) {
-            Button(action: app.toggleRecord) {
-                Label(
-                    app.turn.activity == .recording ? "Finish (\(app.recordingSeconds)s)" : "Record Attempt",
-                    systemImage: app.turn.activity == .recording ? "stop.fill" : "mic")
-            }.disabled(app.busy && app.turn.activity != .recording)
-            if let file = app.help.expression?.attempts.last?.file {
-                Button {
-                    app.play(file)
-                } label: {
-                    Label("Play Attempt", systemImage: "play.fill")
-                }
-                .labelStyle(.iconOnly).help("Play Latest Attempt").disabled(app.busy)
-            }
+            AttemptControls(app: app)
             Spacer(minLength: 2)
             Button("End Review", action: app.endReview).keyboardShortcut(.cancelAction)
             if app.help.review?.revealed == true {

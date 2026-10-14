@@ -221,7 +221,8 @@ public enum MochiTools {
                 properties: [:], required: [],
                 output: [
                     "activity": string, "mode": string, "modal": flag, "paused": flag, "playback_seconds": number,
-                    "playback_duration": number, "conversation_id": string, "title": string, "writable": flag,
+                    "playback_duration": number, "conversation_id": string, "title": string, "title_truncated": flag,
+                    "writable": flag,
                     "instructions": string, "instructions_truncated": flag, "coaching": string, "language": string,
                     "character_name": nullable("string"), "character_name_needs_review": flag,
                     "character_name_truncated": flag, "display_character_name": string,
@@ -327,7 +328,8 @@ public enum MochiTools {
                     "limit": limit, "offset": offset,
                 ], required: [],
                 output: [
-                    "conversations": list(object(["id": string, "title": string])), "has_more": flag,
+                    "conversations": list(object(["id": string, "title": string, "title_truncated": flag])),
+                    "has_more": flag,
                     "next_offset": nextOffset,
                 ], readOnly: true, idempotent: true, scope: .app, origins: [.external]),
             Definition(

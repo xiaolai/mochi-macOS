@@ -219,7 +219,9 @@ import MochiKernel
             ]
             if let chat = app.conversation {
                 result["conversation_id"] = chat.id.uuidString
-                result["title"] = chat.title
+                let title = chat.title.bounded(characters: Self.titleCharacters, bytes: Self.titleBytes)
+                result["title"] = title
+                result["title_truncated"] = title != chat.title
                 result["writable"] = !chat.archived && !chat.isDeleted
                 var untrusted = ["title"]
                 if !chat.archived && !chat.isDeleted {
@@ -274,10 +276,14 @@ import MochiKernel
             // The app's search also finds archived conversations; only active ones are exposed.
             let active = app.library.history(in: .active, query: page.query ?? "").filter { !$0.archived }
             let offset = min(page.offset ?? 0, active.count)
-            let shown = active[offset...].prefix(limit)
+            // An imported title can be any length; each is bounded, and the page ends where the response budget does.
+            let shown = try fitted(Array(active[offset...].prefix(limit)), budget: 110000) { chat, bytes in
+                let title = chat.title.bounded(characters: Self.titleCharacters, bytes: min(bytes, Self.titleBytes))
+                return ["id": chat.id.uuidString, "title": title, "title_truncated": title != chat.title]
+            }
             return success(
                 [
-                    "conversations": shown.map { ["id": $0.id.uuidString, "title": $0.title] },
+                    "conversations": shown,
                     "untrusted_fields": ["conversations.title"],
                 ].merging(Self.paging(next: offset + shown.count, total: active.count)) { _, new in new })
         case .getMessages:
@@ -410,18 +416,20 @@ import MochiKernel
             }
             let english = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
             let meaning = input.meaning ?? ""
+            let language = app.language(of: chatID)
             var candidate = app.library
             if tool.name == .saveExpression {
-                let item =
-                    candidate.expressions.first {
-                        $0.conversationID == chatID && $0.english == english && $0.meaning == meaning
-                    }
-                    ?? PracticeExpression(
-                        conversationID: chatID, meaning: meaning, english: english, language: app.language(of: chatID))
-                if !candidate.expressions.contains(where: { $0.id == item.id }) {
-                    candidate.storeExpression(item)
-                    try persist(candidate)
+                // The same words in another language are a different expression, recognised in that language.
+                if let existing = candidate.expressions.first(where: {
+                    $0.conversationID == chatID && $0.english == english && $0.meaning == meaning
+                        && ($0.language ?? .english) == language
+                }) {
+                    return success(["expression_id": existing.id.uuidString])
                 }
+                let item = PracticeExpression(
+                    conversationID: chatID, meaning: meaning, english: english, language: language)
+                candidate.storeExpression(item)
+                try persist(candidate)
                 return success(["expression_id": item.id.uuidString])
             }
             func hasDraft(_ chat: Conversation) -> Bool {
@@ -436,7 +444,9 @@ import MochiKernel
             }
             let openID = chat.id
             return try schedule { [weak app] in
+                // A language change while this waited would prepare the draft for a language it was not asked in.
                 guard let app, app.selectedID == openID, app.writableConversation, !app.automationModal,
+                    app.language(of: openID) == language,
                     let ci = app.library.conversations.firstIndex(where: { $0.id == openID }),
                     !hasDraft(app.library.conversations[ci])
                 else { throw AppFailure("The conversation changed; your existing Help draft was kept.") }
@@ -525,6 +535,9 @@ import MochiKernel
         }
     }
 
+    /// Bounds for a conversation title in tool results; stored titles are not length-limited.
+    private static let titleCharacters = 200
+    private static let titleBytes = 2048
     /// Expression search results name these fields as library text.
     private static let expressionText = ["expressions.text", "expressions.meaning"]
     /// A saved expression as search results show it, its texts bounded by `bytes`.

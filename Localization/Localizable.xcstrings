@@ -3093,30 +3093,30 @@
         }
       }
     },
-    "Checking the connection sends a short text request. Recordings are sent only when you finish a voice message or choose to translate a recorded thought." : {
+    "Checking the connection sends a short text request. Recordings are sent only when you finish a voice message, choose Transcribe for a recorded thought, or choose to translate a recorded thought." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "接続を確認すると、短いテキストリクエストが送信されます。録音が送信されるのは、音声メッセージを終了したときか、録音した言いたいことの翻訳を選択したときだけです。"
+            "value" : "接続を確認すると、短いテキストリクエストが送信されます。録音が送信されるのは、音声メッセージを終了したとき、録音した言いたいことで「文字起こし」を選択したとき、または録音した言いたいことの翻訳を選択したときだけです。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "연결을 확인하면 짧은 텍스트 요청이 전송됩니다. 녹음은 음성 메시지를 완료하거나 녹음된 생각을 번역하도록 선택한 경우에만 전송됩니다."
+            "value" : "연결을 확인하면 짧은 텍스트 요청이 전송됩니다. 녹음은 음성 메시지를 완료하거나, 녹음된 생각에 대해 받아쓰기를 선택하거나, 녹음된 생각을 번역하도록 선택한 경우에만 전송됩니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "检查连接时会发送一条简短的文本请求。只有在你完成语音消息或选择翻译已录制的想法时，才会发送录音。"
+            "value" : "检查连接时会发送一条简短的文本请求。只有在你完成语音消息、为已录制的想法选择“转写”，或选择翻译已录制的想法时，才会发送录音。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "檢查連線時會傳送一則簡短的文字要求。只有在你完成語音訊息，或選擇翻譯已錄下的想法時，才會傳送錄音。"
+            "value" : "檢查連線時會傳送一則簡短的文字要求。只有在你完成語音訊息、為已錄下的想法選擇「轉錄」，或選擇翻譯已錄下的想法時，才會傳送錄音。"
           }
         }
       }
@@ -10372,6 +10372,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mochi © 2026 HANDO K.K. 依 Mochi 角色授權條款使用。"
+          }
+        }
+      }
+    },
+    "Mochi's library file is a link or another special file, so Mochi did not open or replace it. Put the library file itself in its place." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi のライブラリファイルがリンクまたはその他の特殊なファイルのため、Mochi は開いたり置き換えたりしませんでした。その場所にライブラリファイルそのものを置いてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 라이브러리 파일이 링크 또는 다른 특수 파일이므로 Mochi가 열거나 바꾸지 않았습니다. 그 위치에 라이브러리 파일 자체를 넣으세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 的资料库文件是一个链接或其他特殊文件，因此 Mochi 没有打开或替换它。请将资料库文件本身放在该位置。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 的資料庫檔案是一個連結或其他特殊檔案，因此 Mochi 沒有打開或取代它。請將資料庫檔案本身放在該位置。"
           }
         }
       }
@@ -22216,6 +22244,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的聲音"
+          }
+        }
+      }
+    },
+    "Your voice message could not be saved, so it was not sent. Check the disk and the data folder, then record it again." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声メッセージを保存できなかったため、送信されませんでした。ディスクとデータフォルダを確認してから、もう一度録音してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음성 메시지를 저장할 수 없어 전송되지 않았습니다. 디스크와 데이터 폴더를 확인한 다음 다시 녹음하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存你的语音消息，因此没有发送。请检查磁盘和数据文件夹，然后重新录制。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法儲存你的語音訊息，因此沒有傳送。請檢查磁碟和資料檔案夾，然後重新錄製。"
+          }
+        }
+      }
+    },
+    "Your voice message could not be saved, so it was not sent. Its recording is kept in the data folder as “%@”." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声メッセージを保存できなかったため、送信されませんでした。録音はデータフォルダに「%@」として保存されています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음성 메시지를 저장할 수 없어 전송되지 않았습니다. 녹음은 데이터 폴더에 “%@”(으)로 보관되어 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存你的语音消息，因此没有发送。录音已保留在数据文件夹中，名为“%@”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法儲存你的語音訊息，因此沒有傳送。錄音已保留在資料檔案夾中，名為「%@」。"
           }
         }
       }

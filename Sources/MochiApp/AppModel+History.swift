@@ -53,7 +53,8 @@ extension AppModel {
         showExpressions = false
         history.scope = scope
         history.query = ""
-        selectedID = library.history(in: scope).first?.id
+        selectedID =
+            library.history(in: scope, sort: settings.historySort, companion: history.character).first?.id
         draft = conversation?.draft ?? ""
         save()
     }
@@ -168,12 +169,18 @@ extension AppModel {
     }
     @discardableResult private func finishHistoryChange(_ candidate: Library, affected: Set<UUID>) -> Bool {
         var next = candidate
-        if practice, selectedID.map(affected.contains) == true, let item = help.expression, !item.english.isEmpty {
+        if practice, selectedID.map(affected.contains) == true, var item = help.expression, !item.english.isEmpty {
+            // The thought can be edited after the expression was created; keep what the user now sees, as saveExpression does.
+            item.meaning = help.meaning.trimmingCharacters(in: .whitespacesAndNewlines)
             next.storeExpression(item)
         }
         let selectedAffected = selectedID.map(affected.contains) ?? false
         if selectedAffected {
-            next.selectedConversationID = next.history(in: history.scope, query: history.query).first?.id
+            // The first conversation the list shows, under its current filter and sort.
+            next.selectedConversationID =
+                next.history(
+                    in: history.scope, query: history.query, sort: settings.historySort, companion: history.character
+                ).first?.id
         }
         guard commitHistory(next) else { return false }
         if selectedAffected {

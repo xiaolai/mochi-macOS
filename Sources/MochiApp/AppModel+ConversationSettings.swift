@@ -13,6 +13,8 @@ extension AppModel {
     }
     /// The open conversation's language, named in the interface's language.
     var languageName: String { (conversation?.preferences.language ?? ConversationPreferences().language).displayName }
+    /// The language of the expression being practised, which keeps the language it was saved in.
+    var practiceLanguageName: String { help.expression?.language?.displayName ?? languageName }
     /// The language a conversation is held in; English for one that no longer exists, as before languages.
     func language(of id: UUID) -> ConversationLanguage {
         library.conversations.first { $0.id == id }?.preferences.language ?? ConversationPreferences().language

@@ -33,12 +33,18 @@ struct AttemptCheckView: View {
         Text(text).font(.callout).foregroundStyle(.secondary)
     }
     @ViewBuilder private func checked(_ check: AttemptCheck) -> some View {
-        if check.anythingHeard {
-            Text("Words caught: \(check.count(.heard)) of \(check.words.count)").font(.callout)
-            WrappingStack(spacing: 6) {
-                ForEach(Array(check.words.enumerated()), id: \.offset) { _, word in
-                    WordChip(word: word)
+        // Speech that matched no word of the sentence still counts as heard, and is shown on its own.
+        if check.anythingHeard || !check.extra.isEmpty {
+            if !check.words.isEmpty {
+                Text("Words caught: \(check.count(.heard)) of \(check.words.count)").font(.callout)
+                WrappingStack(spacing: 6) {
+                    ForEach(Array(check.words.enumerated()), id: \.offset) { _, word in
+                        WordChip(word: word)
+                    }
                 }
+                #if MOCHI_DEVELOPMENT
+                    .background(ClickProbe("mochi-word-check-probe"))
+                #endif
             }
             if !check.extra.isEmpty {
                 Text("Also heard: \(check.extra.joined(separator: " "))").font(.callout).foregroundStyle(.secondary)
@@ -130,12 +136,19 @@ private struct WrappingStack: Layout {
         for row in arrange(width: bounds.width, subviews: subviews) {
             var x = bounds.minX
             for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
+                let size = measure(subviews[index], width: bounds.width)
                 subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
             y += row.height + spacing
         }
+    }
+    /// A child's natural size, or, when that is wider than the row, its size wrapped to the row's width, so a long
+    /// word wraps inside its chip instead of being clipped by the pane.
+    private func measure(_ subview: LayoutSubview, width: CGFloat) -> CGSize {
+        let natural = subview.sizeThatFits(.unspecified)
+        guard width.isFinite, natural.width > width else { return natural }
+        return subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
     }
     private struct Row {
         var indices: [Int] = []
@@ -146,7 +159,7 @@ private struct WrappingStack: Layout {
         var rows: [Row] = []
         var row = Row()
         for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
+            let size = measure(subviews[index], width: width)
             let needed = row.indices.isEmpty ? size.width : row.width + spacing + size.width
             if needed > width, !row.indices.isEmpty {
                 rows.append(row)

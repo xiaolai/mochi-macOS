@@ -130,6 +130,37 @@ final class ExternalToolTests: XCTestCase {
         XCTAssertEqual(all["has_more"] as? Bool, false)
     }
 
+    @MainActor func testLongTitlesAreBoundedAndMarked() throws {
+        let app = controlledApp()
+        let index = try XCTUnwrap(app.library.conversations.firstIndex { $0.id == app.selectedID })
+        let long = String(repeating: "Long title ", count: 2000)
+        app.library.conversations[index].title = long
+        let session = try app.tools.execute("get_session", arguments: [:], origin: .external)
+        XCTAssertLessThanOrEqual((session["title"] as? String)?.count ?? .max, 200)
+        XCTAssertEqual(session["title_truncated"] as? Bool, true)
+        let listed = try app.tools.execute("list_conversations", arguments: ["limit": 1], origin: .external)
+        let first = try XCTUnwrap((listed["conversations"] as? [[String: Any]])?.first)
+        XCTAssertLessThanOrEqual((first["title"] as? String)?.count ?? .max, 200)
+        XCTAssertEqual(first["title_truncated"] as? Bool, true)
+    }
+    @MainActor func testTheSameWordsInAnotherLanguageAreANewExpression() throws {
+        let app = controlledApp()
+        let id = try XCTUnwrap(app.selectedID)
+        func save() throws -> String? {
+            try app.tools.execute(
+                "save_expression",
+                arguments: [
+                    "conversation_id": id.uuidString, "expected_revision": app.tools.revision, "text": "Arigato",
+                ], origin: .external)["expression_id"] as? String
+        }
+        let english = try save()
+        XCTAssertEqual(try save(), english, "Saving it again finds the same expression")
+        let index = try XCTUnwrap(app.library.conversations.firstIndex { $0.id == id })
+        app.library.conversations[index].preferences.language = .japanese
+        let japanese = try save()
+        XCTAssertNotEqual(japanese, english)
+        XCTAssertEqual(app.library.expressions.first { $0.id.uuidString == japanese }?.language, .japanese)
+    }
     @MainActor func testRenameAndArchiveActOnAnyActiveConversation() throws {
         let app = controlledApp()
         let open = try XCTUnwrap(app.selectedID)

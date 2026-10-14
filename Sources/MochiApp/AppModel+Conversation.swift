@@ -31,9 +31,11 @@ extension AppModel {
         guard !text.isEmpty else { return }
         submit(text, fromComposer: false)
     }
-    /// Start Again needs something to start again from: a message the model can read.
+    /// Start Again needs something to start again from: a message the model can read. It is off while My Expressions
+    /// covers the conversation, where the restart and its reply would happen out of sight.
     var canStartAgain: Bool {
-        canSendPhrase && conversation?.messages.contains { $0.role == "user" && $0.contextText != nil } == true
+        canSendPhrase && !showExpressions
+            && conversation?.messages.contains { $0.role == "user" && $0.contextText != nil } == true
     }
     /// Whether the conversation was made from a role-play template, which shows Start Again as a button.
     var isRolePlay: Bool { ConversationTemplate.isRolePlay(conversation?.sourceTemplateID) }
@@ -64,7 +66,8 @@ extension AppModel {
         let before = library.conversations.first { $0.id == id }
         // Cleared first, so the save that writes the message also writes the empty composer.
         if fromComposer { draft = "" }
-        let message = Message(role: "user", text: text)
+        var message = Message(role: "user", text: text)
+        if restart { message.startsAgain = true }
         guard append(message, to: id) else {
             // Nothing is sent: the unsaved message leaves memory, so memory never holds a message the disk lacks,
             // and a typed draft returns to the composer. The save failure is already reported.
@@ -74,7 +77,6 @@ extension AppModel {
             if fromComposer { draft = typed }
             return
         }
-        if restart { restartMessageIDs.insert(message.id) }
         requestReply(history: history, text: text, pcm: nil, audioFile: nil, conversationID: id)
     }
     var canRetry: Bool {
@@ -93,15 +95,34 @@ extension AppModel {
             let pcm =
                 try last.contextText == nil
                 ? last.audio.map { try AudioFile.pcm(store.root.appendingPathComponent($0)) } : nil
-            // A retried Start Again keeps its opening; the mark lives only until Mochi quits.
+            // A retried Start Again keeps its opening, also after Mochi restarts.
             let earlier = Array(chat.messages.dropLast())
             requestReply(
-                history: restartMessageIDs.contains(last.id) ? RestartHistory.select(earlier) : earlier,
+                history: last.startsAgain == true ? RestartHistory.select(earlier) : earlier,
                 text: last.text,
                 pcm: pcm, audioFile: last.audio,
                 conversationID: chat.id, existingUserID: last.id)
         } catch {
             self.error = String(localized: "The saved recording could not be read. Record a new message to continue.")
+        }
+    }
+    /// Renames the recording of a voice message that could not be saved to a name Mochi never generates, so launch
+    /// cleanup keeps it; returns that name, or nil when there is no such recording or it could not be renamed.
+    private func keepUnsentRecording(_ name: String?) -> String? {
+        guard let name, URL(fileURLWithPath: name).lastPathComponent == name else { return nil }
+        let source = store.root.appendingPathComponent(name)
+        guard FileManager.default.fileExists(atPath: source.path) else { return nil }
+        let stamp = Date().formatted(
+            .verbatim(
+                "\(year: .defaultDigits)-\(month: .twoDigits)-\(day: .twoDigits) \(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased)).\(minute: .twoDigits).\(second: .twoDigits)",
+                timeZone: .current, calendar: Calendar(identifier: .gregorian)))
+        let kept = "Unsent voice message \(stamp) \(UUID().uuidString.prefix(8)).wav"
+        do {
+            try FileManager.default.moveItem(at: source, to: store.root.appendingPathComponent(kept))
+            return kept
+        } catch {
+            MochiLog.failure(MochiLog.library, "Keep unsent recording", error, level: .info)
+            return nil
         }
     }
     func requestReply(
@@ -116,15 +137,38 @@ extension AppModel {
             var message = Message(role: "user", text: "", audio: audioFile)
             message.recording = RecordingMetadata(model: RealtimeService.transcriptionModel)
             message.transcriptionState = .pending
+            let before = library.conversations.first { $0.id == conversationID }
+            guard append(message, to: conversationID) else {
+                // Nothing is transcribed or sent, as for a typed message: the unsaved message leaves memory, so
+                // memory never holds a message the disk lacks. Its recording, referenced by nothing, is kept under a
+                // name launch cleanup leaves alone, so the learner can still find it.
+                if let before, let i = library.conversations.firstIndex(where: { $0.id == conversationID }) {
+                    library.conversations[i] = before
+                }
+                if let kept = keepUnsentRecording(audioFile) {
+                    error = String(
+                        localized:
+                            "Your voice message could not be saved, so it was not sent. Its recording is kept in the data folder as “\(kept)”."
+                    )
+                } else {
+                    error = String(
+                        localized:
+                            "Your voice message could not be saved, so it was not sent. Check the disk and the data folder, then record it again."
+                    )
+                }
+                return
+            }
             userID = message.id
-            append(message, to: conversationID)
         }
         let operationID =
             userID ?? library.conversations.first(where: { $0.id == conversationID })?.messages.last?.id ?? UUID()
         var requestID = UUID()
         if let userID, pcm != nil {
             requestID = transcripts.begin(userID)
-            updateTranscript(userID, chatID: conversationID, text: nil, state: .pending, error: nil)
+            // A new message was saved as pending when it was added; a retried one is marked pending again here.
+            if existingUserID != nil {
+                updateTranscript(userID, chatID: conversationID, text: nil, state: .pending, error: nil)
+            }
         }
         let token = turn.begin(.generating)
         let chat = library.conversations.first { $0.id == conversationID }

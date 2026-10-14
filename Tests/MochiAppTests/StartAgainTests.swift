@@ -72,6 +72,30 @@ final class StartAgainTests: XCTestCase {
         XCTAssertEqual(request.history.count, 30)
         XCTAssertEqual(request.history.first?.text, "m1")
     }
+    @MainActor func testAFailedStartAgainRetriedAfterARelaunchKeepsTheOpening() async throws {
+        let root = makeTemporaryFolder()
+        let first = makeApp(root: root)
+        var chat = Conversation(title: "Interview")
+        chat.sourceTemplateID = interview.id
+        chat.messages = (1...46).map { Message(role: $0 % 2 == 1 ? "user" : "assistant", text: "m\($0)") }
+        first.library.conversations = [chat]
+        first.selectedID = chat.id
+        first.resume()
+        _ = capture(first, failing: true)
+        first.startAgain()
+        await waitUntil { !first.busy }
+        XCTAssertEqual(first.conversation?.messages.last?.startsAgain, true)
+        let relaunched = makeApp(root: root)
+        relaunched.selectedID = chat.id
+        relaunched.resume()
+        let sent = capture(relaunched)
+        XCTAssertTrue(relaunched.canRetry)
+        relaunched.retryReply()
+        await waitUntil { !relaunched.busy }
+        let request = try XCTUnwrap(sent())
+        XCTAssertEqual(request.history.count, 30)
+        XCTAssertEqual(request.history.first?.text, "m1", "The opening survives the relaunch")
+    }
     @MainActor func testStartAgainNeedsSomethingToStartAgainFrom() {
         let app = appWithConversation(1)
         app.library.conversations[0].messages = [Message(role: "assistant", text: "Which job is it for?")]
@@ -86,6 +110,15 @@ final class StartAgainTests: XCTestCase {
         XCTAssertFalse(app.canStartAgain)
         app.startAgain()
         XCTAssertEqual(app.conversation?.messages.count, 4)
+    }
+    @MainActor func testStartAgainIsOffWhileMyExpressionsCoversTheConversation() {
+        let app = appWithConversation(4)
+        app.showExpressions = true
+        XCTAssertFalse(app.canStartAgain)
+        app.startAgain()
+        XCTAssertEqual(app.conversation?.messages.count, 4, "No restart is sent out of sight")
+        app.showExpressions = false
+        XCTAssertTrue(app.canStartAgain)
     }
     @MainActor func testTheButtonIsForRolePlayConversations() {
         let app = appWithConversation(4)

@@ -105,6 +105,25 @@ final class AutomationTests: XCTestCase {
         XCTAssertNil(app.deferredToolAction)
         XCTAssertFalse(app.practice)
     }
+    @MainActor func testADeferredPreparationIsCancelledWhenTheLanguageChanges() throws {
+        let root = TestScratch.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = makeApp(root: root, preferences: makePreferences(named: "automation-tests-" + root.lastPathComponent))
+        let id = try XCTUnwrap(app.selectedID)
+        let token = app.turn.begin(.generating)
+        _ = try app.tools.execute(
+            "prepare_expression", arguments: ["conversation_id": id.uuidString, "text": "Let me think."],
+            origin: .voice)
+        let index = try XCTUnwrap(app.library.conversations.firstIndex { $0.id == id })
+        app.library.conversations[index].preferences.language = .match
+        _ = app.turn.finish(token)
+        let action = try XCTUnwrap(app.deferredToolAction)
+        app.deferredToolAction = nil
+        action()
+        XCTAssertNil(app.conversation?.helpDraft, "Nothing is prepared for a language it was not asked in")
+        XCTAssertFalse(app.practice)
+        XCTAssertNotNil(app.error)
+    }
     @MainActor func testAtomicFailureDoesNotChangeInstructionsOrExpressions() throws {
         let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }

@@ -72,6 +72,69 @@ final class ReviewSessionTests: XCTestCase {
         XCTAssertEqual(app.library.expressions[0].review?.box, 0)
         XCTAssertEqual(app.library.expressions[0].review?.grades.map(\.grade), [.again, .again])
     }
+    @MainActor func testAReviewThatCannotOpenItsExpressionDoesNotStart() async {
+        let root = makeTemporaryFolder()
+        let app = appWithDueExpressions(1, root: root)
+        // Its conversation is gone, so opening it must first save a new one.
+        app.library.expressions[0].conversationID = UUID()
+        XCTAssertTrue(app.save())
+        XCTAssertEqual(chmod(root.path, 0o500), 0)
+        defer { chmod(root.path, 0o700) }
+        app.startReview()
+        await waitUntil { !app.busy }
+        XCTAssertNotNil(app.error)
+        XCTAssertFalse(app.practice)
+        XCTAssertNil(app.help.review, "No review runs over an expression that is not on screen")
+    }
+    @MainActor func testAnExpressionThatCannotBeOpenedIsSkippedAndStaysDue() async {
+        let root = makeTemporaryFolder()
+        let app = appWithDueExpressions(2, root: root)
+        app.library.expressions[0].conversationID = UUID()
+        XCTAssertTrue(app.save())
+        XCTAssertEqual(chmod(root.path, 0o500), 0)
+        defer { chmod(root.path, 0o700) }
+        app.startReview()
+        await waitUntil { !app.busy }
+        XCTAssertNotNil(app.error)
+        XCTAssertTrue(app.practice)
+        XCTAssertEqual(reviewed(app), "Sentence 2.", "The review goes on with the next expression")
+        XCTAssertEqual(app.help.review?.current, app.library.expressions[1].id)
+        XCTAssertEqual(app.library.expressions[0].review?.grades, [], "The skipped one is not graded and stays due")
+    }
+    @MainActor func testAReviewThatCannotCloseCannotBeGradedAgain() async {
+        let root = makeTemporaryFolder()
+        let app = appWithDueExpressions(1, root: root)
+        app.startReview()
+        await waitUntil { !app.busy }
+        app.revealReview()
+        XCTAssertEqual(chmod(root.path, 0o500), 0)
+        defer { chmod(root.path, 0o700) }
+        // Ending runs resume(), which cannot save, so practice stays open; the run must not.
+        app.endReview()
+        XCTAssertTrue(app.practice)
+        XCTAssertNil(app.help.review)
+        XCTAssertEqual(chmod(root.path, 0o700), 0)
+        app.gradeReview(.good)
+        XCTAssertEqual(app.library.expressions[0].review?.grades, [], "Nothing is graded outside a review")
+    }
+    @MainActor func testResumingKeepsPracticeOpenWhenTheExpressionCannotBeSaved() async {
+        let root = makeTemporaryFolder()
+        let app = appWithDueExpressions(1, root: root)
+        app.openExpression(app.library.expressions[0])
+        await waitUntil { !app.busy }
+        XCTAssertTrue(app.practice)
+        app.editEnglish("Sentence one, edited.")
+        XCTAssertEqual(chmod(root.path, 0o500), 0)
+        defer { chmod(root.path, 0o700) }
+        app.resume()
+        XCTAssertTrue(app.practice, "The unsaved edit stays on screen")
+        XCTAssertNotNil(app.error)
+        XCTAssertNil(app.notice)
+        XCTAssertEqual(chmod(root.path, 0o700), 0)
+        app.resume()
+        XCTAssertFalse(app.practice)
+        XCTAssertTrue(app.library.expressions.contains { $0.english == "Sentence one, edited." })
+    }
     @MainActor func testAFailedSaveKeepsTheExpressionToGradeAgain() async {
         let root = makeTemporaryFolder()
         let app = appWithDueExpressions(2, root: root)

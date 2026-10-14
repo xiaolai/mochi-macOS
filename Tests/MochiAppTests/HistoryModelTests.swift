@@ -131,6 +131,38 @@ final class HistoryModelTests: XCTestCase {
 }
 
 extension HistoryModelTests {
+    @MainActor func testTheReplacementSelectionFollowsTheCharacterFilter() throws {
+        let app = makeApp(root: makeTemporaryFolder())
+        var ids: [UUID] = []
+        for name in ["Ada", "Bea", "Ada"] {
+            if !ids.isEmpty { app.newChat() }
+            let id = try XCTUnwrap(app.selectedID)
+            app.append(Message(role: "user", text: name), to: id)
+            let index = try XCTUnwrap(app.library.conversations.firstIndex { $0.id == id })
+            app.library.conversations[index].characterName = name
+            ids.append(id)
+        }
+        app.history.character = "Ada"
+        app.select(ids[2])
+        app.archiveChats([ids[2]])
+        XCTAssertEqual(app.selectedID, ids[0], "The next conversation the filtered list shows, not one it hides")
+    }
+    @MainActor func testDeletingWhilePractisingKeepsTheEditedThought() throws {
+        let model = makeApp(demo: true)
+        XCTAssertTrue(model.practice)
+        let expressionID = try XCTUnwrap(model.help.expression?.id)
+        model.help.meaning = "  An edited thought  "
+        model.deleteChats(Set(model.library.conversations.map(\.id)))
+        XCTAssertEqual(model.library.expressions.first { $0.id == expressionID }?.meaning, "An edited thought")
+    }
+    @MainActor func testAnAttemptNeedsASentenceToPractise() throws {
+        let model = makeApp(demo: true)
+        XCTAssertTrue(model.practice)
+        model.editEnglish("   ")
+        XCTAssertFalse(model.canRecordAttempt)
+        model.toggleRecord()
+        XCTAssertEqual(model.turn.activity, .idle, "No recording starts without a sentence")
+    }
     @MainActor func testArchivingTheSelectedChatSavesTheReplacementSelection() throws {
         let root = makeTemporaryFolder()
         let app = makeApp(root: root)

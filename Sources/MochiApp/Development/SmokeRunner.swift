@@ -334,12 +334,13 @@
                         ?? (settings
                             ? NSApp.windows.first(where: { $0.isVisible && $0 !== mainWindow && $0.canBecomeMain })
                             : mainWindow)
-                    guard let window = target else {
-                        captureFailures.append(name)
-                        return
-                    }
+                    // Removed first, so a failed capture never leaves an earlier run's image under this name.
                     guard removeStaleEvidence(directory.appendingPathComponent(name)) else {
                         captureFailures.append("\(name): stale capture could not be removed")
+                        return
+                    }
+                    guard let window = target else {
+                        captureFailures.append(name)
                         return
                     }
                     let capture = Process()
@@ -380,6 +381,9 @@
                     guard await waitFor(2, { mainWindow?.attachedSheet != nil }), let sheet = mainWindow?.attachedSheet
                     else {
                         captureCount += 1
+                        if !removeStaleEvidence(directory.appendingPathComponent(name)) {
+                            captureFailures.append("\(name): stale capture could not be removed")
+                        }
                         captureFailures.append("\(name): no sheet attached")
                         return
                     }
@@ -402,14 +406,26 @@
                     scroll.reflectScrolledClipView(scroll.contentView)
                     return end > 0
                 }
+                /// Runs `body` with the app in dark appearance, settled, and puts the previous appearance back.
+                @MainActor func inDarkAppearance(_ body: () async -> Void) async {
+                    let previous = NSApp.appearance
+                    NSApp.appearance = NSAppearance(named: .darkAqua)
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    await body()
+                    NSApp.appearance = previous
+                }
+                /// The view marked `identifier` in `window`, when SwiftUI rendered it.
+                @MainActor func probe(_ identifier: String, in window: NSWindow?) -> NSView? {
+                    @MainActor func find(_ view: NSView) -> NSView? {
+                        view.identifier?.rawValue == identifier ? view : view.subviews.lazy.compactMap(find).first
+                    }
+                    return window?.contentView.flatMap(find)
+                }
                 /// Clicks the middle of the view marked `identifier` with a mouse down and up, as a person would; SwiftUI
                 /// draws its controls without AppKit views or, in this process, accessibility elements. Returns the
                 /// point clicked, in window coordinates, or nil when nothing carries the mark.
                 @MainActor func click(_ identifier: String, in window: NSWindow) -> NSPoint? {
-                    @MainActor func find(_ view: NSView) -> NSView? {
-                        view.identifier?.rawValue == identifier ? view : view.subviews.lazy.compactMap(find).first
-                    }
-                    guard let probe = window.contentView.flatMap(find) else { return nil }
+                    guard let probe = probe(identifier, in: window) else { return nil }
                     let point = probe.convert(NSPoint(x: probe.bounds.midX, y: probe.bounds.midY), to: nil)
                     window.makeKeyAndOrderFront(nil)
                     for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
@@ -423,6 +439,8 @@
                     }
                     return point
                 }
+                // Light captures are light whatever the system appearance; dark ones go through inDarkAppearance.
+                NSApp.appearance = NSAppearance(named: .aqua)
                 if mainWindow?.titleVisibility != .hidden || mainWindow?.toolbar?.displayMode != .iconOnly {
                     captureFailures.append("Workspace title or toolbar display mode is incorrect")
                 }
@@ -443,16 +461,16 @@
                 await capture("practice.png")
                 // The sheet on its own, so the practice pane is visible even when only AppKit view captures work.
                 await captureSheet("practice-sheet.png")
+                // The seeded check must be on screen, not only in the model.
                 let wordCheckShown: Bool = {
-                    if case .checked = model.help.attemptCheck { return true }
-                    return false
+                    guard case .checked = model.help.attemptCheck else { return false }
+                    return probe("mochi-word-check-probe", in: mainWindow?.attachedSheet) != nil
                 }()
                 if !wordCheckShown { captureFailures.append("The practice preview shows no word check") }
-                NSApp.appearance = NSAppearance(named: .darkAqua)
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                await capture("practice-dark.png")
-                await captureSheet("practice-sheet-dark.png")
-                NSApp.appearance = NSAppearance(named: .aqua)
+                await inDarkAppearance {
+                    await capture("practice-dark.png")
+                    await captureSheet("practice-sheet-dark.png")
+                }
                 if let window = mainWindow { window.setContentSize(NSSize(width: 820, height: 700)) }
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("practice-compact.png")
@@ -598,10 +616,9 @@
                     model.customization.instructionsID = chatID
                     try? await Task.sleep(nanoseconds: 450_000_000)
                     await captureSheet("conversation-instructions.png")
-                    NSApp.appearance = NSAppearance(named: .darkAqua)
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                    await captureSheet("conversation-instructions-dark.png")
-                    NSApp.appearance = NSAppearance(named: .aqua)
+                    await inDarkAppearance {
+                        await captureSheet("conversation-instructions-dark.png")
+                    }
                     model.customization.instructionsID = nil
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     model.openTemplatePicker()
@@ -737,10 +754,9 @@
                     if model.customization.characterPresentation != .manager { model.openCharacterManager() }
                     try? await Task.sleep(nanoseconds: 450_000_000)
                     await captureSheet("character-manager.png")
-                    NSApp.appearance = NSAppearance(named: .darkAqua)
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                    await captureSheet("character-manager-dark.png")
-                    NSApp.appearance = NSAppearance(named: .aqua)
+                    await inDarkAppearance {
+                        await captureSheet("character-manager-dark.png")
+                    }
                     if let pip {
                         model.customization.editCharacter(pip, duplicate: true)
                         try? await Task.sleep(nanoseconds: 350_000_000)
@@ -827,10 +843,9 @@
                     }
                     try? await Task.sleep(nanoseconds: 450_000_000)
                     await capture("conversation-phrases.png")
-                    NSApp.appearance = NSAppearance(named: .darkAqua)
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                    await capture("conversation-phrases-dark.png")
-                    NSApp.appearance = NSAppearance(named: .aqua)
+                    await inDarkAppearance {
+                        await capture("conversation-phrases-dark.png")
+                    }
                     let draft = "A thought I am still typing"
                     model.draft = draft
                     let phrase = model.conversation?.phrases.first ?? ""
@@ -866,9 +881,10 @@
                 }
                 // A role-play conversation shows Start Again; pressing it sends the restart request as the user's
                 // message, with the conversation so far as history.
-                var restartRequests: [(text: String, history: Int)] = []
+                // Each request's history as id and text, so a restart is checked against the conversation it came from.
+                var restartRequests: [(text: String, history: [String])] = []
                 model.speech.conversationReply = { _, request, callbacks in
-                    restartRequests.append((request.text, request.history.count))
+                    restartRequests.append((request.text, request.history.map { "\($0.id) \($0.contextText ?? "")" }))
                     var reply = RealtimeAccumulator()
                     reply.text = "We'll redo the interview for the job you named. Is that still right?"
                     try callbacks.response(reply)
@@ -881,6 +897,7 @@
                     let answered = await waitFor(3) { restartRequests.count == 1 && !model.busy }
                     try? await Task.sleep(nanoseconds: 300_000_000)
                     await capture("conversation-start-again.png")
+                    let before = model.conversation?.messages.map { "\($0.id) \($0.contextText ?? "")" } ?? []
                     let clicked = mainWindow.flatMap { click("mochi-start-again-probe", in: $0) }
                     let restarted = await waitFor(3) { restartRequests.count == 2 && !model.busy }
                     let checks: [String: Bool] = [
@@ -888,7 +905,7 @@
                         "restart_sent": restarted,
                         "restart_text": restartRequests.last?.text
                             == String(localized: "Let's start again from the beginning."),
-                        "history_kept": restartRequests.last?.history == 2,
+                        "history_kept": before.count == 2 && restartRequests.last?.history == before,
                     ]
                     for (check, passed) in checks.sorted(by: { $0.key < $1.key }) where !passed {
                         captureFailures.append("Start Again check failed: \(check)")
@@ -915,13 +932,20 @@
                     let queued = model.help.review?.queue == [due.id]
                     try? await Task.sleep(nanoseconds: 300_000_000)
                     await captureSheet("review-prompt.png")
+                    // The words stay hidden until revealed, then show for comparison.
+                    let sheet = mainWindow?.attachedSheet
+                    let hidden =
+                        model.help.review?.revealed == false && probe("mochi-review-prompt-probe", in: sheet) != nil
+                        && probe("mochi-review-words-probe", in: sheet) == nil
                     model.revealReview()
                     try? await Task.sleep(nanoseconds: 300_000_000)
                     await captureSheet("review-revealed.png")
+                    let shown = probe("mochi-review-words-probe", in: mainWindow?.attachedSheet) != nil
                     model.gradeReview(.good)
                     let finished = await waitFor(5) { !model.practice && !model.busy }
                     let checks: [String: Bool] = [
                         "opened": opened, "queued_only_the_due_item": queued, "finished": finished,
+                        "words_hidden_before_reveal": hidden, "words_shown_after_reveal": shown,
                         "graded": model.library.expressions.first(where: { $0.id == due.id })?.review?.box == 1,
                         "back_to_expressions": model.showExpressions,
                     ]
@@ -944,10 +968,9 @@
                 model.editEnglish("I would like a little more time to think.")
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("help-english.png")
-                NSApp.appearance = NSAppearance(named: .darkAqua)
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                await capture("help-english-dark.png")
-                NSApp.appearance = NSAppearance(named: .aqua)
+                await inDarkAppearance {
+                    await capture("help-english-dark.png")
+                }
                 model.beginPractice()
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("help-practice.png")
@@ -1012,10 +1035,9 @@
                     if !model.audio.paused || model.audio.position != 2 {
                         captureFailures.append("Paused seek did not preserve playback state")
                     }
-                    NSApp.appearance = NSAppearance(named: .darkAqua)
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                    await capture("message-playback-dark.png")
-                    NSApp.appearance = NSAppearance(named: .aqua)
+                    await inDarkAppearance {
+                        await capture("message-playback-dark.png")
+                    }
                     if let window = mainWindow { window.setContentSize(NSSize(width: 820, height: 700)) }
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     await capture("message-playback-compact.png")
@@ -1197,10 +1219,9 @@
                 comparison.makeKeyAndOrderFront(nil)
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("pitch-curves-comparison.png", window: comparison)
-                NSApp.appearance = NSAppearance(named: .darkAqua)
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                await capture("pitch-curves-comparison-dark.png", window: comparison)
-                NSApp.appearance = NSAppearance(named: .aqua)
+                await inDarkAppearance {
+                    await capture("pitch-curves-comparison-dark.png", window: comparison)
+                }
                 comparison.orderOut(nil)
                 model.settingsOpen = false
                 for window in NSApp.windows where window !== mainWindow && window.isVisible && window.canBecomeMain {

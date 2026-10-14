@@ -73,7 +73,7 @@ extension AppModel {
         library.conversations[ci].helpDraft = draft
     }
     /// The help draft to keep and its conversation, or nil when there is none.
-    private func currentHelpDraft() -> (Int, HelpDraft)? {
+    func currentHelpDraft() -> (Int, HelpDraft)? {
         guard !help.isRestoring, !help.isSavedPractice, practice, writableConversation,
             let ci = library.conversations.firstIndex(where: { $0.id == selectedID })
         else { return nil }
@@ -193,7 +193,7 @@ extension AppModel {
         if let current = help.expression, current.meaning != thought { help.expression?.meaning = thought }
         guard let saved = help.expression, !saved.english.isEmpty else { return false }
         help.expression?.review = library.storeExpression(saved).review
-        persistHelpDraft()
+        stageHelpDraft()
         return save()
     }
     func render(force: Bool = false) {
@@ -213,9 +213,10 @@ extension AppModel {
             help.expression?.reference = url.lastPathComponent
             help.expression?.referenceKind = label
             help.referencePitch = pitch
-            saveExpression()
+            let saved = saveExpression()
             job.finish()
-            notice = String(localized: "Your reference is ready. Listen, then try saying it yourself.")
+            // A failed save is already reported; the reference is not announced as ready when it was not kept.
+            if saved { notice = String(localized: "Your reference is ready. Listen, then try saying it yourself.") }
         }
     }
 
@@ -255,7 +256,7 @@ extension AppModel {
             guard let self else { return }
             let pitch = try await AudioFile.pitchInBackground(source)
             guard job.isCurrent() else { return }
-            let name = "import-\(UUID().uuidString).\(source.pathExtension)"
+            let name = LibraryStore.importedAudioName(extension: source.pathExtension)
             try FileManager.default.copyItem(at: source, to: store.root.appendingPathComponent(name))
             help.expression?.reference = name
             help.expression?.referenceKind = "Imported reference"
@@ -264,8 +265,13 @@ extension AppModel {
         }
     }
     func resume() {
-        cancelHelpWork()
-        let completed = !help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && saveExpression()
+        let hadDraft = currentHelpDraft() != nil
+        let draftKept = cancelHelpWork()
+        let hasEnglish = !help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let completed = hasEnglish && saveExpression()
+        // When nothing could be saved, practice stays open with the work on screen and the save failure reported,
+        // instead of closing and claiming it was saved.
+        guard completed || (!hasEnglish && (draftKept || !hadDraft)) else { return }
         if completed, !help.isSavedPractice, let ci = library.conversations.firstIndex(where: { $0.id == selectedID }) {
             let saved = library.conversations[ci].helpDraft
             library.conversations[ci].helpDraft = nil
@@ -276,7 +282,9 @@ extension AppModel {
                 }
                 removeUnreferencedRecording(saved?.recording)
             } else {
+                // The draft could not be cleared: practice stays open, so Resume can be tried again.
                 library.conversations[ci].helpDraft = saved
+                return
             }
         }
         leavePractice()
@@ -284,26 +292,11 @@ extension AppModel {
         notice =
             completed
             ? String(localized: "Saved to My Expressions. Say the thought in your own words when you're ready.")
-            : String(localized: "Help draft saved.")
+            : draftKept ? String(localized: "Help draft saved.") : nil
     }
-    func openExpression(_ opened: PracticeExpression) {
-        var item = opened
-        var sourceID = item.conversationID
-        if !library.conversations.contains(where: { $0.id == sourceID && !$0.isDeleted && !$0.archived }) {
-            var candidate = library
-            // The expression's own language, so practising it continues in the language it was saved in.
-            var chat = Conversation(title: "Practice: " + String(item.english.prefix(42)))
-            chat.preferences.language = item.language ?? ConversationPreferences().language
-            candidate.conversations.insert(chat, at: 0)
-            candidate.selectedConversationID = chat.id
-            // Point the expression at its new home, so reopening it does not create yet another conversation.
-            item.conversationID = chat.id
-            if let index = candidate.expressions.firstIndex(where: { $0.id == item.id }) {
-                candidate.expressions[index].conversationID = chat.id
-            }
-            guard commitHistory(candidate) else { return }
-            sourceID = chat.id
-        }
+    /// Opens a saved expression for practice; false when it could not be opened.
+    @discardableResult func openExpression(_ opened: PracticeExpression) -> Bool {
+        guard let (item, sourceID) = practiceHome(for: opened) else { return false }
         if sourceID == selectedID { cancelHelpWork() } else { stop() }
         leavePractice()
         help.isSavedPractice = true
@@ -319,36 +312,60 @@ extension AppModel {
             help.meaning = item.meaning
             help.thoughtRecording = nil
             help.recognizedThought = nil
+            // Left from an earlier help draft, it would ask about another thought.
+            help.clarification = nil
         }
         help.stage = .practice
         help.referencePitch = []
         help.clearAttempt()
+        analyseSavedAudio(of: item)
+        return true
+    }
+    /// The expression and the conversation to practise it in. One whose conversation is gone gets a new one, in the
+    /// expression's own language, and is pointed at it; nil when that cannot be saved.
+    private func practiceHome(for opened: PracticeExpression) -> (PracticeExpression, UUID)? {
+        var item = opened
+        guard !library.conversations.contains(where: { $0.id == item.conversationID && !$0.isDeleted && !$0.archived })
+        else { return (item, item.conversationID) }
+        var candidate = library
+        var chat = Conversation(title: "Practice: " + String(item.english.prefix(42)))
+        chat.preferences.language = item.language ?? ConversationPreferences().language
+        candidate.conversations.insert(chat, at: 0)
+        candidate.selectedConversationID = chat.id
+        // Point the expression at its new home, so reopening it does not create yet another conversation.
+        item.conversationID = chat.id
+        if let index = candidate.expressions.firstIndex(where: { $0.id == item.id }) {
+            candidate.expressions[index].conversationID = chat.id
+        }
+        guard commitHistory(candidate) else { return nil }
+        return (item, chat.id)
+    }
+    /// Analyses the saved example and latest attempt, and checks the attempt's words. Each contour is analysed on its
+    /// own, so one unreadable file does not hide the other; the first failure is reported once both are tried.
+    private func analyseSavedAudio(of item: PracticeExpression) {
         let root = store.root
         let reference = item.reference
         let attempt = item.attempts.last?.file
         runExclusive("Open saved expression") { [weak self] job in
             guard let self else { return }
-            // Each contour is analysed on its own, so one unreadable file does not hide the other.
             var failure: Error?
-            if let name = reference {
-                do {
-                    let points = try await AudioFile.pitchInBackground(root.appendingPathComponent(name))
-                    guard job.isCurrent() else { return }
-                    help.referencePitch = points
-                } catch {
-                    guard job.isCurrent() else { return }
-                    failure = error
+            func contour(_ name: String) async -> [PitchPoint]? {
+                do { return try await AudioFile.pitchInBackground(root.appendingPathComponent(name)) } catch {
+                    failure = failure ?? error
+                    return nil
                 }
             }
+            if let name = reference, let points = await contour(name) {
+                guard job.isCurrent() else { return }
+                help.referencePitch = points
+            }
+            guard job.isCurrent() else { return }
             if let name = attempt {
-                do {
-                    let points = try await AudioFile.pitchInBackground(root.appendingPathComponent(name))
+                if let points = await contour(name) {
                     guard job.isCurrent() else { return }
                     help.attemptPitch = points
-                } catch {
-                    guard job.isCurrent() else { return }
-                    failure = failure ?? error
                 }
+                guard job.isCurrent() else { return }
                 await checkAttempt(name, of: item, job: job)
                 guard job.isCurrent() else { return }
             }

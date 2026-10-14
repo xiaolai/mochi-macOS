@@ -264,6 +264,55 @@ extension PersistenceModelTests {
         XCTAssertEqual(saved?.draft, "")
     }
 
+    @MainActor func testAnUnsavedVoiceMessageIsNeitherTranscribedNorAnswered() async throws {
+        let root = makeTemporaryFolder()
+        let app = makeApp(root: root)
+        defer { chmod(root.path, 0o700) }
+        let id = try XCTUnwrap(app.selectedID)
+        var requests = 0
+        app.speech.conversationReply = { _, _, _ in requests += 1 }
+        XCTAssertEqual(chmod(root.path, 0o500), 0)
+        app.requestReply(
+            history: [], text: "", pcm: Data(repeating: 0, count: 4800), audioFile: "recording-\(UUID()).wav",
+            conversationID: id)
+        await waitUntil { !app.busy }
+        XCTAssertEqual(requests, 0)
+        XCTAssertNotNil(app.error, "The save failure is reported")
+        XCTAssertEqual(app.conversation?.messages.count, 0, "Memory never holds a message the disk lacks")
+        XCTAssertFalse(app.busy)
+    }
+    @MainActor func testAnUnsavedVoiceMessageKeepsItsRecordingWhereLaunchCleanupLeavesIt() async throws {
+        let root = makeTemporaryFolder()
+        let app = makeApp(root: root)
+        let id = try XCTUnwrap(app.selectedID)
+        XCTAssertTrue(app.save())
+        var requests = 0
+        app.speech.conversationReply = { _, _, _ in requests += 1 }
+        let name = "recording-\(UUID()).wav"
+        try Data(repeating: 0, count: 48).write(to: root.appendingPathComponent(name))
+        // A library file that is a link is never replaced, so the save fails while the folder stays writable.
+        let moved = root.appendingPathComponent("elsewhere.json")
+        try FileManager.default.moveItem(at: app.store.file, to: moved)
+        try FileManager.default.createSymbolicLink(at: app.store.file, withDestinationURL: moved)
+        app.requestReply(
+            history: [], text: "", pcm: Data(repeating: 0, count: 4800), audioFile: name, conversationID: id)
+        await waitUntil { !app.busy }
+        XCTAssertEqual(requests, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path))
+        let kept = try XCTUnwrap(
+            FileManager.default.contentsOfDirectory(atPath: root.path).first { $0.hasPrefix("Unsent voice message ") })
+        XCTAssertTrue(app.error?.contains(kept) == true, "The learner is told where it is")
+        // On the next launch, cleanup removes an orphaned recording but keeps the unsent one.
+        try FileManager.default.removeItem(at: app.store.file)
+        try FileManager.default.moveItem(at: moved, to: app.store.file)
+        let orphan = root.appendingPathComponent("recording-\(UUID()).wav")
+        try Data(repeating: 0, count: 48).write(to: orphan)
+        _ = makeApp(root: root)
+        await waitUntil { !FileManager.default.fileExists(atPath: orphan.path) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path), "Launch cleanup ran")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(kept).path))
+    }
+
     @MainActor func testUnsavedTextReplyIsNotReportedAsSavedWithoutAudio() async throws {
         let root = makeTemporaryFolder()
         let app = makeApp(root: root)
