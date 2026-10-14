@@ -157,7 +157,8 @@ extension Library {
                 throw AppFailure("The library contains invalid recording details.")
             }
             if let evidence = message.transcriptEvidence {
-                guard evidence.isValid, evidence.text == message.text else {
+                // Byte for byte: String equality accepts canonically equivalent text whose offsets differ.
+                guard evidence.isValid, evidence.text.utf8.elementsEqual(message.text.utf8) else {
                     throw AppFailure("The library contains transcript evidence that does not match its text.")
                 }
             }
@@ -166,12 +167,15 @@ extension Library {
             throw AppFailure("The library contains invalid review state.")
         }
         for name in referencedAudio {
-            // The v4 backups are matched by their suffix too: an older library may name a recording with that prefix.
+            // Compared as the file system sees it: volumes are case-insensitive by default, so "LIBRARY.JSON" would
+            // name the library itself. The v4 and v5 backups are matched by their suffix too: an older library may
+            // name a recording with that prefix.
+            let folded = name.precomposedStringWithCanonicalMapping.lowercased()
             guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"),
-                !name.hasPrefix("."), !name.hasPrefix("library-before-character-templates-v3"),
-                !(name.hasPrefix(LibraryStore.characterLibraryBackupPrefix) && name.hasSuffix(".json")),
-                !(name.hasPrefix(LibraryStore.reviewLibraryBackupPrefix) && name.hasSuffix(".json")),
-                !name.hasPrefix("library-unreadable-"), !LibraryStore.reservedNames.contains(name)
+                !name.hasPrefix("."), !folded.hasPrefix("library-before-character-templates-v3"),
+                !(folded.hasPrefix(LibraryStore.characterLibraryBackupPrefix) && folded.hasSuffix(".json")),
+                !(folded.hasPrefix(LibraryStore.reviewLibraryBackupPrefix) && folded.hasSuffix(".json")),
+                !folded.hasPrefix("library-unreadable-"), !LibraryStore.reservedNames.contains(folded)
             else { throw AppFailure("The library contains an unsafe recording filename.") }
         }
     }

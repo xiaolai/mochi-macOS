@@ -123,6 +123,26 @@ final class LibraryStoreTests: XCTestCase {
         }
     }
 
+    func testReservedNamesAreRefusedInAnyCase() {
+        // Volumes are case-insensitive by default: these name the library and its backups.
+        let reserved = [
+            "LIBRARY.JSON", "Library.Previous.json", "library-before-review-v5.JSON",
+            "Library-Before-Character-Library-v4-1.json", "LIBRARY-UNREADABLE-1-x.json",
+        ]
+        for name in reserved {
+            var library = Library()
+            var chat = Conversation()
+            chat.messages = [Message(role: "user", text: "", audio: name)]
+            library.conversations = [chat]
+            XCTAssertThrowsError(try library.validate(), name)
+        }
+        var library = Library()
+        var chat = Conversation()
+        chat.messages = [Message(role: "user", text: "", audio: "Recording-1.WAV")]
+        library.conversations = [chat]
+        XCTAssertNoThrow(try library.validate(), "An ordinary capitalised recording name is fine")
+    }
+
     func testEarlierCopyNeverRestoresPendingTranscriptions() throws {
         let root = try folder()
         let store = LibraryStore(root: root)
@@ -232,6 +252,51 @@ final class LibraryStoreTests: XCTestCase {
         let url = TestScratch.folder("mochi-persistence")
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
         return url
+    }
+
+    func testALinkedLibraryIsNeitherOpenedNorReplaced() throws {
+        let root = try folder()
+        let elsewhere = try folder().appendingPathComponent("real-library.json")
+        let real = LibraryStore(root: elsewhere.deletingLastPathComponent())
+        try real.save(voiceLibrary("recording-\(UUID()).wav"))
+        try FileManager.default.moveItem(at: real.file, to: elsewhere)
+        try FileManager.default.createSymbolicLink(at: LibraryStore(root: root).file, withDestinationURL: elsewhere)
+        let before = try Data(contentsOf: elsewhere)
+        let store = LibraryStore(root: root)
+        XCTAssertThrowsError(try store.load())
+        XCTAssertThrowsError(try store.save(Library()))
+        XCTAssertThrowsError(try store.restorePrevious())
+        let kind = try FileManager.default.attributesOfItem(atPath: store.file.path)[.type] as? FileAttributeType
+        XCTAssertEqual(kind, .typeSymbolicLink, "The link was not replaced")
+        XCTAssertEqual(try Data(contentsOf: elsewhere), before)
+    }
+
+    func testImportedRecordingNamesAreClassifiedWithOrWithoutAnExtension() {
+        let id = UUID().uuidString
+        XCTAssertEqual(LibraryStore.generatedAudio("import-\(id).wav"), .cache)
+        XCTAssertEqual(LibraryStore.generatedAudio("import-\(id)"), .cache)
+        XCTAssertEqual(LibraryStore.generatedAudio("import-\(id)."), .cache, "the name an older import produced")
+        XCTAssertNil(LibraryStore.generatedAudio("import-\(id).a.b"))
+        XCTAssertNil(LibraryStore.generatedAudio("import-not-a-uuid.wav"))
+        // Every name an import is given is one the classifier recognises, with or without an extension.
+        for ext in ["mp3", ""] {
+            let name = LibraryStore.importedAudioName(extension: ext)
+            XCTAssertFalse(name.hasSuffix("."), name)
+            XCTAssertEqual(LibraryStore.generatedAudio(name), .cache, name)
+        }
+    }
+
+    func testAnEarlierCopyThatBecomesReadableAgainProtectsItsRecordings() throws {
+        let root = try folder()
+        let store = LibraryStore(root: root)
+        let name = "recording-\(UUID()).wav"
+        try store.save(voiceLibrary(name))
+        try store.save(Library())
+        XCTAssertEqual(chmod(store.previousFile.path, 0o000), 0)
+        defer { chmod(store.previousFile.path, 0o600) }
+        XCTAssertEqual(store.previousReferencedAudio(), [], "An unreadable copy protects nothing")
+        XCTAssertEqual(chmod(store.previousFile.path, 0o600), 0)
+        XCTAssertEqual(store.previousReferencedAudio(), [name], "Restored permissions leave its identity unchanged")
     }
 
     private func voiceLibrary(_ audio: String, state: TranscriptionState? = nil) -> Library {

@@ -119,7 +119,9 @@ final class LibraryVersionFiveTests: XCTestCase {
         var voice = Message(role: "user", text: "I go home.", audio: "recording-\(UUID().uuidString).wav")
         voice.recording = RecordingMetadata(model: "gpt-4o-mini-transcribe", language: "en")
         voice.transcriptEvidence = evidence("I go home.")
-        chat.messages = [voice]
+        var restart = Message(role: "user", text: "Let's start again from the beginning.")
+        restart.startsAgain = true
+        chat.messages = [voice, restart]
         library.conversations = [chat]
         var item = PracticeExpression(conversationID: chat.id, meaning: "m", english: "Hello.", language: .english)
         let day = Date(timeIntervalSince1970: 1_800_000_000)
@@ -133,6 +135,7 @@ final class LibraryVersionFiveTests: XCTestCase {
         XCTAssertEqual(loaded.conversations[0].messages[0].recording, voice.recording)
         XCTAssertEqual(loaded.conversations[0].messages[0].transcriptEvidence, voice.transcriptEvidence)
         XCTAssertEqual(loaded.expressions[0].review, item.review)
+        XCTAssertEqual(loaded.conversations[0].messages.map(\.startsAgain), [nil, true])
 
         let package = folder().appendingPathComponent("backup.mochilibrary")
         try LibraryBackup.write(loaded, from: root, to: package)
@@ -143,6 +146,7 @@ final class LibraryVersionFiveTests: XCTestCase {
         XCTAssertEqual(local.conversations[0].messages[0].transcriptEvidence, voice.transcriptEvidence)
         XCTAssertEqual(local.conversations[0].messages[0].recording, voice.recording)
         XCTAssertEqual(local.expressions[0].review, item.review)
+        XCTAssertEqual(local.conversations[0].messages.map(\.startsAgain), [nil, true])
     }
 
     func testInvalidNewFieldsAreRefused() {
@@ -217,6 +221,18 @@ final class TranscriptEvidenceTests: XCTestCase {
         let evidence = try XCTUnwrap(
             TranscriptEvidence(text: "Hi there", raw: " Hi there\n", tokens: tokens([" Hi", " there", "\n"])))
         XCTAssertEqual(evidence.pieces.map(\.end), [2, 8])
+    }
+    func testATokenWhollyInTrimmedWhitespaceDoesNotLowerTheText() throws {
+        let raw: [(bytes: [UInt8], logprob: Double)] = [
+            (Array(" ".utf8), -9), (Array("Hi".utf8), -0.1), (Array("\n".utf8), -10),
+        ]
+        let evidence = try XCTUnwrap(TranscriptEvidence(text: "Hi", raw: " Hi\n", tokens: raw))
+        XCTAssertEqual(evidence.pieces, [.init(end: 2, logprob: -0.1)])
+    }
+    func testCanonicallyEquivalentButDifferentBytesGiveNoEvidence() {
+        // Composed "é" in the text, decomposed in what the tokens spell: equal as Strings, not as bytes.
+        let decomposed = "Cafe\u{301}"
+        XCTAssertNil(TranscriptEvidence(text: "Café", raw: decomposed, tokens: tokens([decomposed])))
     }
     func testACharacterSplitAcrossTokensStillAligns() throws {
         // "é" is two UTF-8 bytes; the transcriber may send them in two tokens.

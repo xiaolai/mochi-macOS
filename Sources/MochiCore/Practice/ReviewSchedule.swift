@@ -34,7 +34,11 @@ public enum ReviewSchedule {
     }
     private static func day(after now: Date, days: Int, _ calendar: Calendar) -> Date {
         let today = calendar.startOfDay(for: now)
-        return calendar.date(byAdding: .day, value: days, to: today) ?? today.addingTimeInterval(Double(days) * 86400)
+        let later =
+            calendar.date(byAdding: .day, value: days, to: today) ?? today.addingTimeInterval(Double(days) * 86400)
+        // Where daylight saving starts at midnight, a day can begin at 01:00; adding days keeps that hour, so the
+        // result is moved to the start of its own day.
+        return calendar.startOfDay(for: later)
     }
 }
 

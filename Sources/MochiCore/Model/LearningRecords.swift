@@ -40,12 +40,17 @@ public struct TranscriptEvidence: Codable, Equatable, Sendable {
         else { return nil }
         let lead = raw.utf8.distance(from: raw.startIndex, to: range.lowerBound)
         let length = text.utf8.count
+        // String search matches canonically equivalent text; the offsets need the very same bytes.
+        guard Array(raw.utf8).dropFirst(lead).prefix(length).elementsEqual(text.utf8) else { return nil }
         var pieces: [Piece] = []
         var offset = 0
         for token in tokens {
+            let start = offset - lead
             offset += token.bytes.count
             let end = min(max(offset - lead, 0), length)
             guard token.logprob.isFinite, token.logprob <= 0 else { return nil }
+            // A token wholly in the trimmed lead or tail says nothing about the text.
+            guard start < length, offset - lead > 0 else { continue }
             if end > (pieces.last?.end ?? 0) {
                 pieces.append(Piece(end: end, logprob: token.logprob))
             } else if end > 0, let last = pieces.indices.last {

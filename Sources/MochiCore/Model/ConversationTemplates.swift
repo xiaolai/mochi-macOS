@@ -308,7 +308,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
     public var category: Category? { Self.builtinNumbers[id].map { Self.definitions[$0 - 1].category } }
     /// True for a built-in where Mochi plays a part in a scenario the user sets up, so Start Again is offered as a
     /// button. Defined in code and never stored, like the category.
-    public var isRolePlay: Bool { Self.builtinNumbers[id].map { Self.definitions[$0 - 1].rolePlay } ?? false }
+    public var isRolePlay: Bool { Self.isRolePlay(id) }
     public static func isRolePlay(_ id: UUID?) -> Bool {
         id.flatMap { builtinNumbers[$0] }.map { definitions[$0 - 1].rolePlay } ?? false
     }

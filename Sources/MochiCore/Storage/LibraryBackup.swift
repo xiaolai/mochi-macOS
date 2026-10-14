@@ -114,7 +114,7 @@ public enum LibraryBackup {
         do {
             for name in additions.referencedAudio {
                 try Task.checkCancellation()
-                let replacement = "import-\(UUID().uuidString).\(URL(fileURLWithPath:name).pathExtension)"
+                let replacement = LibraryStore.importedAudioName(extension: URL(fileURLWithPath: name).pathExtension)
                 let destination = root.appendingPathComponent(replacement)
                 try FileManager.default.copyItem(at: package.appendingPathComponent(name), to: destination)
                 copied.append(destination)

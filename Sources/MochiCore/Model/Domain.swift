@@ -51,6 +51,8 @@ public struct Message: Codable, Identifiable, Equatable {
     public var recording: RecordingMetadata?
     /// The transcriber's confidence in `text`; nil when it has none, or the text was edited or typed.
     public var transcriptEvidence: TranscriptEvidence?
+    /// True for a Start Again request, so a retried reply keeps the conversation's opening; nil otherwise.
+    public var startsAgain: Bool?
     public init(role: String, text: String, audio: String? = nil, speakerName: String? = nil) {
         self.role = role
         self.text = text
@@ -58,18 +60,23 @@ public struct Message: Codable, Identifiable, Equatable {
         self.speakerName = speakerName
     }
     public var contextText: String? {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            !(role == "user" && audio != nil && Self.legacyLabels.contains(text))
-        else { return nil }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !isLegacyLabel else { return nil }
         return text
     }
     public var displayText: String {
         contextText ?? (role == "user" && audio != nil ? String(localized: "Voice recording") : text)
     }
     private static let legacyLabels = ["Voice message (transcript unavailable)", "Voice message · awaiting transcript"]
+    /// A placeholder an early version stored as the text of a voice message it could not transcribe. Those versions
+    /// stored no transcription state, recording details or evidence, so a message with any of them is a real
+    /// transcript, even one that reads like a label.
+    private var isLegacyLabel: Bool {
+        role == "user" && audio != nil && transcriptionState == nil && recording == nil && transcriptEvidence == nil
+            && Self.legacyLabels.contains(text)
+    }
     private enum CodingKeys: String, CodingKey {
         case id, role, text, audio, date, transcriptionState, transcriptionError, speakerName, recording
-        case transcriptEvidence
+        case transcriptEvidence, startsAgain
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -83,7 +90,8 @@ public struct Message: Codable, Identifiable, Equatable {
         transcriptionError = try c.decodeIfPresent(String.self, forKey: .transcriptionError)
         recording = try c.decodeIfPresent(RecordingMetadata.self, forKey: .recording)
         transcriptEvidence = try c.decodeIfPresent(TranscriptEvidence.self, forKey: .transcriptEvidence)
-        if role == "user", audio != nil, Self.legacyLabels.contains(text) {
+        startsAgain = try c.decodeIfPresent(Bool.self, forKey: .startsAgain)
+        if isLegacyLabel {
             transcriptionState = text.contains("awaiting") ? .interrupted : .failed
             text = ""
         }

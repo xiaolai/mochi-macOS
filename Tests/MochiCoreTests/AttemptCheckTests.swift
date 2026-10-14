@@ -131,4 +131,56 @@ final class AttemptCheckTests: XCTestCase {
         XCTAssertTrue(AttemptCheck.sameWords("start.", "start"))
         XCTAssertFalse(AttemptCheck.sameWords("off", "of"))
     }
+
+    func testAPartlyMatchedWordKeepsItsExtraUnit() {
+        // "don't" matches "do" and adds "not": the target word was heard differently, never silently heard.
+        let result = AttemptCheck(
+            target: "I do agree", recognized: words([("I", 0.9), ("don't", 0.9), ("agree", 0.9)]))
+        XCTAssertEqual(states(result), ["heard", "as:don't", "heard"])
+        XCTAssertEqual(result.extra, ["not"], "The unmatched unit is listed as heard in addition")
+    }
+    func testAPossessiveIsNotItsContraction() {
+        let possessive = AttemptCheck(
+            target: "John's book is here.",
+            recognized: words([("John", 0.9), ("is", 0.9), ("book", 0.9), ("is", 0.9), ("here", 0.9)]))
+        XCTAssertEqual(states(possessive), ["as:John is", "heard", "heard", "heard"])
+        let said = AttemptCheck(
+            target: "John's book is here.",
+            recognized: words([("John's", 0.9), ("book", 0.9), ("is", 0.9), ("here", 0.9)]))
+        XCTAssertEqual(states(said), ["heard", "heard", "heard", "heard"])
+        let contraction = AttemptCheck(
+            target: "She's gone home.",
+            recognized: words([("She", 0.9), ("has", 0.9), ("gone", 0.9), ("home", 0.9)]))
+        XCTAssertEqual(states(contraction), ["heard", "heard", "heard"], "A contraction still accepts its long form")
+        XCTAssertFalse(AttemptCheck.sameWords("John's book", "John is book"))
+        XCTAssertTrue(AttemptCheck.sameWords("John's book", "John's book"))
+        XCTAssertTrue(AttemptCheck.sameWords("She's gone", "She has gone"))
+    }
+
+    func testAmbiguousEndingsMatchEitherReading() {
+        let had = AttemptCheck(
+            target: "I'd already left",
+            recognized: words([("I", 0.9), ("had", 0.9), ("already", 0.9), ("left", 0.9)]))
+        XCTAssertEqual(states(had), ["heard", "heard", "heard"])
+        let would = AttemptCheck(
+            target: "I'd like that", recognized: words([("I", 0.9), ("would", 0.9), ("like", 0.9), ("that", 0.9)]))
+        XCTAssertEqual(states(would), ["heard", "heard", "heard"])
+        XCTAssertTrue(AttemptCheck.sameWords("it's done", "it has done"))
+        XCTAssertFalse(AttemptCheck.sameWords("I'd go", "I will go"))
+    }
+
+    func testDashesAndSlashesSeparateWords() {
+        let result = AttemptCheck(target: "Wait—what?", recognized: words([("Wait", 0.9), ("what", 0.9)]))
+        XCTAssertEqual(states(result), ["heard"])
+        XCTAssertTrue(result.extra.isEmpty)
+        XCTAssertTrue(AttemptCheck.sameWords("and/or", "and or"))
+        XCTAssertTrue(AttemptCheck.sameWords("don't", "do not"), "The apostrophe still joins a contraction")
+    }
+
+    func testOtherNumericCharactersNeverCrashAndAreNotSpelled() {
+        XCTAssertEqual(AttemptCheck.units(of: "㊿"), ["㊿"])
+        XCTAssertEqual(AttemptCheck.units(of: "½"), ["½"])
+        XCTAssertEqual(AttemptCheck.units(of: "١٢٣"), ["١٢٣"], "Arabic-Indic digits are not read as English")
+        XCTAssertEqual(AttemptCheck.units(of: "42"), ["forty", "two"])
+    }
 }

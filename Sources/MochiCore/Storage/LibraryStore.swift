@@ -43,6 +43,17 @@ public final class LibraryStore {
         try FileManager.default.createDirectory(
             at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     }
+    /// Mochi keeps its library as a plain file. A link would be followed when reading but replaced by a plain file on
+    /// the next save, skipping the earlier copy and migration backups, so any other kind of file is refused.
+    private func requirePlainLibraryFile() throws {
+        var info = stat()
+        guard lstat(file.path, &info) == 0 else { return }
+        guard info.st_mode & S_IFMT == S_IFREG else {
+            throw AppFailure(
+                "Mochi's library file is a link or another special file, so Mochi did not open or replace it. Put the library file itself in its place."
+            )
+        }
+    }
     private func identity(_ url: URL) -> FileIdentity? {
         var info = stat()
         guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { return nil }
@@ -61,23 +72,33 @@ public final class LibraryStore {
                 atPath: root.appendingPathComponent("library-before-help-transcription.json").path))
     }
     public func load() throws -> Library {
-        guard FileManager.default.fileExists(atPath: file.path) else {
+        try requirePlainLibraryFile()
+        var info = stat()
+        guard lstat(file.path, &info) == 0 else {
             known = nil
             return Library()
         }
         let before = identity(file)
-        let data = try Data(contentsOf: file)
-        var library = try JSONDecoder().decode(Library.self, from: data)
-        guard (1...Library.currentVersion).contains(library.version) else {
-            throw AppFailure(
+        let (library, storedVersion) = try Self.open(
+            Data(contentsOf: file),
+            newer: AppFailure(
                 "This library was created by a newer version of Mochi. Update Mochi to open it; your data has not been changed."
-            )
-        }
+            ))
+        remember(before == identity(file) ? before : nil, version: storedVersion)
+        return library
+    }
+    /// A stored library as Mochi opens it, with the version it was stored in: decoded, checked, pending
+    /// transcriptions interrupted. `newer` is the failure when it comes from a newer Mochi.
+    private static func open(_ data: Data, newer: @autoclosure () -> AppFailure) throws
+        -> (library: Library, storedVersion: Int)
+    {
+        var library = try JSONDecoder().decode(Library.self, from: data)
+        guard (1...Library.currentVersion).contains(library.version) else { throw newer() }
         try library.validate()
-        remember(before == identity(file) ? before : nil, version: library.version)
+        let storedVersion = library.version
         library.interruptPendingTranscriptions()
         library.version = Library.currentVersion
-        return library
+        return (library, storedVersion)
     }
     /// Loads the copy kept before the most recent save, for recovery when `library.json` is unreadable.
     public func loadPrevious() throws -> Library { try readPrevious().library }
@@ -85,14 +106,8 @@ public final class LibraryStore {
     private func readPrevious() throws -> (original: Data, storedVersion: Int, library: Library) {
         guard identity(previousFile) != nil else { throw AppFailure("No earlier copy of the library is available.") }
         let original = try Data(contentsOf: previousFile)
-        var library = try JSONDecoder().decode(Library.self, from: original)
-        guard (1...Library.currentVersion).contains(library.version) else {
-            throw AppFailure("The earlier copy was created by a newer version of Mochi.")
-        }
-        try library.validate()
-        let storedVersion = library.version
-        library.interruptPendingTranscriptions()
-        library.version = Library.currentVersion
+        let (library, storedVersion) = try Self.open(
+            original, newer: AppFailure("The earlier copy was created by a newer version of Mochi."))
         return (original, storedVersion, library)
     }
     /// Recordings the earlier copy names. Restore Earlier Copy can reinstate them, so none may be removed while named here.
@@ -103,13 +118,19 @@ public final class LibraryStore {
             return []
         }
         if let previousAudio, previousAudio.identity == current { return previousAudio.names }
-        let names = (try? loadPrevious())?.referencedAudio ?? []
+        // A failed read is not remembered: if the copy becomes readable again (its permissions restored, which leaves
+        // its identity unchanged), the next cleanup must see the recordings it names.
+        guard let names = (try? loadPrevious())?.referencedAudio else {
+            previousAudio = nil
+            return []
+        }
         previousAudio = (current, names)
         return names
     }
     /// Keeps an unreadable library under a second name (never deleting it) and atomically reinstates the earlier copy,
     /// so `library.json` always names one of the two.
     public func restorePrevious() throws -> Library {
+        try requirePlainLibraryFile()
         let (original, storedVersion, library) = try readPrevious()
         // The earlier copy is about to become the library, so its own bytes get the backups any upgrade keeps.
         // Without them, the next save would replace `library.previous.json` and lose an older format's bytes.
@@ -164,6 +185,10 @@ public final class LibraryStore {
             try FileManager.default.removeItem(at: url)
         }
     }
+    /// A fresh name for imported audio that keeps the source's extension; a source without one gets no trailing dot.
+    public static func importedAudioName(extension ext: String) -> String {
+        "import-\(UUID().uuidString)" + (ext.isEmpty ? "" : ".\(ext)")
+    }
     enum GeneratedAudio { case session, cache }
     /// Classifies names Mochi itself generates; anything else is not Mochi's to delete.
     static func generatedAudio(_ name: String) -> GeneratedAudio? {
@@ -176,7 +201,12 @@ public final class LibraryStore {
         if ext == "wav", let id = suffix(after: "recording-") ?? suffix(after: "reply-"), UUID(uuidString: id) != nil {
             return .session
         }
-        if let id = suffix(after: "import-"), UUID(uuidString: id) != nil, !ext.isEmpty { return .cache }
+        // "import-<UUID>.<ext>", "import-<UUID>" for an import without an extension, or the "import-<UUID>." such an
+        // import was named before.
+        if name.hasPrefix("import-"), UUID(uuidString: String(name.dropFirst(7).prefix(36))) != nil {
+            let rest = name.dropFirst(7 + 36)
+            if rest.isEmpty || (rest.first == "." && !rest.dropFirst().contains(".")) { return .cache }
+        }
         for (prefix, expected) in [("builtin-", "wav"), ("elevenlabs-", "mp3")] {
             if ext == expected, let hash = suffix(after: prefix), hash.count == 64, hash.allSatisfy(\.isHexDigit) {
                 return .cache
@@ -188,6 +218,7 @@ public final class LibraryStore {
     /// `replacingUnreadable` installs over a file already kept elsewhere: it is neither read nor kept as the earlier copy.
     private func write(_ library: Library, replacingUnreadable: Bool) throws {
         try prepare()
+        try requirePlainLibraryFile()
         guard (1...Library.currentVersion).contains(library.version) else {
             throw AppFailure("Unsupported library version.")
         }

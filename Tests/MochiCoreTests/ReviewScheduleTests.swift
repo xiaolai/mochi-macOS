@@ -115,4 +115,16 @@ final class ReviewScheduleTests: XCTestCase {
         XCTAssertEqual(library.storeExpression(stale, at: now).review, graded, "A stale copy never undoes a grade")
         XCTAssertEqual(library.expressions.map(\.english), ["Edited."])
     }
+
+    func testDueIsTheStartOfTheDayAfterAMidnightDaylightSavingChange() throws {
+        // Chile moves its clocks from 00:00 to 01:00 on 6 September 2026, so that day starts at 01:00.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Santiago"))
+        let noon = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 6, hour: 12)))
+        XCTAssertEqual(calendar.component(.hour, from: calendar.startOfDay(for: noon)), 1, "the fixture's premise")
+        let due = ReviewSchedule.enrol(at: noon, calendar: calendar).due
+        let nextDay = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 7)))
+        XCTAssertEqual(due, calendar.startOfDay(for: nextDay))
+        XCTAssertEqual(calendar.component(.hour, from: due), 0)
+    }
 }
