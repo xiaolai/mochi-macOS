@@ -29,6 +29,8 @@ extension RealtimeService {
         timeoutNanoseconds: UInt64 = 60_000_000_000
     ) async throws -> TranscriptResult {
         try Self.validateTranscriptionAudio(pcm)
+        // An unsupported model and language combination fails here, before any credential or connection.
+        _ = try Self.transcriptionFields(model: transcriptionModel, languages: languages)
         try Task.checkCancellation()
         let token = try await credential()
         try Task.checkCancellation()
@@ -68,16 +70,7 @@ extension RealtimeService {
     ) async throws -> TranscriptResult {
         try validateTranscriptionAudio(pcm)
         var accumulator = RealtimeAccumulator()
-        func waitFor(_ type: String) async throws {
-            while true {
-                try Task.checkCancellation()
-                let event = try await receive()
-                try Task.checkCancellation()
-                try accumulator.accept(event)
-                if event["type"] as? String == type { return }
-            }
-        }
-        try await waitFor("session.created")
+        try await waitFor("session.created", into: &accumulator, receive: receive)
         try await send([
             "type": "session.update",
             "session": [
@@ -85,22 +78,14 @@ extension RealtimeService {
                 "audio": [
                     "input": [
                         "format": ["type": "audio/pcm", "rate": 24000], "turn_detection": NSNull(),
-                        "transcription": RealtimeService.transcriptionFields(
+                        "transcription": try RealtimeService.transcriptionFields(
                             model: transcriptionModel, languages: languages),
                     ]
                 ],
             ],
         ])
-        try await waitFor("session.updated")
-        for offset in stride(from: 0, to: pcm.count, by: 48000) {
-            try Task.checkCancellation()
-            try await send([
-                "type": "input_audio_buffer.append",
-                "audio": pcm.subdata(in: offset..<min(offset + 48000, pcm.count)).base64EncodedString(),
-            ])
-        }
-        try Task.checkCancellation()
-        try await send(["type": "input_audio_buffer.commit"])
+        try await waitFor("session.updated", into: &accumulator, receive: receive)
+        try await upload(pcm, send: send)
         while accumulator.transcriptionState == .pending {
             try Task.checkCancellation()
             let event = try await receive()

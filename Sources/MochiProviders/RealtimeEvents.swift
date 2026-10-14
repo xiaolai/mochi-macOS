@@ -59,16 +59,27 @@ public struct RealtimeAccumulator {
     static let logprobRoundingTolerance = 0.001
     /// Evidence from a completed transcription's `logprobs`: each token's bytes and log probability. Anything
     /// missing or malformed gives none; the transcript itself is kept either way.
+    /// A finite JSON number. JSON `true` and `false` also arrive as NSNumber and are refused, never read as 1 or 0.
+    private static func number(_ value: Any?) -> Double? {
+        guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(), value.doubleValue.isFinite
+        else { return nil }
+        return value.doubleValue
+    }
     static func evidence(text: String, raw: String, logprobs: Any?) -> TranscriptEvidence? {
         guard let entries = logprobs as? [[String: Any]], !entries.isEmpty else { return nil }
         var tokens: [(bytes: [UInt8], logprob: Double)] = []
         for entry in entries {
-            guard let values = entry["bytes"] as? [NSNumber],
-                let logprob = (entry["logprob"] as? NSNumber)?.doubleValue,
-                logprob <= logprobRoundingTolerance,
-                values.allSatisfy({ (0...255).contains($0.intValue) })
+            guard let values = entry["bytes"] as? [NSNumber], let logprob = number(entry["logprob"]),
+                logprob <= logprobRoundingTolerance
             else { return nil }
-            tokens.append((values.map { UInt8($0.intValue) }, min(logprob, 0)))
+            let bytes = values.compactMap { value -> UInt8? in
+                guard let number = number(value), number.rounded() == number, (0...255).contains(number) else {
+                    return nil
+                }
+                return UInt8(number)
+            }
+            guard bytes.count == values.count else { return nil }
+            tokens.append((bytes, min(logprob, 0)))
         }
         return TranscriptEvidence(text: text, raw: raw, tokens: tokens)
     }

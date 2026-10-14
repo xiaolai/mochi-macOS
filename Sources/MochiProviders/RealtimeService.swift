@@ -12,7 +12,11 @@ public struct RealtimeService {
     /// The transcription settings for a session: the model, and a language hint when one is given. One language goes
     /// as `language`, which every transcription model accepts; several go as `languages`, which only `gpt-transcribe`
     /// accepts (`gpt-4o-mini-transcribe` refuses it with HTTP 400, measured 2026-10-14).
-    static func transcriptionFields(model: String, languages: [String] = []) -> [String: Any] {
+    static let modelsAcceptingLanguageLists: Set<String> = ["gpt-transcribe"]
+    static func transcriptionFields(model: String, languages: [String] = []) throws -> [String: Any] {
+        guard languages.count < 2 || modelsAcceptingLanguageLists.contains(model) else {
+            throw AppFailure(verbatim: "\(model) accepts one transcription language, not several.")
+        }
         switch languages.count {
         case 0: return ["model": model]
         case 1: return ["model": model, "language": languages[0]]
@@ -83,7 +87,7 @@ public struct RealtimeService {
             "audio": [
                 "input": [
                     "format": ["type": "audio/pcm", "rate": 24000], "turn_detection": NSNull(),
-                    "transcription": Self.transcriptionFields(model: input.transcriptionModel),
+                    "transcription": try Self.transcriptionFields(model: input.transcriptionModel),
                 ], "output": try options.output(voice: voice),
             ],
         ]
@@ -124,16 +128,7 @@ public struct RealtimeService {
         onTranscription: (@MainActor (RealtimeAccumulator) -> Void)? = nil,
         onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil
     ) async throws -> RealtimeAccumulator {
-        guard RealtimeVoice(rawValue: voice) != nil else {
-            throw AppFailure("Choose a supported built-in voice in Settings.")
-        }
-        try options.validate()
-        try ConversationInstructions.validate(input.instructions)
-        try input.preferences.validate()
-        if !input.help && !input.reference { try ConversationTemplate.validateName(input.characterName) }
-        if let pcm = input.pcm, !Self.isRecordedAudio(pcm) {
-            throw AppFailure("Choose a voice message between a moment and 65 seconds long, then send it again.")
-        }
+        try validate(input)
         let token = try await credential()
         try Task.checkCancellation()
         let channel = connect(realtimeRequest(token: token))
@@ -145,37 +140,11 @@ public struct RealtimeService {
                 do {
                     var accumulator = try await RealtimeDeadline.run(nanoseconds: replyTimeout, close: channel.close) {
                         var accumulator = RealtimeAccumulator()
-                        while true {
-                            let event = try await receive()
-                            try accumulator.accept(event)
-                            if event["type"] as? String == "session.created" { break }
-                        }
+                        try await Self.waitFor("session.created", into: &accumulator, receive: receive)
                         let configuration = try sessionConfiguration(input, toolsEnabled: onTool != nil)
                         try await send(["type": "session.update", "session": configuration])
-                        while true {
-                            let event = try await receive()
-                            try accumulator.accept(event)
-                            if event["type"] as? String == "session.updated" { break }
-                        }
-                        // Only completed chat messages are restored; practice never enters this history.
-                        for message in input.history.suffix(30) {
-                            if let text = message.contextText {
-                                try await send(RealtimeEvents.message(role: message.role, text: text))
-                            }
-                        }
-                        if let pcm = input.pcm {
-                            for offset in stride(from: 0, to: pcm.count, by: 48000) {
-                                try Task.checkCancellation()
-                                try await send([
-                                    "type": "input_audio_buffer.append",
-                                    "audio": pcm.subdata(in: offset..<min(offset + 48000, pcm.count))
-                                        .base64EncodedString(),
-                                ])
-                            }
-                            try await send(["type": "input_audio_buffer.commit"])
-                        } else if !input.reference {
-                            try await send(RealtimeEvents.message(role: "user", text: input.text))
-                        }
+                        try await Self.waitFor("session.updated", into: &accumulator, receive: receive)
+                        try await Self.sendTurn(input, send: send)
                         try await send([
                             "type": "response.create",
                             "response": [
@@ -199,6 +168,59 @@ public struct RealtimeService {
                     throw Self.replyFailure(error)
                 }
             }, onCancel: channel.close)
+    }
+    /// Everything a reply needs that can be checked before connecting.
+    private func validate(_ input: ConversationRequest) throws {
+        guard RealtimeVoice(rawValue: voice) != nil else {
+            throw AppFailure("Choose a supported built-in voice in Settings.")
+        }
+        try options.validate()
+        try ConversationInstructions.validate(input.instructions)
+        try input.preferences.validate()
+        if !input.help && !input.reference { try ConversationTemplate.validateName(input.characterName) }
+        if let pcm = input.pcm, !Self.isRecordedAudio(pcm) {
+            throw AppFailure("Choose a voice message between a moment and 65 seconds long, then send it again.")
+        }
+    }
+    /// Reads events into `accumulator` until one of `type` arrives.
+    static func waitFor(
+        _ type: String, into accumulator: inout RealtimeAccumulator, receive: () async throws -> [String: Any]
+    ) async throws {
+        while true {
+            try Task.checkCancellation()
+            let event = try await receive()
+            try Task.checkCancellation()
+            try accumulator.accept(event)
+            if event["type"] as? String == type { return }
+        }
+    }
+    /// Appends a recording to the input buffer in one-second chunks and commits it.
+    static func upload(_ pcm: Data, send: ([String: Any]) async throws -> Void) async throws {
+        for offset in stride(from: 0, to: pcm.count, by: 48000) {
+            try Task.checkCancellation()
+            try await send([
+                "type": "input_audio_buffer.append",
+                "audio": pcm.subdata(in: offset..<min(offset + 48000, pcm.count)).base64EncodedString(),
+            ])
+        }
+        try Task.checkCancellation()
+        try await send(["type": "input_audio_buffer.commit"])
+    }
+    /// Restores the conversation and sends this turn: its recording, or its text unless it is a reading aloud.
+    private static func sendTurn(_ input: ConversationRequest, send: ([String: Any]) async throws -> Void)
+        async throws
+    {
+        // Only completed chat messages are restored; practice never enters this history.
+        for message in input.history.suffix(30) {
+            if let text = message.contextText {
+                try await send(RealtimeEvents.message(role: message.role, text: text))
+            }
+        }
+        if let pcm = input.pcm {
+            try await upload(pcm, send: send)
+        } else if !input.reference {
+            try await send(RealtimeEvents.message(role: "user", text: input.text))
+        }
     }
     static func replyFailure(_ error: Error) -> AppFailure {
         if error is RealtimeTimeout {
@@ -268,9 +290,13 @@ public struct RealtimeService {
                 throw AppFailure("Mochi's tool request limit was reached. Please retry.")
             }
             rounds += 1
-            // A response may contain speech plus tools; retain it until the final reply.
+            // A response may contain speech plus tools; retain it until the final reply. Whether this round was cut
+            // short comes from this response: the accumulator's flag stays set once any earlier round was.
+            let roundTruncated =
+                response["status"] as? String == "incomplete"
+                && (response["status_details"] as? [String: Any])?["reason"] as? String == "max_output_tokens"
             try await runToolCalls(
-                calls, responseTruncated: accumulator.truncated, budget: &budget, onTool: onTool, send: send)
+                calls, responseTruncated: roundTruncated, budget: &budget, onTool: onTool, send: send)
             accumulator.beginNextRound()
             try await send([
                 "type": "response.create", "response": ["max_output_tokens": Self.maximumOutputTokens],

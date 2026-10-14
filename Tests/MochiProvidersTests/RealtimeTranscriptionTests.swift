@@ -222,6 +222,10 @@ final class RealtimeTranscriptionTests: XCTestCase {
             [["token": "I go home.", "logprob": -0.1]],  // no bytes
             [["token": "I go home.", "logprob": "low", "bytes": Array("I go home.".utf8).map(Int.init)]],
             [["token": "x", "logprob": -0.1, "bytes": [300]]],  // not a byte
+            // Fractional bytes would truncate to a valid "Hi"; a boolean logprob would read as certainty.
+            [["token": "I go home.", "logprob": -0.1, "bytes": Array("I go home.".utf8).map { Double($0) + 0.9 }]],
+            [["token": "I go home.", "logprob": false, "bytes": Array("I go home.".utf8).map(Int.init)]],
+            [["token": "I go home.", "logprob": -0.1, "bytes": Array("I go home.".utf8).map { _ in true }]],
             "not a list",
         ]
         for logprobs in cases {
@@ -260,6 +264,26 @@ final class RealtimeTranscriptionTests: XCTestCase {
         XCTAssertEqual(one, ["model": "gpt-transcribe", "language": "en"])
         let several = try await transcription(["en", "zh"])
         XCTAssertEqual(several, ["model": "gpt-transcribe", "languages": ["en", "zh"]])
+    }
+    func testALanguageListForAModelThatRefusesOneFailsBeforeAnyCredential() async {
+        var asked = false
+        do {
+            _ = try await RealtimeService().transcribe(
+                Data(repeating: 0, count: 4800), transcriptionModel: "gpt-4o-mini-transcribe", languages: ["en", "zh"],
+                credential: {
+                    asked = true
+                    return "token"
+                },
+                connect: { _ in
+                    XCTFail("No connection is made")
+                    return RealtimeChannel(send: { _ in }, receive: { [:] }, close: {})
+                })
+            XCTFail("An unsupported combination must fail")
+        } catch {
+            XCTAssertFalse(asked)
+        }
+        XCTAssertNoThrow(try RealtimeService.transcriptionFields(model: "gpt-4o-mini-transcribe", languages: ["en"]))
+        XCTAssertNoThrow(try RealtimeService.transcriptionFields(model: "gpt-transcribe", languages: ["en", "zh"]))
     }
     func testConversationTurnsAskForLogprobsWithTheRequestsTranscriptionModel() throws {
         var request = ConversationRequest(history: [], text: "")

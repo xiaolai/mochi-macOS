@@ -33,6 +33,32 @@ final class RealtimeToolTests: XCTestCase {
         XCTAssertEqual(calls, 1)
         XCTAssertEqual(sent.last?["type"] as? String, "response.create")
     }
+    @MainActor func testAnEarlierTruncatedRoundDoesNotBlockALaterCompleteCall() async throws {
+        func call(_ id: String) -> [String: Any] {
+            ["type": "function_call", "call_id": id, "name": "get_session", "arguments": "{}"]
+        }
+        var events: [[String: Any]] = [
+            // Round 1 is cut short: its unfinished call is answered without running.
+            [
+                "type": "response.done",
+                "response": [
+                    "status": "incomplete", "status_details": ["reason": "max_output_tokens"], "output": [call("a")],
+                ],
+            ],
+            // Round 2 completes; its call carries no status of its own and must run.
+            ["type": "response.done", "response": ["status": "completed", "output": [call("b")]]],
+            ["type": "response.output_text.delta", "delta": "Done"],
+            ["type": "response.done", "response": ["status": "completed"]],
+        ]
+        var ran: [String] = []
+        _ = try await RealtimeService.deliverResponse(
+            RealtimeAccumulator(), receive: { events.removeFirst() }, onResponse: nil, onTranscription: nil,
+            onTool: { _, _, id in
+                ran.append(id)
+                return ["ok": true]
+            }, send: { _ in })
+        XCTAssertEqual(ran, ["b"])
+    }
     @MainActor func testInvalidAndDuplicateArgumentsDoNotExecuteTwice() async throws {
         let call: [String: Any] = [
             "type": "function_call", "call_id": "same", "name": "get_session", "arguments": "{}",
