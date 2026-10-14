@@ -125,6 +125,7 @@ struct WorkspaceView: View {
                     }
                 }
             }
+            .modifier(TitleBarScrollEdge())
             .overlay(alignment: .topTrailing) {
                 if let notice = app.notice, !app.practice { NoticeCard(app: app, notice: notice) }
             }
@@ -587,6 +588,14 @@ private struct SidebarChatRow: View {
                 .help("Conversation Actions")
                 .accessibilityLabel("Actions for \(chat.displayTitle)")
         }.padding(.vertical, 7)
+    }
+}
+
+/// Content scrolled under the title bar fades out beneath its controls. With the window title hidden, macOS 26 and
+/// later draw no soft scroll edge while the window is key, so the hard style is the one that always shows.
+private struct TitleBarScrollEdge: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) { content.scrollEdgeEffectStyle(.hard, for: .top) } else { content }
     }
 }
 
