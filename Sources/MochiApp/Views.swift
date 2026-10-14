@@ -595,11 +595,36 @@ private struct SidebarChatRow: View {
     }
 }
 
-/// Content scrolled under the title bar fades out beneath its controls. With the window title hidden, macOS 26 and
-/// later draw no soft scroll edge while the window is key, so the hard style is the one that always shows.
+/// Content scrolled under the title bar fades out beneath its controls. On macOS 26 and later the system edge does
+/// not suit Mochi: with the window title hidden its soft style is not drawn while the window is key, and its hard style
+/// always draws a line. Mochi hides it and fades into the window background instead, which is invisible when nothing
+/// is scrolled under the bar.
 private struct TitleBarScrollEdge: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) { content.scrollEdgeEffectStyle(.hard, for: .top) } else { content }
+        if #available(macOS 26.0, *) {
+            content.scrollEdgeEffectHidden(true, for: .top).overlay(alignment: .top) { TitleBarFade() }
+        } else {
+            content
+        }
+    }
+}
+
+private struct TitleBarFade: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let background = Color(nsColor: .textBackgroundColor)
+            LinearGradient(
+                stops: [
+                    .init(color: background.opacity(0.85), location: 0),
+                    .init(color: background.opacity(0.6), location: 0.55),
+                    .init(color: background.opacity(0), location: 1),
+                ], startPoint: .top, endPoint: .bottom
+            )
+            // From the window's top edge to a little below the title bar.
+            .frame(height: proxy.safeAreaInsets.top + 18).frame(maxWidth: .infinity)
+            .offset(y: -proxy.safeAreaInsets.top)
+        }
+        .allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 
