@@ -46,9 +46,10 @@ extension AppModel {
         guard canStartAgain else { return }
         submit(String(localized: "Let's start again from the beginning."), fromComposer: false, restart: true)
     }
-    /// Adds `text` as the user's message and asks for a reply. Nothing is added when the message cannot be saved.
-    private func submit(_ text: String, fromComposer: Bool, restart: Bool = false) {
-        guard !busy, !practice, writableConversation, libraryReadable, let id = selectedID else { return }
+    /// Adds `text` as the user's message and asks for a reply. Nothing is added when the message cannot be saved;
+    /// returns whether the message was added.
+    @discardableResult func submit(_ text: String, fromComposer: Bool, restart: Bool = false) -> Bool {
+        guard !busy, !practice, writableConversation, libraryReadable, let id = selectedID else { return false }
         if conversation?.characterNameNeedsReview == true {
             error =
                 fromComposer
@@ -56,7 +57,7 @@ extension AppModel {
                     localized:
                         "Review the character name in Conversation Instructions before sending. Your draft is kept.")
                 : String(localized: "Review the character name in Conversation Instructions before sending.")
-            return
+            return false
         }
         notice = nil
         let messages = conversation?.messages ?? []
@@ -75,9 +76,10 @@ extension AppModel {
                 library.conversations[i] = before
             }
             if fromComposer { draft = typed }
-            return
+            return false
         }
         requestReply(history: history, text: text, pcm: nil, audioFile: nil, conversationID: id)
+        return true
     }
     var canRetry: Bool {
         guard writableConversation, !busy, !practice, let last = conversation?.messages.last, last.role == "user" else {

@@ -125,8 +125,11 @@ struct DesktopPetSettingsView: View {
                     .accessibilityIdentifier("desktop-pet-toggle")
                 Toggle("Eyes follow the pointer", isOn: Bindable(app.settings).petFollowsPointer)
                     .disabled(!app.petVisible)
+                Toggle("Show the message bar under Mochi", isOn: $app.petBarVisible)
+                    .accessibilityIdentifier("desktop-pet-bar-toggle")
+                    .disabled(!app.petVisible)
                 Text(
-                    "Mochi follows the conversation: she listens while you record, thinks while a reply is prepared, and talks while it plays. Click her to start or finish a voice message, drag her to move her, and Control-click her for more."
+                    "Mochi follows the conversation: she listens while you record, thinks while a reply is prepared, and talks while it plays. Click her to start or finish a voice message, drag her to move her, and Control-click her for more. The message bar under her types or talks to the open conversation."
                 ).font(.callout).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)

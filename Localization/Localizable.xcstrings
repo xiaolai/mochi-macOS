@@ -5837,6 +5837,34 @@
         }
       }
     },
+    "Desktop Mochi Message Bar" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面 Mochi 消息栏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面 Mochi 訊息列"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デスクトップのMochiのメッセージバー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크탑 Mochi 메시지 막대"
+          }
+        }
+      }
+    },
     "Desktop Mochi Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7961,6 +7989,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "데스크탑 Mochi 가리기"
+          }
+        }
+      }
+    },
+    "Hide Message Bar" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏消息栏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隱藏訊息列"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッセージバーを隠す"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지 막대 가리기"
           }
         }
       }
@@ -10460,30 +10516,30 @@
         }
       }
     },
-    "Mochi follows the conversation: she listens while you record, thinks while a reply is prepared, and talks while it plays. Click her to start or finish a voice message, drag her to move her, and Control-click her for more." : {
+    "Mochi follows the conversation: she listens while you record, thinks while a reply is prepared, and talks while it plays. Click her to start or finish a voice message, drag her to move her, and Control-click her for more. The message bar under her types or talks to the open conversation." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mochi 会跟随对话：你录音时她在倾听，准备回复时她在思考，播放回复时她在说话。点按她可开始或结束语音消息，拖移可移动她，按住 Control 键点按可查看更多选项。"
+            "value" : "Mochi 会跟随对话：你录音时她在倾听，准备回复时她在思考，播放回复时她在说话。点按她可开始或结束语音消息，拖移可移动她，按住 Control 键点按可查看更多选项。她下方的消息栏可向当前对话输入文字或说话。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mochi 會跟隨對話：你錄音時她在聆聽，準備回覆時她在思考，播放回覆時她在說話。按一下她可開始或結束語音訊息，拖移可移動她，按住 Control 鍵並按一下可查看更多選項。"
+            "value" : "Mochi 會跟隨對話：你錄音時她在聆聽，準備回覆時她在思考，播放回覆時她在說話。按一下她可開始或結束語音訊息，拖移可移動她，按住 Control 鍵並按一下可查看更多選項。她下方的訊息列可向目前的對話輸入文字或說話。"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mochiは会話に合わせて動きます。録音中は耳を傾け、返事の準備中は考え、再生中は話します。クリックすると音声メッセージを開始または終了し、ドラッグすると移動し、Controlキーを押しながらクリックするとその他の操作が表示されます。"
+            "value" : "Mochiは会話に合わせて動きます。録音中は耳を傾け、返事の準備中は考え、再生中は話します。クリックすると音声メッセージを開始または終了し、ドラッグすると移動し、Controlキーを押しながらクリックするとその他の操作が表示されます。下のメッセージバーから、開いている会話に入力したり話しかけたりできます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mochi는 대화를 따라 움직입니다. 녹음하는 동안 귀를 기울이고, 답장을 준비하는 동안 생각하고, 재생되는 동안 말합니다. 클릭하면 음성 메시지를 시작하거나 끝내고, 드래그하면 옮기며, Control-클릭하면 더 많은 항목이 표시됩니다."
+            "value" : "Mochi는 대화를 따라 움직입니다. 녹음하는 동안 귀를 기울이고, 답장을 준비하는 동안 생각하고, 재생되는 동안 말합니다. 클릭하면 음성 메시지를 시작하거나 끝내고, 드래그하면 옮기며, Control-클릭하면 더 많은 항목이 표시됩니다. 아래의 메시지 막대로 열려 있는 대화에 입력하거나 말할 수 있습니다."
           }
         }
       }
@@ -16844,6 +16900,34 @@
         }
       }
     },
+    "Show Message Bar" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示消息栏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示訊息列"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッセージバーを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지 막대 보기"
+          }
+        }
+      }
+    },
     "Show Mochi on the desktop" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16924,6 +17008,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "데스크탑 Mochi 보기 또는 가리기"
+          }
+        }
+      }
+    },
+    "Show the message bar under Mochi" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Mochi 下方显示消息栏"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Mochi 下方顯示訊息列"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiの下にメッセージバーを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 아래에 메시지 막대 보기"
           }
         }
       }
@@ -21348,6 +21460,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "단축키 입력…"
+          }
+        }
+      }
+    },
+    "Type a Message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入消息"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "輸入訊息"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッセージを入力"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지 입력"
           }
         }
       }

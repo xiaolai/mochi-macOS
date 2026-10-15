@@ -17,6 +17,8 @@ import MochiCore
     var reducesMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
     private(set) var panel: NSPanel?
+    /// The message bar under her, made the first time it is shown.
+    private(set) var bar: PetBar?
     private var view: PetView?
     private weak var model: AppModel?
     private let sprite: PetSprite
@@ -58,10 +60,20 @@ import MochiCore
         let panel = self.panel ?? makePanel()
         if !panel.isVisible {
             _ = body
-            panel.setFrameOrigin(Self.origin(stored: model.settings.petOrigin, screens: Self.screens))
+            panel.setFrameOrigin(
+                Self.origin(stored: model.settings.petOrigin, screens: Self.screens, below: reserve(model)))
             arrived = Date()
             lastError = model.error
             panel.orderFrontRegardless()
+        }
+        if model.petBarVisible {
+            // Turning the bar on can leave her too low for it.
+            keepOnScreen()
+            let bar = self.bar ?? PetBar(model: model)
+            self.bar = bar
+            bar.attach(to: panel)
+        } else {
+            bar?.detach()
         }
         if timer == nil {
             let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
@@ -108,6 +120,7 @@ import MochiCore
         screensObserver = nil
         for monitor in pointerMonitors { NSEvent.removeMonitor(monitor) }
         pointerMonitors = []
+        bar?.detach()
         panel?.orderOut(nil)
     }
 
@@ -204,11 +217,15 @@ import MochiCore
     func clicked() { model?.quickTalk() }
 
     func moved(to origin: CGPoint) {
-        guard let panel else { return }
-        let placed = Self.origin(stored: origin, screens: Self.screens)
+        guard let panel, let model else { return }
+        let placed = Self.origin(stored: origin, screens: Self.screens, below: reserve(model))
         panel.setFrameOrigin(placed)
-        model?.settings.petOrigin = placed
+        model.settings.petOrigin = placed
+        bar?.layout()
     }
+
+    /// Room kept under her for the message bar while it shows.
+    private func reserve(_ model: AppModel) -> CGFloat { model.petBarVisible ? PetBar.reserve : 0 }
 
     func menu() -> NSMenu {
         let menu = NSMenu()
@@ -223,6 +240,11 @@ import MochiCore
         add(String(localized: "Open Mochi"), #selector(openWorkspace))
         add(String(localized: "Desktop Mochi Settings…"), #selector(openSettings))
         menu.addItem(.separator())
+        if model?.petBarVisible == true {
+            add(String(localized: "Hide Message Bar"), #selector(toggleBar))
+        } else {
+            add(String(localized: "Show Message Bar"), #selector(toggleBar))
+        }
         add(String(localized: "Hide Desktop Mochi"), #selector(hidePet))
         return menu
     }
@@ -236,10 +258,12 @@ import MochiCore
         model.settingsOpen = true
     }
     @objc private func hidePet() { model?.petVisible = false }
+    @objc private func toggleBar() { model?.petBarVisible.toggle() }
 
     private func keepOnScreen() {
-        guard let panel, panel.isVisible else { return }
-        panel.setFrameOrigin(Self.origin(stored: panel.frame.origin, screens: Self.screens))
+        guard let panel, panel.isVisible, let model else { return }
+        panel.setFrameOrigin(Self.origin(stored: panel.frame.origin, screens: Self.screens, below: reserve(model)))
+        bar?.layout()
     }
 
     // MARK: Placement
@@ -247,8 +271,8 @@ import MochiCore
     static var screens: [CGRect] { NSScreen.screens.map(\.visibleFrame) }
 
     /// Where she sits: the stored spot kept fully on the screen that holds her centre, or the bottom right corner
-    /// of the first screen when no screen holds it any more.
-    static func origin(stored: CGPoint?, screens: [CGRect]) -> CGPoint {
+    /// of the first screen when no screen holds it any more. `below` is room kept free under her, for the bar.
+    static func origin(stored: CGPoint?, screens: [CGRect], below: CGFloat = 0) -> CGPoint {
         guard let first = screens.first else { return stored ?? .zero }
         if let stored, stored.x.isFinite, stored.y.isFinite,
             let screen = screens.first(where: {
@@ -257,9 +281,9 @@ import MochiCore
         {
             return CGPoint(
                 x: min(max(stored.x, screen.minX), screen.maxX - size.width),
-                y: min(max(stored.y, screen.minY), screen.maxY - size.height))
+                y: min(max(stored.y, screen.minY + below), screen.maxY - size.height))
         }
-        return CGPoint(x: first.maxX - size.width - margin, y: first.minY + margin)
+        return CGPoint(x: first.maxX - size.width - margin, y: first.minY + margin + below)
     }
 }
 

@@ -23,6 +23,33 @@ extension AppModel {
         }
     }
 
+    var petBarVisible: Bool {
+        get { settings.petBarVisible }
+        set {
+            settings.petBarVisible = newValue
+            updateDesktopPet?()
+        }
+    }
+
+    /// Sends text typed under the desktop Mochi to the open conversation; the workspace composer and its draft are
+    /// left alone. A conversation that cannot take messages here, or whose character name needs review, brings the
+    /// workspace forward, as quick talk does. Returns whether the message was added, so text that was not sent stays
+    /// in the bar.
+    @discardableResult func sendFromDesktop(_ text: String) -> Bool {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
+        guard !practice, writableConversation, libraryReadable else {
+            revealWorkspace?()
+            return false
+        }
+        guard submit(text, fromComposer: false) else {
+            // The review's reason is reported in the workspace, where the name can be fixed.
+            if conversation?.characterNameNeedsReview == true { revealWorkspace?() }
+            return false
+        }
+        return true
+    }
+
     func setShortcut(_ shortcut: Shortcut?, for action: ShortcutAction) {
         settings.shortcuts[action] = shortcut
         shortcuts.apply()

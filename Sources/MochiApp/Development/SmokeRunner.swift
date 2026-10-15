@@ -1168,8 +1168,9 @@
                 await capture("desktop-settings.png", settings: true)
                 // The desktop Mochi: shown from the preference, mirroring the turn, and gone again when turned off.
                 // A capture left by an earlier run must never stand in for this one.
-                if !removeStaleEvidence(directory.appendingPathComponent("desktop-pet.png")) {
-                    captureFailures.append("desktop-pet.png: stale capture could not be removed")
+                for name in ["desktop-pet.png", "desktop-bar.png", "desktop-bar-open.png"]
+                where !removeStaleEvidence(directory.appendingPathComponent(name)) {
+                    captureFailures.append("\(name): stale capture could not be removed")
                 }
                 // The preference is the preview's own; the check must leave it as it found it.
                 let petWasVisible = model.petVisible
@@ -1180,6 +1181,40 @@
                     }
                     try? await Task.sleep(nanoseconds: 300_000_000)
                     await capture("desktop-pet.png", window: petPanel)
+                    // The message bar: hung under her, off the keyboard as a pill, and on it once its field opens.
+                    let barWasVisible = model.petBarVisible
+                    model.petBarVisible = true
+                    if let bar = pet.bar, bar.panel.isVisible, bar.panel.parent === petPanel,
+                        !bar.panel.canBecomeKey
+                    {
+                        await capture("desktop-bar.png", window: bar.panel)
+                        bar.open()
+                        // Typed into the field's editor, so this fails if the field is not focused or not bound.
+                        let typed = "How was your day?"
+                        let focused = await waitFor(2) {
+                            bar.panel.isKeyWindow && bar.panel.firstResponder is NSTextView
+                        }
+                        (bar.panel.firstResponder as? NSTextView)?.insertText(
+                            typed, replacementRange: NSRange(location: NSNotFound, length: 0))
+                        let received = await waitFor(1) { bar.state.text == typed }
+                        if !focused || !received {
+                            let responder = bar.panel.firstResponder.map { "\(type(of: $0))" } ?? "none"
+                            captureFailures.append(
+                                "Desktop Mochi message bar does not take typing when open (key: \(bar.panel.isKeyWindow), responder: \(responder), text: \(bar.state.text.debugDescription))"
+                            )
+                        }
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        await capture("desktop-bar-open.png", window: bar.panel)
+                        bar.close()
+                        bar.state.text = ""
+                        if bar.panel.isKeyWindow || !bar.panel.isVisible || bar.panel.parent !== petPanel {
+                            captureFailures.append("Desktop Mochi message bar keeps the keyboard or leaves her")
+                        }
+                    } else {
+                        captureCount += 2
+                        captureFailures.append("Desktop Mochi message bar did not appear under her")
+                    }
+                    model.petBarVisible = barWasVisible
                     let epoch = model.turn.begin(.recording)
                     // Her own timer has to notice; a tick from here would hide a stopped timer.
                     if await !waitFor(2, { self.pet.currentPose == .review }) {

@@ -1,5 +1,6 @@
 import AppKit
 import MochiCore
+import MochiProviders
 import MochiTestSupport
 import XCTest
 
@@ -256,7 +257,8 @@ final class DesktopPetTests: XCTestCase {
         // The preview conversation is in practice, where a click opens the workspace instead of talking.
         XCTAssertTrue(app.practice)
         XCTAssertEqual(
-            pet.menu().items.map(\.title), ["Open Mochi", "Desktop Mochi Settings…", "", "Hide Desktop Mochi"])
+            pet.menu().items.map(\.title),
+            ["Open Mochi", "Desktop Mochi Settings…", "", "Hide Message Bar", "Hide Desktop Mochi"])
         app.resume()
         XCTAssertEqual(app.quickTalkPlan, .microphone)
         XCTAssertEqual(pet.menu().items.first?.title, app.microphoneLabel)
@@ -269,7 +271,133 @@ final class DesktopPetTests: XCTestCase {
         XCTAssertTrue(app.settingsOpen)
         XCTAssertEqual(app.settingsTab, .desktopMochi)
         menu.performActionForItem(at: 4)
+        XCTAssertFalse(app.petBarVisible)
+        XCTAssertEqual(pet.menu().items[4].title, "Show Message Bar")
+        pet.menu().performActionForItem(at: 4)
+        XCTAssertTrue(app.petBarVisible)
+        pet.menu().performActionForItem(at: 5)
         XCTAssertFalse(app.petVisible)
+    }
+
+    // MARK: Message bar
+
+    @MainActor func testBarHangsCentredUnderHerAndStaysOnHerScreen() {
+        let screen = CGRect(x: 0, y: 25, width: 1440, height: 875)
+        let pet = CGRect(origin: CGPoint(x: 600, y: 300), size: DesktopPet.size)
+        let pill = PetBar.frame(below: pet, width: PetBar.pillWidth, screen: screen)
+        XCTAssertEqual(pill.midX, pet.midX)
+        XCTAssertEqual(pill.maxY, pet.minY - PetBar.gap)
+        XCTAssertEqual(pill.height, PetBar.height)
+        // Wider than her: near the right edge, the field moves left rather than off the screen.
+        let corner = CGRect(origin: CGPoint(x: screen.maxX - DesktopPet.size.width, y: 300), size: DesktopPet.size)
+        let field = PetBar.frame(below: corner, width: PetBar.fieldWidth, screen: screen)
+        XCTAssertEqual(field.maxX, screen.maxX)
+        XCTAssertEqual(field.width, PetBar.fieldWidth)
+        XCTAssertEqual(PetBar.frame(below: pet, width: 100, screen: nil).midX, pet.midX)
+    }
+
+    @MainActor func testPlacementLeavesRoomForTheBar() {
+        let main = CGRect(x: 0, y: 25, width: 1440, height: 875)
+        let size = DesktopPet.size
+        XCTAssertEqual(
+            DesktopPet.origin(stored: nil, screens: [main], below: PetBar.reserve),
+            CGPoint(x: main.maxX - size.width - DesktopPet.margin, y: main.minY + DesktopPet.margin + PetBar.reserve))
+        XCTAssertEqual(
+            DesktopPet.origin(stored: CGPoint(x: 300, y: 30), screens: [main], below: PetBar.reserve),
+            CGPoint(x: 300, y: main.minY + PetBar.reserve), "Pulled up so the bar stays on the screen")
+    }
+
+    @MainActor func testBarFollowsItsPreferenceAndTakesTheKeyboardOnlyWhenOpen() throws {
+        _ = NSApplication.shared
+        let preferences = makePreferences()
+        let app = makeApp(demo: true, preferences: preferences)
+        XCTAssertTrue(app.petBarVisible, "On by default")
+        let pet = DesktopPet()
+        pet.attach(app)
+        defer { app.petVisible = false }
+        app.petVisible = true
+        let panel = try XCTUnwrap(pet.panel)
+        let bar = try XCTUnwrap(pet.bar)
+        XCTAssertTrue(bar.panel.isVisible)
+        XCTAssertTrue(bar.panel.parent === panel, "It moves with her")
+        XCTAssertTrue(bar.panel.styleMask.contains(.nonactivatingPanel))
+        XCTAssertFalse(bar.panel.canHide)
+        XCTAssertFalse(bar.panel.canBecomeKey, "A click on the pill leaves the app you are in active")
+        XCTAssertEqual(bar.panel.frame.width, PetBar.pillWidth)
+        XCTAssertGreaterThanOrEqual(panel.frame.minY, (DesktopPet.screens.first?.minY ?? 0) + PetBar.reserve)
+        // Opened without taking the keyboard: this runs on a Mac in use. The smoke run opens it for real.
+        bar.state.expanded = true
+        bar.layout()
+        XCTAssertTrue(bar.panel.canBecomeKey, "The open field takes typing")
+        XCTAssertEqual(bar.panel.frame.width, PetBar.fieldWidth)
+        bar.state.text = "Half a thought"
+        bar.close()
+        XCTAssertFalse(bar.state.expanded)
+        XCTAssertFalse(bar.panel.canBecomeKey)
+        XCTAssertEqual(bar.state.text, "Half a thought", "Putting the field away keeps what was typed")
+        XCTAssertTrue(bar.panel.isVisible)
+        XCTAssertTrue(bar.panel.parent === panel)
+        // Moving her carries the bar along.
+        let screen = try XCTUnwrap(DesktopPet.screens.first)
+        pet.moved(to: CGPoint(x: screen.midX, y: screen.midY))
+        XCTAssertEqual(bar.panel.frame.midX, panel.frame.midX)
+        XCTAssertEqual(bar.panel.frame.maxY, panel.frame.minY - PetBar.gap)
+        app.petBarVisible = false
+        XCTAssertFalse(bar.panel.isVisible)
+        XCTAssertNil(bar.panel.parent)
+        XCTAssertFalse(
+            PreferencesStore(preferences, importLegacy: false, allowExternalControl: false).petBarVisible)
+        app.petBarVisible = true
+        XCTAssertTrue(bar.panel.isVisible)
+        app.petVisible = false
+        XCTAssertFalse(bar.panel.isVisible, "It leaves with her")
+        XCTAssertFalse(panel.isVisible)
+    }
+}
+
+final class DesktopMessageTests: XCTestCase {
+    @MainActor private func app() -> AppModel {
+        let app = makeApp(root: makeTemporaryFolder("mochi-desktop-message"))
+        addTeardownBlock { @MainActor in app.stop() }
+        return app
+    }
+
+    @MainActor func testTypedTextGoesToTheOpenConversationAndTheComposerKeepsItsDraft() async {
+        let app = app()
+        var requests: [ConversationRequest] = []
+        app.speech.conversationReply = { _, request, callbacks in
+            requests.append(request)
+            var reply = RealtimeAccumulator()
+            reply.text = "Hello there."
+            try callbacks.response(reply)
+        }
+        app.draft = "A half-written thought"
+        XCTAssertFalse(app.sendFromDesktop("   "), "Nothing to send")
+        XCTAssertTrue(app.sendFromDesktop("  How are you?\n"))
+        await waitUntil { requests.count == 1 && !app.busy }
+        XCTAssertEqual(requests.first?.text, "How are you?")
+        XCTAssertEqual(app.conversation?.messages.map(\.text), ["How are you?", "Hello there."])
+        XCTAssertEqual(app.draft, "A half-written thought")
+    }
+
+    @MainActor func testTextThatCannotBeSentStaysAndAConversationThatNeedsTheWorkspaceOpensIt() {
+        let app = app()
+        var revealed = 0
+        app.revealWorkspace = { revealed += 1 }
+        _ = app.turn.begin(.generating)
+        XCTAssertFalse(app.sendFromDesktop("Wait for me"), "Not while Mochi prepares a reply")
+        XCTAssertEqual(revealed, 0)
+        app.turn.stop()
+        app.library.conversations[0].archived = true
+        XCTAssertFalse(app.sendFromDesktop("Hello"))
+        XCTAssertEqual(revealed, 1, "An archived conversation cannot take messages; the workspace shows why")
+        XCTAssertEqual(app.conversation?.messages.count, 0)
+        app.library.conversations[0].archived = false
+        app.library.conversations[0].characterName = "Bad\nName"
+        XCTAssertFalse(app.sendFromDesktop("Hello"))
+        XCTAssertEqual(revealed, 2, "A character name that needs review is fixed in the workspace")
+        XCTAssertEqual(app.error, "Review the character name in Conversation Instructions before sending.")
+        XCTAssertEqual(app.conversation?.messages.count, 0)
     }
 }
 

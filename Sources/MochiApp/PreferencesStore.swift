@@ -49,6 +49,8 @@ import MochiProviders
     var petVisible: Bool { didSet { defaults.set(petVisible, forKey: "desktopPetVisible") } }
     /// Whether the desktop Mochi's eyes follow the pointer while she is idle; off unless turned on.
     var petFollowsPointer: Bool { didSet { defaults.set(petFollowsPointer, forKey: "desktopPetFollowsPointer") } }
+    /// Whether the message bar sits under the desktop Mochi; on unless turned off.
+    var petBarVisible: Bool { didSet { defaults.set(petBarVisible, forKey: "desktopPetBarVisible") } }
     /// Where the desktop Mochi was left, in screen coordinates; nil until she is first moved.
     var petOrigin: CGPoint? {
         didSet {
@@ -155,6 +157,7 @@ import MochiProviders
             ?? .twoMinutes
         petVisible = defaults.bool(forKey: "desktopPetVisible")
         petFollowsPointer = defaults.bool(forKey: "desktopPetFollowsPointer")
+        petBarVisible = defaults.object(forKey: "desktopPetBarVisible") as? Bool ?? true
         if let point = defaults.array(forKey: "desktopPetOrigin") as? [Double], point.count == 2,
             point.allSatisfy(\.isFinite)
         {
