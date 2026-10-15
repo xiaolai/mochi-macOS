@@ -127,8 +127,11 @@ extension AppModel {
             return nil
         }
     }
+    /// `history` is taken owned: callers pass the conversation's own messages, which `append` below then changes. With
+    /// the default borrowed convention, optimized builds handed the reply task the very buffer that append freed
+    /// (a use-after-free found by Address Sanitizer in release builds); an owned argument is the caller's own copy.
     func requestReply(
-        history: [Message], text: String, pcm: Data?, audioFile: String?, conversationID: UUID,
+        history: __owned [Message], text: String, pcm: Data?, audioFile: String?, conversationID: UUID,
         existingUserID: UUID? = nil
     ) {
         if let existingUserID, transcribingMessageIDs.contains(existingUserID) { return }
