@@ -1,6 +1,7 @@
 import AppKit
 import MochiCore
 import MochiKernel
+import MochiProviders
 
 struct MessageDeletionUndo {
     let conversationID: UUID
@@ -171,6 +172,18 @@ struct MessageDeletionUndo {
     var recordingSeconds = 0
     var recordingMeaning = false
     var serviceStatus = String(localized: "Not checked")
+    /// Codex's sign-in and model list, read at launch and whenever Settings opens or the connection is checked.
+    var codex = CodexStatus()
+    /// The model text requests use now: the user's choice while Codex lists it, otherwise the lightest listed.
+    /// The reasoning effort text requests use now: the user's choice while the model supports it, otherwise low.
+    var textEffort: String? {
+        textModel?.effort(selected: settings.textEffort.isEmpty ? nil : settings.textEffort)
+    }
+    var textModel: CodexModel? {
+        codex.signInProblem == nil
+            ? CodexModel.resolve(selected: settings.textModel.isEmpty ? nil : settings.textModel, in: codex.models)
+            : nil
+    }
     let settings: PreferencesStore
     var settingsTab = SettingsTab.general
     let audio: AudioController
@@ -280,6 +293,15 @@ struct MessageDeletionUndo {
         }
         routeSpeechThroughListening()
         observeListeningConditions()
+        if !demo { refreshCodex() }
+    }
+    /// Reads Codex's sign-in file and model list in the background; the answer lands in `codex`.
+    func refreshCodex() {
+        let status = speech.codexStatus
+        Task { [weak self] in
+            let result = await status()
+            self?.codex = result
+        }
     }
     /// Preview launches create a fresh library each time; remove it so previews leave nothing behind.
     func discardTemporaryLibrary() {

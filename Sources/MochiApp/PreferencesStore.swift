@@ -18,6 +18,26 @@ import MochiProviders
     }
     /// The model services use: the typed name without surrounding spaces, or the default when it is blank.
     var effectiveModelName: String { Self.trimmed(modelName) ?? RealtimeService.defaultModel }
+    /// The Codex model chosen for text requests; empty means Automatic. A name Codex no longer lists is not used.
+    var textModel: String {
+        didSet {
+            if Self.trimmed(textModel) == nil {
+                defaults.removeObject(forKey: "textModel")
+            } else {
+                defaults.set(textModel, forKey: "textModel")
+            }
+        }
+    }
+    /// The reasoning effort chosen for text requests; empty means Automatic. One the model lacks is not used.
+    var textEffort: String {
+        didSet {
+            if Self.trimmed(textEffort) == nil {
+                defaults.removeObject(forKey: "textEffort")
+            } else {
+                defaults.set(textEffort, forKey: "textEffort")
+            }
+        }
+    }
     /// What Mochi calls the user, as typed. Empty until the user gives a name, and a blank name is not stored.
     var userName: String {
         didSet {
@@ -139,6 +159,8 @@ import MochiProviders
         }
         modelName = defaults.string(forKey: "model").flatMap(Self.trimmed) ?? RealtimeService.defaultModel
         userName = defaults.string(forKey: "userName") ?? ""
+        textModel = defaults.string(forKey: "textModel").flatMap(Self.trimmed) ?? ""
+        textEffort = defaults.string(forKey: "textEffort").flatMap(Self.trimmed) ?? ""
         defaultLanguage =
             defaults.string(forKey: "defaultLanguage").flatMap(ConversationLanguage.init(rawValue:)) ?? .english
         historySort = defaults.string(forKey: "historySort").flatMap(HistorySort.init(rawValue:)) ?? .recent

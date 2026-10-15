@@ -142,14 +142,38 @@ extension AppModel {
             ? "Intended thought: \(input)\nPrevious wording: \(help.english)\nOffer a different natural wording with exactly the same meaning."
             : input
         let textReply = speech.textReply
+        let codexReply = speech.codexHelpReply
+        let codexModel = textModel
+        let codexEffort = textEffort
         let preferences = conversation?.preferences ?? ConversationPreferences()
         runExclusive("Find the words", progress: "Finding the words…") { [weak self] job in
             guard let self else { return }
-            let result = try await textReply(
-                service,
-                ConversationRequest(history: history, text: requestText, help: true, preferences: preferences))
+            let request = ConversationRequest(
+                history: history, text: requestText, help: true, preferences: preferences)
+            func ask() async throws -> String {
+                // Codex's text endpoint guarantees the reply shape; any failure there falls back to the voice model.
+                if let codexReply, let codexModel {
+                    do { return try await codexReply(request, codexModel, codexEffort) } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        MochiLog.failure(
+                            MochiLog.network, "Codex text reply failed; using the voice model", error, level: .default)
+                    }
+                }
+                return try await textReply(service, request)
+            }
+            let result = try await ask()
             guard job.isCurrent() else { return }
-            let suggestion = try HelpSuggestion.parse(result)
+            let suggestion: HelpSuggestion
+            do {
+                suggestion = try HelpSuggestion.parse(result)
+            } catch {
+                // The model sometimes ends after a lead-in sentence with no suggestion at all; the request is text
+                // and safe to repeat, so one unreadable reply is asked again before the user sees a failure.
+                let again = try await ask()
+                guard job.isCurrent() else { return }
+                suggestion = try HelpSuggestion.parse(again)
+            }
             if suggestion.kind == .clarification {
                 help.clarification = suggestion.text
                 help.stage = .thought

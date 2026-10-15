@@ -502,6 +502,7 @@ extension AppModel {
     }
     func checkConnection() {
         guard !busy else { return }
+        refreshCodex()
         serviceStatus = String(localized: "Checking…")
         let service = settings.conversationService()
         let textReply = speech.textReply

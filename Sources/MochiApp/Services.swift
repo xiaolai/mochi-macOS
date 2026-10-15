@@ -24,6 +24,10 @@ struct SpeechServices {
     var referenceAudio: (String, RealtimeService, URL, Bool) async throws -> URL
     /// Transcribes a saved recording: (file, session model, transcription model).
     var transcribe: (URL, String, String) async throws -> TranscriptResult
+    /// Whether Codex is signed in and which models it lists; reads local files and sends nothing.
+    var codexStatus: () async -> CodexStatus = { CodexStatus() }
+    /// Help Me Say This through Codex's text endpoint, which enforces the reply shape; nil where it is not wired.
+    var codexHelpReply: ((ConversationRequest, CodexModel, String?) async throws -> String)?
 
     static var live: SpeechServices {
         TestEnvironment.assertNotUnderTest("SpeechServices.live")
@@ -40,6 +44,10 @@ struct SpeechServices {
             transcribe: { url, model, transcriptionModel in
                 try await RealtimeService(model: model).transcribe(
                     AudioFile.pcm(url), transcriptionModel: transcriptionModel)
+            },
+            codexStatus: { await CodexCatalog.status() },
+            codexHelpReply: { request, model, effort in
+                try await CodexTextService(model: model, effort: effort).help(request)
             })
     }
 }

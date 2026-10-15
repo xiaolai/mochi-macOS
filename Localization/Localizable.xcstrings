@@ -2337,6 +2337,34 @@
         }
       }
     },
+    "Automatic · %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动 · %@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動 · %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動 · %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동 · %@"
+          }
+        }
+      }
+    },
     "Automation" : {
       "localizations" : {
         "ja" : {
@@ -3705,6 +3733,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "指導"
+          }
+        }
+      }
+    },
+    "Codex has not listed any models yet. Use Codex once, then reopen Settings." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex 还没有列出任何模型。请先使用一次 Codex，然后重新打开设置。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex 尚未列出任何模型。請先使用一次 Codex，然後重新開啟設定。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex はまだモデルを一覧に出していません。Codex を一度使ってから、設定を開き直してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex가 아직 모델을 나열하지 않았습니다. Codex를 한 번 사용한 다음 설정을 다시 여세요."
           }
         }
       }
@@ -8105,6 +8161,34 @@
         }
       }
     },
+    "How much the model thinks before it answers. Lower is faster, and these requests need little." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型回答前思考的程度。越低越快，这类请求不需要太多。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型回答前思考的程度。越低越快，這類請求不需要太多。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回答する前にモデルがどれだけ考えるかです。低いほど速く、この種のリクエストにはあまり必要ありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모델이 답하기 전에 얼마나 생각하는지입니다. 낮을수록 빠르며, 이런 요청에는 많이 필요하지 않습니다."
+          }
+        }
+      }
+    },
     "How the companion comes across. The instructions decide what you do together." : {
       "localizations" : {
         "ja" : {
@@ -12392,6 +12476,34 @@
         }
       }
     },
+    "Not signed in" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未登录"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未登入"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サインインしていません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인되어 있지 않음"
+          }
+        }
+      }
+    },
     "Nothing to review today" : {
       "localizations" : {
         "ja" : {
@@ -14096,6 +14208,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "隨時可以開始 · 麥克風已關閉"
+          }
+        }
+      }
+    },
+    "Reasoning effort" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推理强度"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推理強度"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推論の強さ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추론 강도"
           }
         }
       }
@@ -18384,6 +18524,34 @@
         }
       }
     },
+    "Text model" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字模型"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字模型"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキストモデル"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "텍스트 모델"
+          }
+        }
+      }
+    },
     "That conversation is not currently open. Read get_session again." : {
       "localizations" : {
         "ja" : {
@@ -22048,6 +22216,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最多使用 6 個短語。"
+          }
+        }
+      }
+    },
+    "Used for Help Me Say This. Automatic picks the last model Codex lists, normally the lightest. If it fails, Mochi uses the voice model." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于“帮我说出来”。“自动”会选择 Codex 列出的最后一个模型，通常是最轻量的。如果它失败，Mochi 会改用语音模型。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用於「幫我說出來」。「自動」會選擇 Codex 列出的最後一個模型，通常是最輕量的。如果它失敗，Mochi 會改用語音模型。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「言い方を教えて」で使います。「自動」は Codex が一覧に出す最後のモデルを選びます。通常は最も軽いモデルです。失敗した場合、Mochi は音声モデルを使います。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘말하기 도우미’에 사용됩니다. ‘자동’은 Codex가 나열한 마지막 모델을 고르며, 보통 가장 가벼운 모델입니다. 실패하면 Mochi가 음성 모델을 사용합니다."
           }
         }
       }

@@ -37,20 +37,31 @@ public enum Credentials {
             }
         }
     }
-    public static func codexToken() async throws -> String {
-        try await codexToken(
+    public static func codexToken() async throws -> String { try await codexSignIn().token }
+    /// The access token with the ChatGPT account it belongs to, which Codex's own text endpoint asks for.
+    public struct CodexSignIn: Equatable {
+        public let token: String
+        public let accountID: String?
+    }
+    public static func codexSignIn() async throws -> CodexSignIn {
+        try await codexSignIn(
             environment: ProcessInfo.processInfo.environment, home: FileManager.default.homeDirectoryForCurrentUser,
             now: Date())
     }
     static func codexToken(environment: [String: String], home: URL, now: Date, retryDelay: UInt64 = 50_000_000)
         async throws -> String
     {
+        try await codexSignIn(environment: environment, home: home, now: now, retryDelay: retryDelay).token
+    }
+    static func codexSignIn(environment: [String: String], home: URL, now: Date, retryDelay: UInt64 = 50_000_000)
+        async throws -> CodexSignIn
+    {
         do {
             let file = try codexFolder(environment: environment, home: home).appendingPathComponent("auth.json")
-            do { return try token(in: file, now: now) } catch SignIn.unrecognized {
+            do { return try signIn(in: file, now: now) } catch SignIn.unrecognized {
                 // Codex may be rewriting the file; one re-read tells a torn write from a real format change.
                 try await Task.sleep(nanoseconds: retryDelay)
-                return try token(in: file, now: now)
+                return try signIn(in: file, now: now)
             }
         } catch let problem as SignIn { throw problem.failure }
     }
@@ -67,7 +78,8 @@ public enum Credentials {
         else { throw SignIn.untrustedCodexHome }
         return folder
     }
-    static func token(in file: URL, now: Date) throws -> String {
+    static func token(in file: URL, now: Date) throws -> String { try signIn(in: file, now: now).token }
+    static func signIn(in file: URL, now: Date) throws -> CodexSignIn {
         let data = try signInData(file)
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw SignIn.unrecognized
@@ -78,11 +90,16 @@ public enum Credentials {
         }
         guard let token = tokens["access_token"] as? String, !token.isEmpty else { throw SignIn.unrecognized }
         if let expiry = expiry(of: token), expiry <= now { throw SignIn.expired }
-        return token
+        let account = (tokens["account_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return CodexSignIn(token: token, accountID: account)
     }
     /// Opens once without following symlinks, then checks and reads that same descriptor, so the file
     /// cannot be swapped or grown between the ownership check and the read.
     private static func signInData(_ file: URL) throws -> Data {
+        try ownedFileData(file, limit: maximumFileSize)
+    }
+    /// The contents of a regular file the user owns, smaller than `limit`, read without following symlinks.
+    static func ownedFileData(_ file: URL, limit: Int) throws -> Data {
         let descriptor = open(file.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard descriptor >= 0 else {
             switch errno {
@@ -95,12 +112,12 @@ public enum Credentials {
         var info = stat()
         guard fstat(descriptor, &info) == 0 else { throw SignIn.unreadable }
         guard info.st_mode & S_IFMT == S_IFREG, info.st_uid == getuid() else { throw SignIn.notOwned }
-        guard info.st_size < maximumFileSize else { throw SignIn.unreadable }
-        var buffer = [UInt8](repeating: 0, count: maximumFileSize)
+        guard info.st_size < limit else { throw SignIn.unreadable }
+        var buffer = [UInt8](repeating: 0, count: limit)
         var count = 0
-        while count < maximumFileSize {
+        while count < limit {
             let chunk = buffer.withUnsafeMutableBytes {
-                Darwin.read(descriptor, $0.baseAddress! + count, maximumFileSize - count)
+                Darwin.read(descriptor, $0.baseAddress! + count, limit - count)
             }
             if chunk == 0 { break }
             if chunk < 0 {
@@ -109,7 +126,7 @@ public enum Credentials {
             }
             count += chunk
         }
-        guard count < maximumFileSize else { throw SignIn.unreadable }
+        guard count < limit else { throw SignIn.unreadable }
         return Data(buffer[..<count])
     }
     /// The `exp` claim of a JWT access token; nil for opaque tokens.

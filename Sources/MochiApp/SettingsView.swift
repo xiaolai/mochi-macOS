@@ -1,4 +1,5 @@
 import MochiCore
+import MochiProviders
 import SwiftUI
 
 /// The Settings window's tabs, in the order they appear.
@@ -29,9 +30,14 @@ struct SettingsView: View {
                 }
                 TalkingSection(settings: app.settings)
                 Section("Connection") {
-                    LabeledContent("Sign-in", value: "Codex")
+                    LabeledContent(
+                        "Sign-in", value: app.codex.signInProblem == nil ? "Codex" : String(localized: "Not signed in"))
+                    if let problem = app.codex.signInProblem {
+                        Text(problem).font(.callout).foregroundStyle(.red)
+                    }
                     Text("Sign in through Codex on this Mac, then check the connection here.").font(.callout)
                         .foregroundStyle(.secondary)
+                    TextModelPicker(app: app)
                     TextField("Model", text: Bindable(app.settings).modelName).textFieldStyle(.roundedBorder).disabled(
                         app.busy
                     )
@@ -99,6 +105,42 @@ struct SettingsView: View {
         if let error = app.error, app.errorTab == tab { Text(error).font(.callout).foregroundStyle(.red) }
     }
 
+}
+
+/// The Codex model for text requests, from the list Codex keeps for this account.
+struct TextModelPicker: View {
+    @Bindable var app: AppModel
+
+    var body: some View {
+        let models = app.codex.models
+        if models.isEmpty {
+            if app.codex.signInProblem == nil {
+                Text("Codex has not listed any models yet. Use Codex once, then reopen Settings.").font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            let lightest = CodexModel.resolve(selected: nil, in: models)
+            Picker("Text model", selection: Bindable(app.settings).textModel) {
+                Text("Automatic · \(lightest?.name ?? "")").tag("")
+                ForEach(models) { Text($0.name).tag($0.slug) }
+                if !app.settings.textModel.isEmpty && !models.contains(where: { $0.slug == app.settings.textModel }) {
+                    Text("\(app.settings.textModel) (not available)").tag(app.settings.textModel)
+                }
+            }
+            Text(
+                "Used for Help Me Say This. Automatic picks the last model Codex lists, normally the lightest. If it fails, Mochi uses the voice model."
+            ).font(.callout).foregroundStyle(.secondary)
+            if let model = app.textModel, !model.efforts.isEmpty {
+                let automatic = model.lightestEffort ?? ""
+                Picker("Reasoning effort", selection: Bindable(app.settings).textEffort) {
+                    Text("Automatic · \(automatic.capitalized)").tag("")
+                    ForEach(model.efforts, id: \.self) { Text(verbatim: $0.capitalized).tag($0) }
+                }
+                Text("How much the model thinks before it answers. Lower is faster, and these requests need little.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
 }
 
 /// How the learner hands a spoken turn to Mochi.

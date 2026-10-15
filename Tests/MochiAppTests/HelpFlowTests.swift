@@ -64,6 +64,72 @@ final class HelpFlowTests: XCTestCase {
         XCTAssertNil(app.help.progress)
         XCTAssertNotNil(app.error)
     }
+    @MainActor func testHelpAsksCodexFirstWithTheResolvedModelAndSkipsTheVoiceModel() async throws {
+        let app = makeApp(demo: true)
+        app.codex = CodexStatus(models: [
+            CodexModel(slug: "big", name: "Big", priority: 1, efforts: ["low", "high"], defaultEffort: nil),
+            CodexModel(slug: "small", name: "Small", priority: 9, efforts: ["low"], defaultEffort: nil),
+        ])
+        var asked: [String] = []
+        app.speech.codexHelpReply = { _, model, effort in
+            asked.append("\(model.slug):\(effort ?? "-")")
+            return #"{"kind":"expression","text":"From Codex."}"#
+        }
+        app.speech.textReply = { _, _ in
+            XCTFail("The voice model is the fallback only")
+            return ""
+        }
+        app.startHelp()
+        app.help.meaning = "我的想法"
+        app.translate()
+        await waitUntil { !app.busy }
+        XCTAssertEqual(asked, ["small:low"])
+        XCTAssertEqual(app.help.english, "From Codex.")
+        app.settings.textModel = "big"
+        app.settings.textEffort = "high"
+        app.tryAnotherWording()
+        await waitUntil { !app.busy }
+        XCTAssertEqual(asked, ["small:low", "big:high"])
+        // An effort the model does not support is ignored.
+        app.settings.textEffort = "ultra"
+        app.tryAnotherWording()
+        await waitUntil { !app.busy }
+        XCTAssertEqual(asked.last, "big:low")
+    }
+
+    @MainActor func testHelpFallsBackToTheVoiceModelWhenCodexFails() async throws {
+        let app = makeApp(demo: true)
+        app.codex = CodexStatus(models: [
+            CodexModel(slug: "small", name: "Small", priority: 9, efforts: ["low"], defaultEffort: nil)
+        ])
+        app.speech.codexHelpReply = { _, _, _ in throw AppFailure("Codex refused the model.") }
+        app.speech.textReply = { _, _ in #"{"kind":"expression","text":"From the voice model."}"# }
+        app.startHelp()
+        app.help.meaning = "我的想法"
+        app.translate()
+        await waitUntil { !app.busy }
+        XCTAssertEqual(app.help.english, "From the voice model.")
+        XCTAssertNil(app.error)
+    }
+
+    @MainActor func testHelpSkipsCodexWhenSignedOutOrNoModelsAreListed() async throws {
+        let app = makeApp(demo: true)
+        app.speech.codexHelpReply = { _, _, _ in
+            XCTFail("Codex is not usable")
+            return ""
+        }
+        app.speech.textReply = { _, _ in #"{"kind":"expression","text":"Voice."}"# }
+        let small = CodexModel(slug: "small", name: "Small", priority: 9, efforts: [], defaultEffort: nil)
+        for status in [CodexStatus(signInProblem: "Signed out", models: [small]), CodexStatus(models: [])] {
+            app.codex = status
+            app.startHelp()
+            app.help.meaning = "我的想法"
+            app.translate()
+            await waitUntil { !app.busy }
+            XCTAssertEqual(app.help.english, "Voice.")
+        }
+    }
+
     @MainActor func testRegenerationIncludesPriorWordingButPreservesOriginalMeaning() async throws {
         let app = makeApp(demo: true)
         app.startHelp()
