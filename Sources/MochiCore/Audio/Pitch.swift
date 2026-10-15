@@ -26,24 +26,31 @@ public enum PitchAnalyzer {
         guard hop > 0, high > low + 1, (samples.count - 1) / stride + 1 >= window else { return [] }
         let signal = decimate(samples, by: stride)
         func point(at start: Int) -> PitchPoint {
-            let segment = Array(signal[start..<start + window])
-            let mean = segment.reduce(0, +) / Double(window)
-            let x = segment.map { $0 - mean }
-            let rms = sqrt(x.reduce(0) { $0 + $1 * $1 } / Double(window))
+            var x = Array(signal[start..<start + window])
+            var mean = 0.0
+            vDSP_meanvD(x, 1, &mean, vDSP_Length(window))
+            var offset = -mean
+            vDSP_vsaddD(x, 1, &offset, &x, 1, vDSP_Length(window))
+            var energy = 0.0
+            vDSP_dotprD(x, 1, x, 1, &energy, vDSP_Length(window))
+            let rms = sqrt(energy / Double(window))
             let time = Double(start + window / 2) / rate
             guard rms > 0.008 else { return PitchPoint(time: time, hz: nil) }
+            // head[k] is the energy of x[0..<k]: the first factor of every lag's normalisation. The second factor is
+            // the energy of the lag's tail, the total less the energy before it.
+            var head = [Double](repeating: 0, count: window + 1)
+            for i in 0..<window { head[i + 1] = head[i] + x[i] * x[i] }
             // Neighbours outside low...high are computed too, so peaks at either end of the range count.
             var correlations = [Double](repeating: 0, count: high + 2)
-            for lag in (low - 1)...(high + 1) {
-                var sum = 0.0
-                var a = 0.0
-                var b = 0.0
-                for i in 0..<(window - lag) {
-                    sum += x[i] * x[i + lag]
-                    a += x[i] * x[i]
-                    b += x[i + lag] * x[i + lag]
+            x.withUnsafeBufferPointer { buffer in
+                guard let base = buffer.baseAddress else { return }
+                for lag in (low - 1)...(high + 1) {
+                    var sum = 0.0
+                    vDSP_dotprD(base, 1, base + lag, 1, &sum, vDSP_Length(window - lag))
+                    let a = head[window - lag]
+                    let b = head[window] - head[lag]
+                    correlations[lag] = sum / max(1e-10, sqrt(a * b))
                 }
-                correlations[lag] = sum / max(1e-10, sqrt(a * b))
             }
             guard
                 let peak = (low...high).first(where: {
