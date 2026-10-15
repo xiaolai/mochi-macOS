@@ -210,7 +210,9 @@ final class AutomationTests: XCTestCase {
         let app = makeApp(root: root, preferences: makePreferences())
         app.externalControlEnabled = true
         var revealed = 0
-        app.revealWorkspace = { revealed += 1 }
+        // An assistant shows the workspace without taking the keyboard from the app the user is in.
+        app.offerWorkspace = { revealed += 1 }
+        app.revealWorkspace = { XCTFail("An external tool must not force Mochi in front") }
         var payload: [String: Any] = [
             "name": "create_conversation",
             "arguments": ["title": "Practice", "expected_revision": app.tools.revision], "request_id": "same",

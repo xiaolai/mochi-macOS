@@ -200,7 +200,7 @@ import MochiKernel
                 return success(["status": "scheduled_after_reply"])
             }
             if origin == .external && [.prepareExpression, .startPractice].contains(tool.name) {
-                app.revealWorkspace?()
+                app.offerWorkspace?()
             }
             // Existing playback is allowed for an immediate external seek/replay.
             guard app.selectedID == scheduledConversationID, app.writableConversation, !app.automationModal else {
@@ -377,13 +377,13 @@ import MochiKernel
             try persist(candidate)
             app.select(chat.id)
             app.history.scope = .active
-            app.revealWorkspace?()
+            app.offerWorkspace?()
             return success(["conversation_id": chat.id.uuidString])
         case .openConversation:
             let id = try conversationID()
             app.select(id)
             app.history.scope = .active
-            app.revealWorkspace?()
+            app.offerWorkspace?()
             return success(["conversation_id": id.uuidString])
         case .renameConversation:
             let id = try conversationID()

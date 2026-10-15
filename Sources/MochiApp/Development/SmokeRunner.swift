@@ -232,6 +232,12 @@
                             "Left click restores window and Dock without menu",
                             window.isVisible && !NSApp.isHidden && NSApp.activationPolicy() == .regular && !presented
                         ))
+                    // Shown is not enough: since macOS 14 a refused activation leaves the window behind the app in front.
+                    let activeDeadline = Date().addingTimeInterval(2)
+                    while !(NSApp.isActive && window.isKeyWindow) && Date() < activeDeadline {
+                        try await Task.sleep(nanoseconds: 1_000_000)
+                    }
+                    checks.append(("Left click brings Mochi in front", NSApp.isActive && window.isKeyWindow))
                     if CommandLine.arguments.contains("--single-instance-smoke-test") {
                         tray.closeToTray()
                         let duplicate = Process()

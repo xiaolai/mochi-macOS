@@ -127,9 +127,20 @@ import SwiftUI
         return true
     }
 
-    @objc func showWindow() {
+    /// Brings the workspace in front for the user's own click or keypress: the menu bar icon and its menu, the
+    /// desktop Mochi, a shortcut, or opening Mochi again.
+    @objc func showWindow() { show(forced: true) }
+
+    /// Shows the workspace for a request from another app without taking the keyboard from the app in front.
+    func offerWindow() { show(forced: false) }
+
+    /// Since macOS 14 activation is cooperative, and the system refuses Mochi's polite request even right after a
+    /// click on its menu bar icon or the desktop Mochi: the click belongs to the menu bar and the non-activating
+    /// panel, not to Mochi. Only a forced activation brings it in front, so it is kept for the user's own actions.
+    private func show(forced: Bool) {
+        let activate = forced ? { (NSApp as ForcedActivation).activateIgnoringOtherApps() } : { NSApp.activate() }
         guard let window else {
-            if openWorkspaceIfUnopened() { NSApp.activate() }
+            if openWorkspaceIfUnopened() { activate() }
             return
         }
         NSApp.setActivationPolicy(.regular)
@@ -137,9 +148,7 @@ import SwiftUI
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
         visibilityChanged?()
-        // Since macOS 14, activation is cooperative: the request is honoured when it follows the user's own input,
-        // such as a click on the menu bar icon or the desktop Mochi, whose window never activates the app itself.
-        NSApp.activate()
+        activate()
     }
 
     @objc func quitApp() { NSApp.terminate(nil) }
@@ -203,6 +212,14 @@ import SwiftUI
         image.isTemplate = true
         return image
     }
+}
+
+/// The forced activation that macOS 14 deprecated without a replacement for it. Called through this protocol, it
+/// stays in one place and the build stays free of deprecation warnings.
+private protocol ForcedActivation { func activateIgnoringOtherApps() }
+extension NSApplication: ForcedActivation {
+    @available(macOS, deprecated: 14.0, message: "Only for the user's own click; see TrayController.show(forced:)")
+    fileprivate func activateIgnoringOtherApps() { activate(ignoringOtherApps: true) }
 }
 
 struct MainWindowReader: NSViewRepresentable {

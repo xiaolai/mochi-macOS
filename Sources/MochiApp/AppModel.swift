@@ -31,6 +31,8 @@ struct MessageDeletionUndo {
     func updateLibraryQuietly(_ change: (inout Library) -> Void) { libraryController.updateQuietly(change) }
     @ObservationIgnored var deferredToolAction: (() -> Void)?
     @ObservationIgnored var revealWorkspace: (() -> Void)?
+    /// Shows the workspace for an external assistant, leaving the keyboard with the app in front.
+    @ObservationIgnored var offerWorkspace: (() -> Void)?
     /// Shows or hides the desktop Mochi to match the preference; set by the app delegate, which owns her window.
     @ObservationIgnored var updateDesktopPet: (() -> Void)?
     /// Shortcuts that work in every app.

@@ -154,6 +154,7 @@ import SwiftUI
         self.model = model
         model.listeningIndicator = { [weak self] in self?.tray.showListening($0) }
         model.revealWorkspace = { [weak self] in self?.tray.showWindow() }
+        model.offerWorkspace = { [weak self] in self?.tray.offerWindow() }
         model.configureAutomation()
         model.configureShortcuts()
         pet.attach(model)
