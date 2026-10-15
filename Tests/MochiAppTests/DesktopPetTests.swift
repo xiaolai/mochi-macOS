@@ -246,6 +246,7 @@ final class DesktopPetTests: XCTestCase {
         XCTAssertTrue(reopened.petVisible)
     }
 
+    /// Her context menu is the shared one, with her own settings item; MochiMenuTests covers its states.
     @MainActor func testMenuOffersTalkOpenSettingsAndHide() {
         let app = makeApp(demo: true)
         var revealed = 0
@@ -258,24 +259,28 @@ final class DesktopPetTests: XCTestCase {
         XCTAssertTrue(app.practice)
         XCTAssertEqual(
             pet.menu().items.map(\.title),
-            ["Open Mochi", "Desktop Mochi Settings…", "", "Hide Message Bar", "Hide Desktop Mochi"])
+            [
+                app.status, "", app.listeningMenuTitle, "New Conversation", "", "Open Mochi",
+                "Desktop Mochi Settings…", "", "Hide Desktop Mochi", "Hide Message Bar", "", "Quit Mochi Completely",
+            ])
         app.resume()
         XCTAssertEqual(app.quickTalkPlan, .microphone)
-        XCTAssertEqual(pet.menu().items.first?.title, app.microphoneLabel)
+        XCTAssertEqual(pet.menu().items[2].title, app.microphoneLabel)
         app.turn.begin(.generating)
-        XCTAssertEqual(pet.menu().items.first?.title, "Open Mochi", "Nothing to say while she prepares a reply")
+        XCTAssertEqual(pet.menu().items[2].title, app.listeningMenuTitle, "Nothing to say while she prepares a reply")
         app.turn.stop()
         let menu = pet.menu()
-        menu.performActionForItem(at: 2)
+        menu.performActionForItem(at: menu.indexOfItem(withTitle: "Desktop Mochi Settings…"))
         XCTAssertEqual(revealed, 1)
         XCTAssertTrue(app.settingsOpen)
         XCTAssertEqual(app.settingsTab, .desktopMochi)
-        menu.performActionForItem(at: 4)
+        menu.performActionForItem(at: menu.indexOfItem(withTitle: "Hide Message Bar"))
         XCTAssertFalse(app.petBarVisible)
-        XCTAssertEqual(pet.menu().items[4].title, "Show Message Bar")
-        pet.menu().performActionForItem(at: 4)
+        let shown = pet.menu()
+        shown.performActionForItem(at: shown.indexOfItem(withTitle: "Show Message Bar"))
         XCTAssertTrue(app.petBarVisible)
-        pet.menu().performActionForItem(at: 5)
+        let hidden = pet.menu()
+        hidden.performActionForItem(at: hidden.indexOfItem(withTitle: "Hide Desktop Mochi"))
         XCTAssertFalse(app.petVisible)
     }
 

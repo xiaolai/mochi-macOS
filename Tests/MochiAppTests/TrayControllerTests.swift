@@ -48,6 +48,38 @@ final class TrayControllerTests: XCTestCase {
         XCTAssertTrue(UserDefaults.standard.bool(forKey: "ApplePersistenceIgnoreState"))
     }
 
+    /// The menu bar menu is the shared one, filled again as it opens.
+    @MainActor func testMenuIsTheSharedMenuFilledAsItOpens() {
+        let app = makeApp(demo: true)
+        let tray = TrayController()
+        tray.follow(app)
+        let menu = NSMenu()
+        tray.menuNeedsUpdate(menu)
+        XCTAssertEqual(menu.items.first?.title, app.status)
+        XCTAssertNotNil(menu.items.first { $0.title == "Settings…" })
+        XCTAssertNotNil(menu.items.first { $0.title == "New Conversation" })
+        XCTAssertEqual(menu.items.last?.title, "Quit Mochi Completely")
+        XCTAssertEqual(menu.items.last?.keyEquivalent, "")
+        app.petVisible = true
+        defer { app.petVisible = false }
+        tray.menuNeedsUpdate(menu)
+        XCTAssertNotNil(menu.items.first { $0.title == "Hide Desktop Mochi" })
+    }
+
+    /// The icon's tooltip follows the error, or else the status, as they change.
+    @MainActor func testStatusDescriptionFollowsTheModel() async {
+        let app = makeApp(demo: true)
+        let tray = TrayController()
+        tray.follow(app)
+        XCTAssertEqual(tray.statusDescription, app.status)
+        app.error = "Mochi couldn’t reach the voice service."
+        await waitUntil { tray.statusDescription == "Mochi couldn’t reach the voice service." }
+        app.error = nil
+        app.resume()
+        await waitUntil { tray.statusDescription == app.status }
+        XCTAssertEqual(tray.statusDescription, app.status, "The watch re-arms after each change")
+    }
+
     @MainActor func testFinishingWorkReportsAFailedSave() {
         let root = makeTemporaryFolder()
         let app = makeApp(root: root)

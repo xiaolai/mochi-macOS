@@ -134,6 +134,15 @@
                             "Command-Q is Close Window to Tray",
                             commandQ?.title == String(localized: "Close Window to Tray")
                         ))
+                    // The menu is filled as it opens; fill it as opening would.
+                    if let menu = tray.menu { tray.menuNeedsUpdate(menu) }
+                    let trayTitles = tray.menu?.items.map(\.title) ?? []
+                    checks.append(
+                        (
+                            "Tray menu offers Settings and New Conversation",
+                            trayTitles.contains(String(localized: "Settings…"))
+                                && trayTitles.contains(String(localized: "New Conversation"))
+                        ))
                     let quit = tray.menu?.items.first { $0.title == String(localized: "Quit Mochi Completely") }
                     checks.append(("Tray quit has no Command-Q shortcut", quit != nil && quit?.keyEquivalent == ""))
                     let playbackEpoch = model.turn.begin(.playing)

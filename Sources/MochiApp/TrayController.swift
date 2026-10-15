@@ -23,7 +23,12 @@ import SwiftUI
     var presentMenu: (NSMenu, NSEvent, NSView) -> Void = { _, _, _ in }
     private weak var previousDelegate: NSWindowDelegate?
     private weak var model: AppModel?
-    private(set) var petItem: NSMenuItem?
+    /// Fills the menu each time it opens; made once the model is known.
+    private var menuBuilder: MochiMenu?
+    /// What the icon's tooltip and accessibility value say: the error, or else the status line.
+    private(set) var statusDescription = "Mochi"
+    /// Whether a change to the status is being watched, so the watch is armed only once.
+    private var trackingStatus = false
     /// Told when the workspace window is ordered out or shown here, which posts no notification of its own.
     var visibilityChanged: (() -> Void)?
 
@@ -31,26 +36,16 @@ import SwiftUI
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = Self.icon()
-        item.button?.toolTip = "Mochi"
         item.button?.setAccessibilityLabel("Mochi")
         let menu = NSMenu()
-        let show = menu.addItem(
-            withTitle: String(localized: "Open Mochi"), action: #selector(showWindow), keyEquivalent: "")
-        show.target = self
-        let pet = menu.addItem(
-            withTitle: String(localized: "Show Desktop Mochi"), action: #selector(togglePet), keyEquivalent: "")
-        pet.target = self
-        petItem = pet
         menu.delegate = self
-        menu.addItem(.separator())
-        let quit = menu.addItem(
-            withTitle: String(localized: "Quit Mochi Completely"), action: #selector(quitApp), keyEquivalent: "")
-        quit.target = self
+        menuBuilder?.fill(menu)
         self.menu = menu
         item.button?.target = self
         item.button?.action = #selector(clicked)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         statusItem = item
+        showStatus()
         presentMenu = { [weak item] menu, _, _ in
             guard let item else { return }
             item.menu = menu
@@ -78,9 +73,39 @@ import SwiftUI
         // The replaced window gets its own delegate back, so its callbacks never act on the new window's state.
         if let old = self.window, old.delegate === self { old.delegate = previousDelegate }
         self.window = window
-        self.model = model
+        follow(model)
         previousDelegate = window.delegate
         window.delegate = self
+    }
+
+    /// Takes the model the menu and the icon's status describe.
+    func follow(_ model: AppModel) {
+        guard self.model !== model || menuBuilder == nil else { return }
+        self.model = model
+        menuBuilder = MochiMenu(model: model, context: .tray)
+        if let menu { menuBuilder?.fill(menu) }
+        trackStatus()
+    }
+
+    /// Keeps the status description current, re-arming the watch after each change: Observation reports only the
+    /// first change after a read.
+    private func trackStatus() {
+        guard !trackingStatus, let model else { return }
+        trackingStatus = true
+        statusDescription = withObservationTracking {
+            model.error ?? model.status
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.trackingStatus = false
+                self?.trackStatus()
+            }
+        }
+        showStatus()
+    }
+
+    private func showStatus() {
+        statusItem?.button?.toolTip = statusDescription
+        statusItem?.button?.setAccessibilityValue(statusDescription)
     }
 
     /// Ends in-progress work and saves. False only when a readable library could not be written.
@@ -153,13 +178,7 @@ import SwiftUI
 
     @objc func quitApp() { NSApp.terminate(nil) }
 
-    @objc func togglePet() { model?.petVisible.toggle() }
-
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        petItem?.title =
-            model?.petVisible == true
-            ? String(localized: "Hide Desktop Mochi") : String(localized: "Show Desktop Mochi")
-    }
+    func menuNeedsUpdate(_ menu: NSMenu) { menuBuilder?.fill(menu) }
 
     // Preserve SwiftUI's other window delegate callbacks.
     override func responds(to selector: Selector!) -> Bool {
@@ -170,7 +189,8 @@ import SwiftUI
         return super.forwardingTarget(for: selector)
     }
 
-    /// Shows in the menu bar whether hands-free listening has the microphone open.
+    /// Shows in the menu bar whether hands-free listening has the microphone open. The label names the app and
+    /// whether it listens; the accessibility value carries the status, as the tooltip does.
     func showListening(_ listening: Bool) {
         guard let button = statusItem?.button, (button.image === Self.listeningIcon) != listening else { return }
         button.image = listening ? Self.listeningIcon : Self.icon()

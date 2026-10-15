@@ -152,6 +152,7 @@ import SwiftUI
     func attachModel(_ model: AppModel) {
         guard self.model !== model else { return }
         self.model = model
+        tray.follow(model)
         model.listeningIndicator = { [weak self] in self?.tray.showListening($0) }
         model.revealWorkspace = { [weak self] in self?.tray.showWindow() }
         model.offerWorkspace = { [weak self] in self?.tray.offerWindow() }

@@ -21,6 +21,8 @@ import MochiCore
     private(set) var bar: PetBar?
     private var view: PetView?
     private weak var model: AppModel?
+    /// Kept here because menu items hold their target weakly.
+    private var menuBuilder: MochiMenu?
     private let sprite: PetSprite
     private lazy var body = PetSprite.BodyMask(sprite)
     private var timer: Timer?
@@ -43,6 +45,7 @@ import MochiCore
 
     func attach(_ model: AppModel) {
         self.model = model
+        menuBuilder = MochiMenu(model: model, context: .desktopMochi)
         model.updateDesktopPet = { [weak self] in self?.update() }
         update()
     }
@@ -227,38 +230,8 @@ import MochiCore
     /// Room kept under her for the message bar while it shows.
     private func reserve(_ model: AppModel) -> CGFloat { model.petBarVisible ? PetBar.reserve : 0 }
 
-    func menu() -> NSMenu {
-        let menu = NSMenu()
-        func add(_ title: String, _ action: Selector) {
-            menu.addItem(withTitle: title, action: action, keyEquivalent: "").target = self
-        }
-        // The first item names what a click on her does now; it is left out when a click opens the workspace
-        // or does nothing.
-        if let model, [.microphone, .pause].contains(model.quickTalkPlan) {
-            add(model.quickTalkLabel, #selector(talk))
-        }
-        add(String(localized: "Open Mochi"), #selector(openWorkspace))
-        add(String(localized: "Desktop Mochi Settings…"), #selector(openSettings))
-        menu.addItem(.separator())
-        if model?.petBarVisible == true {
-            add(String(localized: "Hide Message Bar"), #selector(toggleBar))
-        } else {
-            add(String(localized: "Show Message Bar"), #selector(toggleBar))
-        }
-        add(String(localized: "Hide Desktop Mochi"), #selector(hidePet))
-        return menu
-    }
-
-    @objc private func talk() { model?.quickTalk() }
-    @objc private func openWorkspace() { model?.revealWorkspace?() }
-    @objc private func openSettings() {
-        guard let model else { return }
-        model.revealWorkspace?()
-        model.settingsTab = .desktopMochi
-        model.settingsOpen = true
-    }
-    @objc private func hidePet() { model?.petVisible = false }
-    @objc private func toggleBar() { model?.petBarVisible.toggle() }
+    /// Her context menu, the one the menu bar icon shows with her own settings item.
+    func menu() -> NSMenu { menuBuilder?.menu() ?? NSMenu() }
 
     private func keepOnScreen() {
         guard let panel, panel.isVisible, let model else { return }
