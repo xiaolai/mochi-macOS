@@ -10,6 +10,12 @@ final class MochiMenuTests: XCTestCase {
     /// The builders and models a test's menus use. Both are held weakly, by the items and the builder, as their
     /// owners in the app hold them for as long as it runs.
     private var kept: [AnyObject] = []
+    /// A menu item's action is sent through the application, so without one `performActionForItem` does nothing; the
+    /// suite cannot rely on an earlier test having created it, as a parallel worker may run this one first.
+    @MainActor override func setUp() {
+        super.setUp()
+        _ = NSApplication.shared
+    }
     override func tearDown() {
         kept = []
         super.tearDown()
