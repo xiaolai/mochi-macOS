@@ -74,6 +74,26 @@ final class RealtimeTranscriptionTests: XCTestCase {
         XCTAssertThrowsError(try HelpSuggestion.parse(#"{"kind":"expression","text":" "}"#))
     }
 
+    /// Shapes the live model returned instead of bare JSON: 23 of 24 live replies.
+    func testHelpSuggestionReadsTheShapesTheModelActuallyReturns() throws {
+        let body = #"{"kind": "expression", "text": "I'm not sure {if} I can \"go\"."}"#
+        let shapes = [
+            "```json\n\(body)\n```",
+            "Here is a natural expression:\n\n\(body)",
+            "好的，请听：\n\n```json\n\(body)\n```",
+            "JSON:\n\(body)",
+            "<RESPONSE>\(body)</RESPONSE>",
+            "[\n\(body)\n]",
+        ]
+        for shape in shapes {
+            let suggestion = try HelpSuggestion.parse(shape)
+            XCTAssertEqual(suggestion.kind, .expression, shape)
+            XCTAssertEqual(suggestion.text, #"I'm not sure {if} I can "go"."#, shape)
+        }
+        XCTAssertThrowsError(try HelpSuggestion.parse("```json\n{\"kind\": \"expression\"\n```"))
+        XCTAssertThrowsError(try HelpSuggestion.parse(""))
+    }
+
     func testRealtimeRecoveryCommitsAudioWithoutGeneratingAReply() async throws {
         let pcm = Data(repeating: 7, count: 96000)
         var sent: [[String: Any]] = []

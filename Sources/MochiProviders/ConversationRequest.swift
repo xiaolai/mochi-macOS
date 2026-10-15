@@ -60,13 +60,64 @@ public struct HelpSuggestion: Decodable {
     public enum Kind: String, Decodable { case expression, clarification }
     public let kind: Kind
     public let text: String
+    /// The model is told to return bare JSON but often adds a code fence, a lead-in sentence, a wrapper tag or a
+    /// one-element array, so the first JSON object in the reply that decodes with text is the suggestion.
     public static func parse(_ text: String) throws -> HelpSuggestion {
-        guard let value = try? JSONDecoder().decode(Self.self, from: Data(text.utf8)),
-            !value.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-            throw AppFailure(
-                "The suggestion could not be read. Try again; your thought and previous wording are kept.")
+        for candidate in [text] + objects(in: text) {
+            if let value = try? JSONDecoder().decode(Self.self, from: Data(candidate.utf8)),
+                !value.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return value
+            }
         }
-        return value
+        throw AppFailure(
+            "The suggestion could not be read. Try again; your thought and previous wording are kept.")
+    }
+    /// Every balanced `{…}` span, outermost first, skipping braces inside JSON strings.
+    private static func objects(in text: String) -> [String] {
+        let characters = Array(text)
+        var found: [String] = []
+        var index = 0
+        while index < characters.count {
+            guard characters[index] == "{" else {
+                index += 1
+                continue
+            }
+            var depth = 0
+            var inString = false
+            var escaped = false
+            var end: Int?
+            scan: for position in index..<characters.count {
+                let character = characters[position]
+                if inString {
+                    if escaped {
+                        escaped = false
+                    } else if character == "\\" {
+                        escaped = true
+                    } else if character == "\"" {
+                        inString = false
+                    }
+                    continue
+                }
+                switch character {
+                case "\"": inString = true
+                case "{": depth += 1
+                case "}":
+                    depth -= 1
+                    if depth == 0 {
+                        end = position
+                        break scan
+                    }
+                default: break
+                }
+            }
+            if let end {
+                found.append(String(characters[index...end]))
+                index = end + 1
+            } else {
+                index += 1
+            }
+        }
+        return found
     }
 }
