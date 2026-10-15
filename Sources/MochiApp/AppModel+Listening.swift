@@ -110,12 +110,10 @@ extension AppModel {
     var listeningStatus: String? {
         switch listening.phase {
         case .off, .failed, .waitingForReply, .mochiSpeaking: return nil
-        case .listening:
+        // Hearing speech comes and goes with every pause, so it changes the icon, never the words: a line that
+        // rewrote itself on each breath flashed.
+        case .listening, .hearingSpeech:
             return String(localized: "Listening · audio is sent only once you speak")
-        case .hearingSpeech:
-            return practice
-                ? String(localized: "Hearing your attempt · stays on this Mac")
-                : String(localized: "Hearing you · sending as you speak")
         case .endOfTurn: return String(localized: "Sending your turn…")
         case .paused: return String(localized: "Listening paused · microphone off")
         case .stoppedBySilence: return String(localized: "Stopped listening after silence · microphone off")

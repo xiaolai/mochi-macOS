@@ -42,6 +42,8 @@ struct MessageDeletionUndo {
     @ObservationIgnored var talkPress: (time: Date, request: UUID?)?
     /// The request that started the recording now running: the turn of its microphone permission step.
     @ObservationIgnored var recordingRequest: UUID?
+    /// When the microphone of `recordingRequest` opened.
+    @ObservationIgnored var recordingStartedAt: Date?
     /// The reply audio playing for the first time, which an interruption may cut; nil once it ends or stops.
     @ObservationIgnored var unheardReply: String?
     /// The recording that started by itself after a reply; it is discarded if Mochi is locked or hidden meanwhile.

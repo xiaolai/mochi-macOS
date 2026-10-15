@@ -7853,62 +7853,6 @@
         }
       }
     },
-    "Hearing you · sending as you speak" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "聞いています · 話しながら送信中"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "듣는 중 · 말하는 동안 전송 중"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在听你说 · 边说边发送"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在聽你說 · 邊說邊傳送"
-          }
-        }
-      }
-    },
-    "Hearing your attempt · stays on this Mac" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "練習を聞いています · このMacにのみ保存"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "시도를 듣는 중 · 이 Mac에만 저장"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在听你跟读 · 仅保存在这台 Mac 上"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在聽你練習 · 僅保留在這台 Mac 上"
-          }
-        }
-      }
-    },
     "Help Me Say This" : {
       "localizations" : {
         "ja" : {
@@ -16728,62 +16672,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "立即傳送"
-          }
-        }
-      }
-    },
-    "Send what you have said now" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "話した内容を今すぐ送信"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "지금까지 말한 내용을 지금 보내기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "立即发送你已说的内容"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "立即傳送你已說的內容"
-          }
-        }
-      }
-    },
-    "Send what you have said now (%@)" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "話した内容を今すぐ送信（%@）"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "지금까지 말한 내용을 지금 보내기 (%@)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "立即发送你已说的内容（%@）"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "立即傳送你已說的內容（%@）"
           }
         }
       }

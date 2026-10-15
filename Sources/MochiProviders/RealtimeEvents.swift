@@ -132,6 +132,10 @@ public struct RealtimeAccumulator {
                 return
             }
             guard status == "completed" else {
+                // The message the learner sees cannot say why; the log can.
+                MochiLog.network.error(
+                    "Response ended \(status ?? "without a status", privacy: .public): \(reason ?? "no reason given", privacy: .public)"
+                )
                 throw AppFailure("Mochi could not complete that response. Please retry.")
             }
             done = true

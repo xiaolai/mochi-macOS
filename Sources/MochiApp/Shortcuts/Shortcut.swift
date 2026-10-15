@@ -201,7 +201,8 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         switch self {
         case .talk: return Shortcut(keyCode: UInt16(kVK_ANSI_M), modifiers: [.control, .option, .command])
         case .togglePet: return Shortcut(keyCode: UInt16(kVK_ANSI_H), modifiers: [.control, .option, .command])
-        case .listen: return Shortcut(keyCode: UInt16(kVK_ANSI_L), modifiers: [.control, .option, .command])
+        // Not ⌃⌥⌘L: ChatGPT's desktop app takes that one for its voice mode, and the first app to register wins.
+        case .listen: return Shortcut(keyCode: UInt16(kVK_ANSI_E), modifiers: [.control, .option, .command])
         // ⌘↩ already sends typed text and translates in Help; a spoken turn and typed text can be in progress at once.
         case .sendNow: return Shortcut(keyCode: UInt16(kVK_Return), modifiers: [.option, .command])
         }

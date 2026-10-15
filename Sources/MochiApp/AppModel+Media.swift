@@ -151,6 +151,7 @@ extension AppModel {
                 _ = turn.finish(token)
                 _ = turn.startRecording()
                 recordingRequest = token
+                recordingStartedAt = started
                 unattendedRecording = unattended ? token : nil
                 recordingSeconds = 0
                 lastAudibleRecordingTime = 0

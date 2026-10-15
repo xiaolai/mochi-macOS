@@ -466,6 +466,19 @@ final class QuickTalkTests: XCTestCase {
         XCTAssertEqual(app.turn.activity, .idle)
     }
 
+    @MainActor func testSlowlyLiftedChordIsStillATap() async {
+        let app = app()
+        var now = Date()
+        app.recordingNow = { now }
+        app.shortcutTriggered(.talk, pressed: true)
+        await waitUntil { app.turn.activity == .recording }
+        // Four keys take a moment to let go of; short of the hold time the recording keeps running.
+        now = now.addingTimeInterval(AppModel.holdToTalk - 0.1)
+        app.shortcutTriggered(.talk, pressed: false)
+        XCTAssertEqual(app.turn.activity, .recording)
+        app.stop()
+    }
+
     @MainActor func testTapTogglesAndHoldingTheShortcutIsPushToTalk() async {
         let app = app()
         var now = Date()

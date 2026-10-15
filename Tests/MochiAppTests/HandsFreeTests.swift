@@ -1415,7 +1415,7 @@ final class HandsFreeTests: XCTestCase {
     @MainActor func testListenAndSendNowShortcutDefaults() {
         XCTAssertEqual(
             ShortcutAction.listen.defaultShortcut,
-            Shortcut(keyCode: UInt16(kVK_ANSI_L), modifiers: [.control, .option, .command]))
+            Shortcut(keyCode: UInt16(kVK_ANSI_E), modifiers: [.control, .option, .command]))
         XCTAssertEqual(
             ShortcutAction.sendNow.defaultShortcut,
             Shortcut(keyCode: UInt16(kVK_Return), modifiers: [.option, .command]))

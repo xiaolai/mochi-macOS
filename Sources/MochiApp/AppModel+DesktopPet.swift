@@ -96,8 +96,10 @@ extension AppModel {
         return plan
     }
 
-    /// A press held this long is push-to-talk: letting go sends the message.
-    static let holdToTalk: TimeInterval = 0.4
+    /// A press held this long, once the microphone is open, is push-to-talk: letting go sends the message. The
+    /// shortcut is a four-key chord, which takes longer to let go of than a single key; a shorter hold sent a message
+    /// that a tap had only just started.
+    static let holdToTalk: TimeInterval = 0.6
 
     func shortcutTriggered(_ action: ShortcutAction, pressed: Bool) {
         switch action {
@@ -128,7 +130,9 @@ extension AppModel {
                 talkPress = (recordingNow(), started ? turn.epoch : nil)
             } else if let press = talkPress {
                 talkPress = nil
-                guard let request = press.request, recordingNow().timeIntervalSince(press.time) >= Self.holdToTalk
+                // Held time counts from when the microphone opened: a moment of it goes to asking for permission.
+                let heldSince = recordingRequest == press.request ? recordingStartedAt ?? press.time : press.time
+                guard let request = press.request, recordingNow().timeIntervalSince(heldSince) >= Self.holdToTalk
                 else { return }
                 if turn.activity == .recording && recordingRequest == request {
                     // Push-to-talk: letting go sends the recording this press started, never a later one.

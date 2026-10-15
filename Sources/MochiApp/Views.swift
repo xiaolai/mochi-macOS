@@ -454,14 +454,17 @@ struct WorkspaceView: View {
             .padding(12)
             .fieldFrame(cornerRadius: 24, focused: composerFocused)
             if app.turn.activity == .recording { RecordingFeedback(app: app) }
-            if app.listening.isOn { SendNowButton(app: app) }
             HStack(spacing: 5) {
                 if app.turn.activity == .generating || app.turn.activity == .requestingPermission {
                     ProgressView().controlSize(.mini)
                 } else {
                     let open = app.turn.activity == .recording || app.listening.microphoneOpen
-                    Image(systemName: app.turn.activity == .recording ? "record.circle" : open ? "ear" : "mic.slash")
-                        .foregroundStyle(open ? .red : .secondary)
+                    let hearing = app.listening.phase == .hearingSpeech
+                    Image(
+                        systemName: app.turn.activity == .recording
+                            ? "record.circle" : hearing ? "waveform" : open ? "ear" : "mic.slash"
+                    )
+                    .foregroundStyle(open ? .red : .secondary)
                 }
                 Text(app.status).lineLimit(1)
                 Spacer(minLength: 4)
@@ -698,23 +701,6 @@ struct PracticeActions: View {
         }
     }
 }
-/// Ends the spoken turn at once. Shown while hands-free listening is on: Mochi can judge a pause mid-sentence as the
-/// end of a turn, or wait at the end of one, and this is the learner's own say (plan E5).
-struct SendNowButton: View {
-    @Bindable var app: AppModel
-    var body: some View {
-        Button(action: app.sendNow) {
-            Label(ShortcutAction.sendNow.title, systemImage: "paperplane")
-        }
-        .controlSize(.small)
-        .disabled(!app.canSendNow)
-        .help(
-            app.settings.shortcuts[.sendNow].map { Text("Send what you have said now (\($0.display))") }
-                ?? Text("Send what you have said now")
-        )
-        .accessibilityIdentifier("send-now")
-    }
-}
 /// Records an attempt and replays the latest one; shared by practice and review.
 struct AttemptControls: View {
     @Bindable var app: AppModel
@@ -724,7 +710,6 @@ struct AttemptControls: View {
             Button(action: app.toggleRecord) {
                 Label(app.listeningMenuTitle, systemImage: app.listeningSymbol ?? "ear")
             }.disabled(!app.listening.isOn && !app.canStartListening)
-            if app.listening.isOn { SendNowButton(app: app) }
         } else {
             Button(action: app.toggleRecord) {
                 Label(

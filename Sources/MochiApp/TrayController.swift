@@ -168,12 +168,16 @@ import SwiftUI
             if openWorkspaceIfUnopened() { activate() }
             return
         }
+        let frame = window.frame
         NSApp.setActivationPolicy(.regular)
         NSApp.unhide(nil)
         if window.isMiniaturized { window.deminiaturize(nil) }
-        window.makeKeyAndOrderFront(nil)
-        visibilityChanged?()
+        // Activating first means the window is raised once, where it already is. Ordering it front while Mochi was
+        // still in the background let the window server place it on the display the click came from.
         activate()
+        window.makeKeyAndOrderFront(nil)
+        if window.frame != frame { window.setFrame(frame, display: true) }
+        visibilityChanged?()
     }
 
     @objc func quitApp() { NSApp.terminate(nil) }

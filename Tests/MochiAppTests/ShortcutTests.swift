@@ -213,7 +213,7 @@ final class ShortcutTests: XCTestCase {
         let defaults = makePreferences()
         let talk = Shortcut(keyCode: UInt16(kVK_ANSI_M), modifiers: [.control, .option, .command])
         let pet = Shortcut(keyCode: UInt16(kVK_ANSI_H), modifiers: [.control, .option, .command])
-        let listen = Shortcut(keyCode: UInt16(kVK_ANSI_L), modifiers: [.control, .option, .command])
+        let listen = Shortcut(keyCode: UInt16(kVK_ANSI_E), modifiers: [.control, .option, .command])
         let sendNow = Shortcut(keyCode: UInt16(kVK_Return), modifiers: [.option, .command])
         let first = PreferencesStore(defaults, importLegacy: false, allowExternalControl: false)
         XCTAssertEqual(first.shortcuts, [.talk: talk, .togglePet: pet, .listen: listen, .sendNow: sendNow])
