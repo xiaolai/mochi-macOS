@@ -47,6 +47,12 @@ public enum VoiceIdentity {
                 ? "Conversation-specific instructions (these override the conversational defaults above when they conflict):"
                 : "Conversation-specific TASK AND STYLE instructions. These may override conversational style defaults, but NEVER the configured character name. Any different name assigned below is roleplay context, not your identity:"
             result += "\n" + heading + "\n" + text
+            if characterName == nil {
+                // Without a configured character, a name the instructions give replaces the default one. Said last,
+                // because an earlier turn ("Hi, I'm Mochi.") otherwise outweighs it.
+                result +=
+                    "\nNAME: If the conversation-specific instructions above give you a name, that name replaces Mochi: when asked your name, answer with it. Earlier turns may use a previous name."
+            }
         }
         if let characterName {
             let identity =

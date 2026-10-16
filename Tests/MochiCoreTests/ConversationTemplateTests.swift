@@ -170,6 +170,7 @@ extension ConversationTemplateTests {
             VoiceIdentity.conversationInstructions(custom: "Be brief", preferences: prefs),
             VoiceIdentity.instructions + "\nSpeak only English."
                 + "\nConversation-specific instructions (these override the conversational defaults above when they conflict):\nBe brief"
+                + "\nNAME: If the conversation-specific instructions above give you a name, that name replaces Mochi: when asked your name, answer with it. Earlier turns may use a previous name."
         )
     }
     func testImportSummaryCountsOnlyAddedTemplatesAndReportsSoftCap() {
@@ -218,6 +219,19 @@ extension ConversationTemplateTests {
         XCTAssertTrue(
             VoiceIdentity.conversationInstructions(custom: "Your name is Sam", preferences: ConversationPreferences())
                 .contains("these override the conversational defaults above"))
+        XCTAssertFalse(prompt.contains("that name replaces Mochi"), "a configured character keeps its own name")
+    }
+    /// Without a configured character, a name the instructions give replaces Mochi, and the prompt says so last,
+    /// after the instructions, so an earlier "Hi, I'm Mochi." does not outweigh it.
+    func testInstructionNameReplacesTheDefaultLast() throws {
+        let prompt = VoiceIdentity.conversationInstructions(
+            custom: "Your name is Sam.", preferences: ConversationPreferences())
+        XCTAssertTrue(prompt.hasSuffix("Earlier turns may use a previous name."))
+        let named = try XCTUnwrap(prompt.range(of: "that name replaces Mochi"))
+        XCTAssertLessThan(try XCTUnwrap(prompt.range(of: "Your name is Sam.")).lowerBound, named.lowerBound)
+        XCTAssertFalse(
+            VoiceIdentity.conversationInstructions(custom: "", preferences: ConversationPreferences())
+                .contains("that name replaces Mochi"), "no instructions, no name rule")
     }
 }
 
