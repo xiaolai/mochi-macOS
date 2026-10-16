@@ -184,6 +184,43 @@ extension ServiceHTTPTests {
         }
     }
 
+    /// `ServiceHTTP.failure` tells an oversized reply and a timeout apart by the package's own wording, and a broken
+    /// connection by the URL error code it keeps in `cause`. These failures come from the shared minter itself, not
+    /// from hand-built errors, so a package release that rewords them fails here instead of quietly turning Mochi's
+    /// specific messages into generic ones.
+    func testTheSharedPackagesOwnFailuresKeepMochisWords() async throws {
+        defer {
+            StubProtocol.response = nil
+            StubProtocol.failure = nil
+        }
+        func mintFailure(_ minter: Minter = stubMinter()) async throws -> AppFailure? {
+            do {
+                _ = try await RealtimeService.secret(model: "gpt-realtime", minter: minter)
+                XCTFail("The mint succeeded")
+                return nil
+            } catch let error as RealtimeError {
+                return ServiceHTTP.failure(error, provider: "OpenAI")
+            }
+        }
+        StubProtocol.response = (200, Data(count: Minter.maximumReply + 1))
+        let large = try await mintFailure()
+        XCTAssertEqual(large?.message, "OpenAI response was too large.")
+        StubProtocol.response = nil
+        StubProtocol.failure = URLError(.notConnectedToInternet)
+        let offline = try await mintFailure()
+        XCTAssertEqual(
+            offline?.message,
+            ServiceHTTP.transportFailure(URLError(.notConnectedToInternet), provider: "OpenAI").message)
+        StubProtocol.failure = nil
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SilentProtocol.self]
+        let silent = Minter(
+            client: HTTPClient(configuration: configuration), credentials: FixedSignIn(), timeout: 0.2,
+            lifetimeSeconds: 600)
+        let late = try await mintFailure(silent)
+        XCTAssertEqual(late?.message, ServiceHTTP.transportFailure(URLError(.timedOut), provider: "OpenAI").message)
+    }
+
     /// A refused reply's text is the provider's and can hold what the user said; it never reaches Mochi's message or
     /// its diagnostics.
     func testAProvidersRefusalTextIsDropped() throws {
