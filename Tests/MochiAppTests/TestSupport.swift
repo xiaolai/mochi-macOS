@@ -15,7 +15,7 @@ extension SpeechServices {
         return SpeechServices(
             conversationReply: { _, _, _ in throw refuse("conversation reply") },
             textReply: { _, _ in throw refuse("text reply") },
-            referenceAudio: { _, _, _, _ in throw refuse("reference audio") },
+            referenceAudio: { _, _, _, _, _ in throw refuse("reference audio") },
             transcribe: { _, _, _ in throw refuse("transcription") })
     }
 }

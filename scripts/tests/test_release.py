@@ -142,6 +142,17 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError): release.validate_distribution_symbols(retired,"normal","normal")
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",retired)
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal",retired,"normal")
-        for retired in ("OPENAI_API_KEY",):
-            with self.assertRaises(ValueError): release.validate_distribution_symbols(retired,"normal","normal")
-            with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",retired)
+
+    def test_the_api_key_gate_is_on_mochis_own_sources(self):
+        # The shared sign-in package ships the name to strip it from Codex's environment and to refuse an API-key
+        # sign-in; only Mochi's sources could add a fallback.
+        release.validate_distribution_symbols("OPENAI_API_KEY","normal","OPENAI_API_KEY")
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder)/"Fallback.swift"
+            source.write_text('let key = environment["OPENAI_API_KEY"]\n')
+            with self.assertRaises(ValueError): release.validate_sources(folder)
+            source.write_text('let key = "codex"\n')
+            release.validate_sources(folder)
+        with tempfile.TemporaryDirectory() as empty:
+            with self.assertRaises(ValueError): release.validate_sources(empty)
+        release.validate_sources()

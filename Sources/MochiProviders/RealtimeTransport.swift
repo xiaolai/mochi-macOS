@@ -1,93 +1,64 @@
 import Foundation
 import MochiKernel
+import RealtimeConnection
 
-struct RealtimeTimeout: Error {}
-/// Cancelling or expiring a deadline closes the transport to unblock a suspended receive.
-/// Completion and expiry are arbitrated under one lock: whichever settles first wins, so a deadline
-/// that fires after the operation finished never closes a transport that is still in use.
-final class RealtimeDeadline: @unchecked Sendable {
-    private enum Outcome { case running, finished, expired }
-    private let lock = NSLock()
-    private var outcome = Outcome.running
-    /// True when this call expired the deadline; false when the operation had already finished.
-    private func expire() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard outcome == .running else { return false }
-        outcome = .expired
-        return true
-    }
-    /// True when the operation finished in time; false when the deadline had already expired.
-    private func finish() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard outcome == .running else { return outcome == .finished }
-        outcome = .finished
-        return true
-    }
-    static func run<T>(
-        nanoseconds: UInt64, close: @escaping @Sendable () -> Void,
-        operation: () async throws -> T
-    ) async throws -> T {
-        let state = RealtimeDeadline()
-        let timer = Task {
-            do { try await Task.sleep(nanoseconds: nanoseconds) } catch { return }
-            guard !Task.isCancelled, state.expire() else { return }
-            close()
-        }
-        defer { timer.cancel() }
-        return try await withTaskCancellationHandler(
-            operation: {
-                do {
-                    try Task.checkCancellation()
-                    let result = try await operation()
-                    guard state.finish() else { throw RealtimeTimeout() }
-                    try Task.checkCancellation()
-                    return result
-                } catch {
-                    let inTime = state.finish()
-                    if Task.isCancelled { throw CancellationError() }
-                    if !inTime { throw RealtimeTimeout() }
-                    throw error
-                }
-            }, onCancel: close)
-    }
+/// The shared clients every OpenAI request goes through: the origin policy, no redirects and the failure taxonomy of
+/// the shared package. Minting uses Mochi's 45 s request and 90 s resource limits; sockets bound their own handshake.
+enum OpenAIConnection {
+    static let policy = OriginPolicy(realNetworkGuard: { LiveAccess.refusal() })
+    static let http = HTTPClient(policy: policy, configuration: ServiceHTTP.configuration)
+    static let sockets = HTTPClient(policy: policy)
+    /// A minted secret is asked to live 600 s, the lifetime OpenAI gave it when Mochi did not ask; it only has to
+    /// outlast the handshake it is minted for.
+    static let minter = Minter(
+        client: http, credentials: CodexSignIn.shared, timeout: 45, lifetimeSeconds: 600, route: "realtime")
+    /// The largest event a session accepts; a reply's audio arrives in deltas far below it.
+    static let readLimit = 4_000_000
+    /// Bounds the WebSocket handshake, as the socket's own request timeout did before the shared package.
+    static let handshakeTimeout: TimeInterval = 30
 }
-/// The connection reported itself cancelled while the reply was not: it closed underneath.
+
+/// Where one Realtime session connects, and the minted secret it presents.
+struct RealtimeEndpoint {
+    let url: URL
+    let secret: ClientSecret
+}
+
+/// The connection was reported cancelled while the reply was not: it closed underneath.
 struct RealtimeConnectionCancelled: Error {}
-struct RealtimeChannel {
+/// Sendable so a handshake can run in its own task; its closures are driven by one sender and one receiver at a time,
+/// and `close` is safe from anywhere.
+struct RealtimeChannel: @unchecked Sendable {
     let send: ([String: Any]) async throws -> Void
     let receive: () async throws -> [String: Any]
     let close: @Sendable () -> Void
-    static func live(_ request: URLRequest) -> RealtimeChannel {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 30
-        let session = URLSession(configuration: config)
-        let socket = session.webSocketTask(with: request)
-        socket.maximumMessageSize = 4_000_000
-        socket.resume()
+    /// A session of the shared package: its socket, read limit and handshake classification. Events reach Mochi as
+    /// the JSON objects it reads, including the ones the package does not type, such as tool calls.
+    static func live(_ endpoint: RealtimeEndpoint) async throws -> RealtimeChannel {
+        let session = try await RealtimeSession.open(
+            client: OpenAIConnection.sockets, secret: endpoint.secret,
+            configuration: .init(
+                url: endpoint.url, handshakeTimeout: OpenAIConnection.handshakeTimeout,
+                readLimit: OpenAIConnection.readLimit, route: "realtime"))
         return RealtimeChannel(
             send: { event in
                 let bytes = try JSONSerialization.data(withJSONObject: event)
-                try await surfacing { try await socket.send(.string(String(decoding: bytes, as: UTF8.self))) }
+                try await surfacing { try await session.send(bytes) }
             },
             receive: {
-                let message = try await surfacing { try await socket.receive() }
-                let bytes: Data
-                switch message {
-                case .data(let data): bytes = data
-                case .string(let text): bytes = Data(text.utf8)
-                @unknown default: throw AppFailure("Unexpected Realtime response.")
+                let message: RealtimeMessage
+                do { message = try await surfacing { try await session.next() } } catch let error as RealtimeError
+                    where error.errorClass == .protocol && error.code.isEmpty
+                {
+                    // A malformed event; an oversized one carries its close code and ends the session.
+                    throw AppFailure("Invalid Realtime event.", underlying: error)
                 }
-                guard let event = try JSONSerialization.jsonObject(with: bytes) as? [String: Any] else {
+                guard let event = try JSONSerialization.jsonObject(with: message.raw) as? [String: Any] else {
                     throw AppFailure("Invalid Realtime event.")
                 }
                 return event
             },
-            close: {
-                socket.cancel(with: .goingAway, reason: nil)
-                session.invalidateAndCancel()
-            })
+            close: { Task { await session.close() } })
     }
 }
 extension RealtimeChannel {

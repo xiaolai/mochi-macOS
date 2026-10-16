@@ -1,6 +1,7 @@
 import MochiCore
 import MochiKernel
 import MochiProviders
+import PCM16
 import XCTest
 
 @testable import MochiApp
@@ -13,7 +14,8 @@ final class AttemptCheckModelTests: XCTestCase {
             var value = Int16(sin(2 * Double.pi * 180 * Double(i) / 24000) * 12000).littleEndian
             withUnsafeBytes(of: &value) { pcm.append(contentsOf: $0) }
         }
-        return PCM.wav(pcm)
+        // Half a second of 24 kHz audio is far inside the header's range, so writing it cannot fail.
+        return try! PCM.wav(pcm, rate: PCM.sampleRate)
     }
     private let heard = [RecognizedWord(text: "Let", confidence: 0.9), RecognizedWord(text: "me", confidence: 0.9)]
 

@@ -118,7 +118,7 @@ final class CompanionModelTests: XCTestCase {
         app.media.permission = { true }
         app.media.record = { _ in }
         app.audio.makePlayer = { _ in SilentPlayer() }
-        app.speech.referenceAudio = { text, service, root, _ in
+        app.speech.referenceAudio = { text, _, service, root, _ in
             spoken.append((text, service.voice))
             return root.appendingPathComponent("greeting.wav")
         }
@@ -141,7 +141,7 @@ final class CompanionModelTests: XCTestCase {
         var recordings = 0
         app.media.permission = { true }
         app.media.record = { _ in recordings += 1 }
-        app.speech.referenceAudio = { _, _, root, _ in
+        app.speech.referenceAudio = { _, _, _, root, _ in
             greetings += 1
             return root.appendingPathComponent("greeting.wav")
         }
@@ -158,7 +158,7 @@ final class CompanionModelTests: XCTestCase {
         let app = app()
         app.library.conversations[0].greeting = "A long and awkward greeting."
         app.media.permission = { true }
-        app.speech.referenceAudio = { _, _, _, _ in
+        app.speech.referenceAudio = { _, _, _, _, _ in
             throw AppFailure("The example did not match the sentence exactly.", underlying: ReferenceSpeech.Mismatch())
         }
         app.toggleConversationVoice()

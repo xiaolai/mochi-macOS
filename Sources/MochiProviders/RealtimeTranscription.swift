@@ -1,6 +1,7 @@
 import Foundation
 import MochiCore
 import MochiKernel
+import RealtimeConnection
 
 /// A finished transcription: the trimmed text, and the transcriber's confidence in it when that came back whole.
 public struct TranscriptResult: Equatable, Sendable {
@@ -19,40 +20,55 @@ extension RealtimeService {
         _ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel, languages: [String] = []
     ) async throws -> TranscriptResult {
         try await transcribe(
-            pcm, transcriptionModel: transcriptionModel, languages: languages, credential: { try await token() },
+            pcm, transcriptionModel: transcriptionModel, languages: languages, credential: { try await secret() },
             connect: RealtimeChannel.live)
     }
     /// Full transport lifecycle seam: request construction, deadlines and cancellation.
     func transcribe(
         _ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel, languages: [String] = [],
-        credential: () async throws -> String, connect: (URLRequest) -> RealtimeChannel,
+        credential: () async throws -> ClientSecret, connect: (RealtimeEndpoint) async throws -> RealtimeChannel,
         timeoutNanoseconds: UInt64 = 60_000_000_000
     ) async throws -> TranscriptResult {
         try Self.validateTranscriptionAudio(pcm)
         // An unsupported model and language combination fails here, before any credential or connection.
         _ = try Self.transcriptionFields(model: transcriptionModel, languages: languages)
         try Task.checkCancellation()
-        let token = try await credential()
-        try Task.checkCancellation()
-        let channel = connect(realtimeRequest(token: token))
-        defer { channel.close() }
         do {
-            return try await RealtimeDeadline.run(nanoseconds: timeoutNanoseconds, close: channel.close) {
+            let secret = try await credential()
+            try Task.checkCancellation()
+            let channel = try await connect(endpoint(secret))
+            defer { channel.close() }
+            return try await RealtimeDeadline.run(seconds: Self.seconds(timeoutNanoseconds), close: channel.close) {
                 try await Self.transcribeTurn(
                     pcm, transcriptionModel: transcriptionModel, languages: languages, send: channel.send,
                     receive: channel.receive)
             }
-        } catch is CancellationError { throw CancellationError() } catch is RealtimeTimeout {
-            throw AppFailure("Transcription timed out. Your recording is saved; retry or add text.")
-        } catch let error as AppFailure { throw error } catch let error as URLError {
-            throw AppFailure(
+        } catch {
+            if Task.isCancelled || error is CancellationError { throw CancellationError() }
+            throw Self.transcriptionFailure(error)
+        }
+    }
+    /// The words for a failed transcription. A broken connection says the recording is kept, as a timeout does.
+    static func transcriptionFailure(_ error: Error) -> AppFailure {
+        switch error {
+        case is RealtimeDeadline.Expired:
+            return AppFailure("Transcription timed out. Your recording is saved; retry or add text.")
+        case let error as AppFailure: return error
+        case let error as RealtimeError where error.errorClass == .network:
+            let message = ServiceHTTP.failure(error, provider: "OpenAI")?.message ?? ""
+            return AppFailure("\(message) Your recording is saved.", underlying: error)
+        case let error as RealtimeError:
+            if let failure = ServiceHTTP.failure(error, provider: "OpenAI") { return failure }
+        case let error as URLError:
+            return AppFailure(
                 "\(ServiceHTTP.transportFailure(error, provider: "OpenAI").message) Your recording is saved.",
                 underlying: error)
-        } catch {
-            throw AppFailure(
-                "The transcription connection ended. Your recording is saved; check your connection and retry, or add text.",
-                underlying: error)
+        default:
+            if let failure = CodexSignIn.failure(error) as? AppFailure { return failure }
         }
+        return AppFailure(
+            "The transcription connection ended. Your recording is saved; check your connection and retry, or add text.",
+            underlying: error)
     }
     /// 16-bit mono 24 kHz PCM from a moment (0.1 s) up to 65 seconds long.
     static func isRecordedAudio(_ pcm: Data) -> Bool {

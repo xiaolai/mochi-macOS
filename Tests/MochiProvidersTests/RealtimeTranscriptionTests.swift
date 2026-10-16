@@ -1,4 +1,6 @@
 import MochiKernel
+import MochiTestSupport
+import RealtimeConnection
 import XCTest
 
 @testable import MochiProviders
@@ -167,14 +169,19 @@ final class RealtimeTranscriptionTests: XCTestCase {
     }
 
     func testRealtimeCredentialRoutesNeverFallBack() async throws {
-        let codex = try await RealtimeService.sessionToken(
-            model: "gpt-realtime", codexToken: { "fake-codex" },
-            transport: { request in
-                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer fake-codex")
-                XCTAssertEqual(request.url?.path, "/v1/realtime/client_secrets")
-                return Data(#"{"value":"fake-session"}"#.utf8)
-            })
-        XCTAssertEqual(codex, "fake-session")
+        StubProtocol.response = (200, Data(#"{"value":"ek_fake-session","expires_at":1900000000}"#.utf8))
+        defer { StubProtocol.response = nil }
+        let codex = try await RealtimeService.secret(
+            model: "gpt-realtime", minter: stubMinter(FixedSignIn(bearer: "tok-fake-codex")))
+        XCTAssertEqual(codex.bearer, "ek_fake-session")
+        let request = try XCTUnwrap(StubProtocol.lastRequest)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer tok-fake-codex")
+        XCTAssertEqual(request.url?.absoluteString, "https://api.openai.com/v1/realtime/client_secrets")
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(StubProtocol.lastBody)) as? [String: Any])
+        XCTAssertEqual(body["session"] as? [String: String], ["type": "realtime", "model": "gpt-realtime"])
+        XCTAssertEqual(
+            body["expires_after"] as? [String: AnyHashable], ["anchor": "created_at", "seconds": 600])
     }
 
     func testRealtimeRecoveryCancellationRejectsLateCompletion() async throws {
@@ -292,7 +299,7 @@ final class RealtimeTranscriptionTests: XCTestCase {
                 Data(repeating: 0, count: 4800), transcriptionModel: "gpt-4o-mini-transcribe", languages: ["en", "zh"],
                 credential: {
                     asked = true
-                    return "token"
+                    return testSecret()
                 },
                 connect: { _ in
                     XCTFail("No connection is made")

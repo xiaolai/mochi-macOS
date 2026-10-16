@@ -1,5 +1,7 @@
 import Foundation
 import MochiKernel
+import MochiTestSupport
+import RealtimeConnection
 import XCTest
 
 @testable import MochiProviders
@@ -11,7 +13,7 @@ private final class FakeConnection: @unchecked Sendable {
     private var waiting: CheckedContinuation<[String: Any], Error>?
     private(set) var sent: [[String: Any]] = []
     private(set) var closed = false
-    private(set) var request: URLRequest?
+    private(set) var endpoint: RealtimeEndpoint?
 
     init(_ events: [[String: Any]]) { queued = events }
 
@@ -36,9 +38,9 @@ private final class FakeConnection: @unchecked Sendable {
         defer { lock.unlock() }
         return closed
     }
-    func channel(_ request: URLRequest) -> RealtimeChannel {
+    func channel(_ endpoint: RealtimeEndpoint) -> RealtimeChannel {
         lock.lock()
-        self.request = request
+        self.endpoint = endpoint
         lock.unlock()
         return RealtimeChannel(
             send: { [self] event in
@@ -80,7 +82,7 @@ final class ListeningSessionTests: XCTestCase {
     ) async throws -> ListeningSession {
         try await ListeningSession.open(
             service: RealtimeService(), detection: detection, transcriptionModel: "gpt-4o-mini-transcribe",
-            languages: [], credential: { "session-token" }, connect: connection.channel,
+            languages: [], credential: { testSecret("ek_session-token") }, connect: { connection.channel($0) },
             handshakeTimeout: timeout)
     }
 
@@ -116,7 +118,7 @@ final class ListeningSessionTests: XCTestCase {
             let session = try await open(connection, detection: .semantic(eagerness: eagerness))
             defer { session.close() }
             XCTAssertEqual(
-                connection.request?.value(forHTTPHeaderField: "Authorization"), "Bearer session-token")
+                connection.endpoint?.secret.bearer, "ek_session-token")
             let update = try XCTUnwrap(connection.sentSnapshot.first)
             XCTAssertEqual(update["type"] as? String, "session.update")
             let configuration = try XCTUnwrap(update["session"] as? [String: Any])
@@ -226,7 +228,7 @@ final class ListeningSessionTests: XCTestCase {
         let session = try await open(connection)
         let listening = Task { try await self.signals(session, count: 1) }
         try await Task.sleep(nanoseconds: 50_000_000)
-        connection.channel(URLRequest(url: URL(string: "wss://example.invalid")!)).close()
+        connection.channel(RealtimeEndpoint(url: URL(string: "wss://example.invalid")!, secret: testSecret())).close()
         do {
             _ = try await listening.value
             XCTFail("Expected the session to fail")
@@ -265,7 +267,7 @@ final class ListeningSessionTests: XCTestCase {
         // Should the deadline regress, this ends the wait, so the test fails on the time instead of hanging.
         let watchdog = Task {
             try await Task.sleep(nanoseconds: 3_000_000_000)
-            silent.channel(URLRequest(url: URL(string: "wss://example.invalid")!)).close()
+            silent.channel(RealtimeEndpoint(url: URL(string: "wss://example.invalid")!, secret: testSecret())).close()
         }
         defer { watchdog.cancel() }
         let started = Date()
@@ -288,14 +290,14 @@ final class ListeningSessionTests: XCTestCase {
                 transcriptionModel: "gpt-4o-mini-transcribe", languages: [],
                 credential: {
                     try await Task.sleep(nanoseconds: 5_000_000_000)
-                    return "late"
-                }, connect: connection.channel, handshakeTimeout: 100_000_000)
+                    return testSecret("ek_late")
+                }, connect: { connection.channel($0) }, handshakeTimeout: 100_000_000)
             XCTFail("Expected the handshake to time out")
         } catch {
             XCTAssertTrue((error as? AppFailure)?.message.contains("in time") == true, "\(error)")
         }
         XCTAssertLessThan(Date().timeIntervalSince(started), 2, "The deadline cancels the slow credential")
-        XCTAssertNil(connection.request, "No connection opens after the deadline")
+        XCTAssertNil(connection.endpoint, "No connection opens after the deadline")
     }
 
     func testACredentialThatIgnoresCancellationNeverLeavesAConnectionOpen() async throws {
@@ -317,8 +319,8 @@ final class ListeningSessionTests: XCTestCase {
                             done.resume()
                         }
                     }
-                    return "late"
-                }, connect: connection.channel, handshakeTimeout: 100_000_000)
+                    return testSecret("ek_late")
+                }, connect: { connection.channel($0) }, handshakeTimeout: 100_000_000)
             XCTFail("Expected the handshake to time out")
         } catch {
             XCTAssertTrue((error as? AppFailure)?.message.contains("in time") == true, "\(error)")
@@ -327,7 +329,38 @@ final class ListeningSessionTests: XCTestCase {
         release.signal()
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertTrue(
-            connection.request == nil || connection.isClosed, "A late credential never leaves a connection open")
+            connection.endpoint == nil || connection.isClosed, "A late credential never leaves a connection open")
+    }
+
+    /// The handshake is a step of its own now that the shared session opens the socket: one still running when the
+    /// deadline expires is cancelled, not waited for, and a connection it opens late is closed at once.
+    func testAHandshakeArrivingAfterTheDeadlineIsClosed() async throws {
+        let connection = FakeConnection(handshake)
+        let release = DispatchSemaphore(value: 0)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) { release.signal() }
+        let started = Date()
+        do {
+            _ = try await ListeningSession.open(
+                service: RealtimeService(), detection: .semantic(eagerness: "low"),
+                transcriptionModel: "gpt-4o-mini-transcribe", languages: [], credential: { testSecret() },
+                connect: { endpoint in
+                    // Ignores cancellation, as a handshake stuck in the network can.
+                    await withCheckedContinuation { done in
+                        DispatchQueue.global().async {
+                            release.wait()
+                            done.resume()
+                        }
+                    }
+                    return connection.channel(endpoint)
+                }, handshakeTimeout: 100_000_000)
+            XCTFail("Expected the handshake to time out")
+        } catch {
+            XCTAssertTrue((error as? AppFailure)?.message.contains("in time") == true, "\(error)")
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1, "The deadline does not wait for the handshake")
+        release.signal()
+        let closed = await eventually { connection.isClosed }
+        XCTAssertTrue(closed, "A handshake that completes late never leaves its connection open")
     }
 
     func testUnsupportedTranscriptionLanguagesFailBeforeConnecting() async throws {
@@ -337,7 +370,7 @@ final class ListeningSessionTests: XCTestCase {
                 transcriptionModel: "gpt-4o-mini-transcribe", languages: ["en", "zh"],
                 credential: {
                     XCTFail("No credential before the settings are valid")
-                    return ""
+                    return testSecret()
                 },
                 connect: { _ in
                     XCTFail("No connection before the settings are valid")

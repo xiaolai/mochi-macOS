@@ -169,7 +169,7 @@ final class PersistenceModelTests: XCTestCase {
         let fixture = fixtureURL("reference.mp3")
         app.settings.builtInPracticeVoice = "cedar"
         var calls: [(String, String, Bool)] = []
-        app.speech.referenceAudio = { text, service, root, force in
+        app.speech.referenceAudio = { text, _, service, root, force in
             calls.append((text, service.voice, force))
             let url = root.appendingPathComponent("builtin-test.mp3")
             if !FileManager.default.fileExists(atPath: url.path) {
@@ -194,7 +194,8 @@ final class PersistenceModelTests: XCTestCase {
         app.ensureExpression()
         app.help.expression?.reference = "saved.wav"
         app.help.expression?.referenceKind = "Original"
-        app.speech.referenceAudio = { _, _, _, _ in throw AppFailure("The example did not match the sentence exactly.")
+        app.speech.referenceAudio = { _, _, _, _, _ in
+            throw AppFailure("The example did not match the sentence exactly.")
         }
         app.render(force: true)
         await waitUntil { !app.busy }
@@ -209,7 +210,7 @@ final class PersistenceModelTests: XCTestCase {
         app.ensureExpression()
         app.help.expression?.reference = "saved.wav"
         app.help.expression?.referenceKind = "Original"
-        app.speech.referenceAudio = { _, _, root, _ in
+        app.speech.referenceAudio = { _, _, _, root, _ in
             started.fulfill()
             await gate.wait()
             return root.appendingPathComponent("late.wav")

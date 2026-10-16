@@ -2,6 +2,7 @@ import AppKit
 import MochiCore
 import MochiKernel
 import MochiProviders
+import PCM16
 
 /// Where a hands-free turn goes: a voice message in a conversation, or a practice attempt.
 enum ListeningContext: Equatable {
@@ -460,7 +461,7 @@ extension AppModel {
         }
         let name = "recording-\(UUID().uuidString).wav"
         let url = store.root.appendingPathComponent(name)
-        do { try writeListeningTurn(PCM.wav(audio), url) } catch {
+        do { try writeListeningTurn(PCM.wav(audio, rate: PCM.sampleRate), url) } catch {
             MochiLog.failure(MochiLog.library, "Save hands-free turn", error)
             self.error = persistenceMessage(
                 error, action: "Save hands-free turn",

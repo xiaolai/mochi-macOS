@@ -27,15 +27,15 @@ public struct CodexTextService {
     /// The text of the reply to a Help Me Say This request.
     public func help(
         _ input: ConversationRequest,
-        signIn: () async throws -> Credentials.CodexSignIn = { try await Credentials.codexSignIn() },
+        signIn: () async throws -> CodexAccount = { try await CodexSignIn.account() },
         transport: (URLRequest) async throws -> Data = { try await ServiceHTTP.data($0, provider: "OpenAI") }
     ) async throws -> String {
-        let credentials = try await signIn()
-        guard let account = credentials.accountID else {
+        let signedIn = try await signIn()
+        guard let account = signedIn.accountID else {
             throw AppFailure(verbatim: "Codex's sign-in has no ChatGPT account id.")
         }
         try Task.checkCancellation()
-        let data = try await transport(request(input, token: credentials.token, account: account))
+        let data = try await transport(request(input, token: signedIn.token, account: account))
         return try Self.text(fromEvents: data)
     }
 

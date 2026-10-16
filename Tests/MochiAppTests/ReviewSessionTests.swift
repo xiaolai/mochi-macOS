@@ -1,6 +1,7 @@
 import Darwin
 import MochiCore
 import MochiKernel
+import PCM16
 import XCTest
 
 @testable import MochiApp
@@ -179,7 +180,7 @@ final class ReviewSessionTests: XCTestCase {
             withUnsafeBytes(of: &value) { pcm.append(contentsOf: $0) }
         }
         let take = root.appendingPathComponent("attempt.wav")
-        try PCM.wav(pcm).write(to: take)
+        try PCM.wav(pcm, rate: PCM.sampleRate).write(to: take)
         app.media.permission = { true }
         app.media.record = { _ in }
         app.media.stopRecording = { take }

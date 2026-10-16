@@ -556,7 +556,7 @@ final class QuickTalkTests: XCTestCase {
         app.library.conversations[0].voiceIntroduced = false
         var now = Date()
         app.recordingNow = { now }
-        app.speech.referenceAudio = { _, _, _, _ in throw CancellationError() }
+        app.speech.referenceAudio = { _, _, _, _, _ in throw CancellationError() }
         app.shortcutTriggered(.talk, pressed: true)
         XCTAssertTrue(app.greetingActive)
         XCTAssertNil(app.talkPress?.request, "The greeting comes first, so the press owns no recording")

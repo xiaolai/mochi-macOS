@@ -1,4 +1,5 @@
 import MochiKernel
+import RealtimeConnection
 import XCTest
 
 @testable import MochiProviders
@@ -7,9 +8,25 @@ import XCTest
 final class StubProtocol: URLProtocol {
     nonisolated(unsafe) static var response: (status: Int, body: Data)?
     nonisolated(unsafe) static var failure: URLError?
+    /// The last request served, and its body, which URLSession hands a protocol as a stream.
+    nonisolated(unsafe) static var lastRequest: URLRequest?
+    nonisolated(unsafe) static var lastBody: Data?
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        Self.lastRequest = request
+        Self.lastBody =
+            request.httpBody
+            ?? request.httpBodyStream.map { stream in
+                stream.open()
+                defer { stream.close() }
+                var body = Data()
+                var chunk = [UInt8](repeating: 0, count: 4096)
+                while case let count = stream.read(&chunk, maxLength: chunk.count), count > 0 {
+                    body.append(chunk, count: count)
+                }
+                return body
+            }
         if let failure = Self.failure {
             client?.urlProtocol(self, didFailWithError: failure)
             return
@@ -24,6 +41,21 @@ final class StubProtocol: URLProtocol {
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
+}
+
+/// A sign-in that always hands out one fixed token; refreshing returns it again.
+struct FixedSignIn: CredentialSource {
+    var bearer = "tok-fixed-sign-in"
+    func token() async throws -> Token { Token(bearer: bearer, expires: nil) }
+    func refresh(after stale: Token) async throws -> Token { try await token() }
+}
+
+/// Mochi's minter over `StubProtocol`, so a mint reply is whatever the test set.
+func stubMinter(_ signIn: any CredentialSource = FixedSignIn()) -> Minter {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StubProtocol.self]
+    return Minter(
+        client: HTTPClient(configuration: configuration), credentials: signIn, timeout: 5, lifetimeSeconds: 600)
 }
 
 /// Never answers, so a request stays in flight until the task is cancelled.
@@ -115,5 +147,68 @@ final class ServiceHTTPTests: XCTestCase {
                     URLRequest(url: URL(string: "https://api.openai.com/test")!), provider: "OpenAI",
                     configuration: configuration))
         } catch { return .failure(error as! AppFailure) }
+    }
+}
+
+extension ServiceHTTPTests {
+    /// The shared taxonomy reads as Mochi's own words did: a status keeps its message, a broken connection tells
+    /// offline, timeout and interception apart, and a class with no words of its own leaves the caller's.
+    func testClassifiedFailuresKeepMochisWords() {
+        func message(_ error: RealtimeError) -> String? { ServiceHTTP.failure(error, provider: "OpenAI")?.message }
+        XCTAssertEqual(
+            message(RealtimeError(.authExpired, status: 401)),
+            ServiceHTTP.failure(status: 401, provider: "OpenAI").message)
+        XCTAssertEqual(
+            message(RealtimeError(.routeDenied, status: 401, code: "missing_scope")),
+            "This account does not have access to OpenAI.")
+        XCTAssertEqual(message(RealtimeError(.rateLimited, status: 429)), "OpenAI usage limit reached. Retry later.")
+        XCTAssertEqual(
+            message(RealtimeError(.server, status: 503)), "OpenAI request failed (HTTP 503). Check Settings and retry.")
+        XCTAssertTrue(message(RealtimeError(.protocol, status: 302))?.contains("redirected") == true)
+        XCTAssertEqual(
+            message(RealtimeError(.protocol, status: 200, message: "reply exceeds 1048576 bytes")),
+            "OpenAI response was too large.")
+        XCTAssertEqual(
+            message(RealtimeError(.protocol, status: 200, message: "mint reply is not valid JSON")),
+            "OpenAI returned an invalid response.")
+        let offline = RealtimeError(
+            .network, message: "request failed", cause: "URLError \(URLError.Code.notConnectedToInternet.rawValue)")
+        XCTAssertEqual(
+            message(offline),
+            ServiceHTTP.transportFailure(URLError(.notConnectedToInternet), provider: "OpenAI").message)
+        XCTAssertEqual(
+            message(RealtimeError(.network, message: "request timed out after 45.0 s")),
+            ServiceHTTP.transportFailure(URLError(.timedOut), provider: "OpenAI").message)
+        for quiet in [ErrorClass.cancelled, .internal, .protocol] {
+            XCTAssertNil(message(RealtimeError(quiet, message: "realtime event: not valid JSON")), "\(quiet)")
+        }
+    }
+
+    /// A refused reply's text is the provider's and can hold what the user said; it never reaches Mochi's message or
+    /// its diagnostics.
+    func testAProvidersRefusalTextIsDropped() throws {
+        let failure = try XCTUnwrap(
+            ServiceHTTP.failure(
+                RealtimeError(.invalidRequest, status: 400, message: "private words", requestID: "req-1"),
+                provider: "OpenAI"))
+        XCTAssertFalse(failure.message.contains("private words"))
+        let kept = try XCTUnwrap(failure.underlying as? RealtimeError)
+        XCTAssertEqual(kept.message, "")
+        XCTAssertEqual(kept.requestID, "req-1")
+    }
+
+    /// Minting goes through the shared minter with Mochi's session object, and its refusal is Mochi's message.
+    func testMintingSendsTheModelAndReadsTheSecret() async throws {
+        StubProtocol.response = (200, Data(#"{"value":"ek_minted-value","expires_at":1900000000}"#.utf8))
+        defer { StubProtocol.response = nil }
+        let secret = try await RealtimeService.secret(model: "gpt-realtime", minter: stubMinter())
+        XCTAssertEqual(secret.bearer, "ek_minted-value")
+        StubProtocol.response = (429, Data())
+        do {
+            _ = try await RealtimeService.secret(model: "gpt-realtime", minter: stubMinter())
+            XCTFail("A refused mint returned a secret")
+        } catch let error as RealtimeError {
+            XCTAssertEqual(RealtimeService.replyFailure(error).message, "OpenAI usage limit reached. Retry later.")
+        }
     }
 }

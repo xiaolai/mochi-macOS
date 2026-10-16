@@ -42,7 +42,7 @@ extension SettingsErrorTests {
         let app = makeApp(root: makeTemporaryFolder())
         app.audio.makePlayer = { _ in throw Offline() }
         let fixture = fixtureURL("reference.mp3")
-        app.speech.referenceAudio = { _, _, root, _ in
+        app.speech.referenceAudio = { _, _, _, root, _ in
             let url = root.appendingPathComponent("preview-test.mp3")
             try FileManager.default.copyItem(at: fixture, to: url)
             return url

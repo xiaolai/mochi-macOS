@@ -1,4 +1,6 @@
 import MochiKernel
+import MochiTestSupport
+import RealtimeConnection
 import XCTest
 
 @testable import MochiCore
@@ -62,16 +64,17 @@ final class ConversationRequestTests: XCTestCase {
         let channel = RealtimeChannel(send: { sent.append($0) }, receive: { events.removeFirst() }, close: {})
         let history = (0..<31).map { Message(role: $0.isMultiple(of: 2) ? "user" : "assistant", text: "Message \($0)") }
         let request = ConversationRequest(history: history, text: "", pcm: Data(count: 100_000), spoken: true)
-        var requested: URLRequest?
+        var requested: RealtimeEndpoint?
         let reply = try await RealtimeService(model: "test-model").reply(
-            request, credential: { "session" },
+            request, credential: { testSecret("ek_reply-session") },
             connect: {
                 requested = $0
                 return channel
             })
         XCTAssertEqual(reply.text, "Hi.")
         XCTAssertEqual(reply.inputTranscript, "Spoken words")
-        XCTAssertEqual(requested?.value(forHTTPHeaderField: "Authorization"), "Bearer session")
+        XCTAssertEqual(requested?.secret.bearer, "ek_reply-session")
+        XCTAssertEqual(requested?.url.absoluteString, "wss://api.openai.com/v1/realtime?model=test-model")
         let types = sent.map { $0["type"] as? String ?? "" }
         XCTAssertEqual(types.first, "session.update")
         XCTAssertEqual(types.filter { $0 == "conversation.item.create" }.count, 30)
@@ -90,7 +93,7 @@ final class ConversationRequestTests: XCTestCase {
                     ConversationRequest(history: [], text: "", pcm: pcm, spoken: true),
                     credential: {
                         signedIn = true
-                        return "session"
+                        return testSecret()
                     },
                     connect: { _ in
                         XCTFail("connected")
@@ -132,7 +135,7 @@ extension ConversationRequestTests {
             ]
             let channel = RealtimeChannel(send: { sent.append($0) }, receive: { events.removeFirst() }, close: {})
             _ = try await RealtimeService(model: "test-model").reply(
-                ConversationRequest(history: [], text: line, reference: reference), credential: { "session" },
+                ConversationRequest(history: [], text: line, reference: reference), credential: { testSecret() },
                 connect: { _ in channel })
             let instructions = (sent.first?["session"] as? [String: Any])?["instructions"] as? String ?? ""
             let messages = sent.filter { $0["type"] as? String == "conversation.item.create" }

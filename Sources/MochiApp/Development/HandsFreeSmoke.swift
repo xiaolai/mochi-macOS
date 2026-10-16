@@ -4,6 +4,7 @@
     import CoreAudio
     import MochiCore
     import MochiKernel
+    import PCM16
 
     /// Plays a recorded 24 kHz mono 16-bit stream into hands-free listening in real time, in 100 ms pieces, once
     /// `play()` is called; before that and after it, quiet room noise, for as long as listening keeps the capture open.
@@ -426,7 +427,7 @@
                         // the echo check below without proving anything. That turn's reply is the one checked.
                         microphoneLive = true
                         let learner = directory.appendingPathComponent("barge-in-learner.wav")
-                        try PCM.wav(stream).write(to: learner)
+                        try PCM.wav(stream, rate: PCM.sampleRate).write(to: learner)
                         let speaker = try AVAudioPlayer(contentsOf: learner)
                         guard speaker.play() else { throw AppFailure(verbatim: "The learner recording did not play.") }
                         speechHeard = await waitFor(20) { model.listening.phase == .hearingSpeech }

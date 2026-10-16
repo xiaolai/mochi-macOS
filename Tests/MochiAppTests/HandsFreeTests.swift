@@ -2,6 +2,7 @@ import Carbon.HIToolbox
 import MochiCore
 import MochiKernel
 import MochiTestSupport
+import PCM16
 import SwiftUI
 import XCTest
 
@@ -227,7 +228,7 @@ final class HandsFreeTests: XCTestCase {
         pressed.media.permission = { true }
         pressed.media.record = { url in
             recorded = url
-            try PCM.wav(turnAudio).write(to: url)
+            try PCM.wav(turnAudio, rate: PCM.sampleRate).write(to: url)
         }
         pressed.media.stopRecording = { recorded }
         pressed.toggleRecord()
@@ -647,7 +648,7 @@ final class HandsFreeTests: XCTestCase {
         let ordinary = TestPlayer()
         app.audio.makePlayer = { _ in ordinary }
         let recording = app.store.root.appendingPathComponent("mine.wav")
-        try PCM.wav(Data(repeating: 0, count: 4800)).write(to: recording)
+        try PCM.wav(Data(repeating: 0, count: 4800), rate: PCM.sampleRate).write(to: recording)
         _ = await startedLine(app, listening)
         app.play("mine.wav")
         await waitUntil { app.listening.phase == .mochiSpeaking }
@@ -794,7 +795,7 @@ final class HandsFreeTests: XCTestCase {
         let player = TestPlayer()
         app.audio.makePlayer = { _ in player }
         let greeting = app.store.root.appendingPathComponent("earlier.wav")
-        try PCM.wav(Data(repeating: 0, count: 4800)).write(to: greeting)
+        try PCM.wav(Data(repeating: 0, count: 4800), rate: PCM.sampleRate).write(to: greeting)
         app.play("earlier.wav")
         XCTAssertEqual(app.turn.activity, .playing)
         app.toggleListening()
@@ -969,7 +970,7 @@ final class HandsFreeTests: XCTestCase {
         let player = TestPlayer()
         app.audio.makePlayer = { _ in player }
         let earlier = app.store.root.appendingPathComponent("earlier.wav")
-        try PCM.wav(Data(repeating: 0, count: 4800)).write(to: earlier)
+        try PCM.wav(Data(repeating: 0, count: 4800), rate: PCM.sampleRate).write(to: earlier)
         app.play("earlier.wav")
         app.shortcutTriggered(.talk, pressed: true)
         await waitUntil { app.listening.isOn }
@@ -1213,8 +1214,8 @@ final class HandsFreeTests: XCTestCase {
             app.library.conversations[index].voiceIntroduced = false
         }
         let greeting = app.store.root.appendingPathComponent("greeting.wav")
-        try PCM.wav(Data(repeating: 0, count: 4800)).write(to: greeting)
-        app.speech.referenceAudio = { _, _, _, _ in greeting }
+        try PCM.wav(Data(repeating: 0, count: 4800), rate: PCM.sampleRate).write(to: greeting)
+        app.speech.referenceAudio = { _, _, _, _, _ in greeting }
         let routed = TestPlayer()
         listening.routedPlayer = routed
         app.toggleConversationVoice()
@@ -1279,8 +1280,8 @@ final class HandsFreeTests: XCTestCase {
             app.library.conversations[index].voiceIntroduced = false
         }
         let greeting = app.store.root.appendingPathComponent("greeting.wav")
-        try PCM.wav(Data(repeating: 0, count: 4800)).write(to: greeting)
-        app.speech.referenceAudio = { _, _, _, _ in greeting }
+        try PCM.wav(Data(repeating: 0, count: 4800), rate: PCM.sampleRate).write(to: greeting)
+        app.speech.referenceAudio = { _, _, _, _, _ in greeting }
         let player = TestPlayer()
         app.audio.makePlayer = { _ in player }
         app.toggleConversationVoice()
@@ -1370,7 +1371,7 @@ final class HandsFreeTests: XCTestCase {
                 app.media.permission = { true }
                 var take: URL?
                 app.media.record = { url in
-                    try PCM.wav(Data(repeating: 0, count: 48000)).write(to: url)
+                    try PCM.wav(Data(repeating: 0, count: 48000), rate: PCM.sampleRate).write(to: url)
                     take = url
                 }
                 app.media.stopRecording = { take }

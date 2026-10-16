@@ -1,5 +1,6 @@
 import MochiCore
 import MochiKernel
+import PCM16
 import XCTest
 
 @testable import MochiProviders
@@ -127,7 +128,7 @@ final class TemplateAuditionTests: XCTestCase {
                         "- \(template.title): finish \(String(format: "%.1f", seconds)) s, truncated \(reply.truncated)"
                     )
                     XCTAssertFalse(reply.truncated, "\(template.title): the spoken finish hit the output cap")
-                    try PCM.wav(reply.audio).write(
+                    try PCM.wav(reply.audio, rate: PCM.sampleRate).write(
                         to: folder.appendingPathComponent(String(format: "%02d-finish.wav", number + 1)))
                 }
             }
@@ -226,10 +227,12 @@ final class TemplateAuditionTests: XCTestCase {
                     do {
                         let reply = try await service.reply(
                             ConversationRequest(history: [], text: text, spoken: true, reference: true))
-                        matched = !reply.audio.isEmpty && !reply.truncated && ReferenceSpeech.matches(text, reply.text)
+                        matched =
+                            !reply.audio.isEmpty && !reply.truncated
+                            && ReferenceSpeech.matches(text, reply.text, language: language)
                         attempts.append(reply.text)
                         if matched {
-                            try PCM.wav(reply.audio).write(
+                            try PCM.wav(reply.audio, rate: PCM.sampleRate).write(
                                 to: folder.appendingPathComponent(
                                     String(format: "greeting-%02d-%@-%@.wav", number + 1, language, voice)))
                         }
@@ -296,7 +299,7 @@ final class TemplateAuditionTests: XCTestCase {
                     }
                     if spoken {
                         if reply.truncated { failures.append("\(name): the spoken finish hit the output cap") }
-                        try PCM.wav(reply.audio).write(
+                        try PCM.wav(reply.audio, rate: PCM.sampleRate).write(
                             to: folder.appendingPathComponent(
                                 String(format: "conversation-%02d-finish.wav", number + 1)))
                         summary.append(

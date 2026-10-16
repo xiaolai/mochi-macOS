@@ -1,6 +1,7 @@
 import Foundation
 import MochiCore
 import MochiKernel
+import RealtimeConnection
 
 enum RealtimeEvents {
     static func message(role: String, text: String) -> [String: Any] {
@@ -12,27 +13,57 @@ enum RealtimeEvents {
             ],
         ]
     }
+    /// A server `error` event, classified by the shared package from its type and code.
     static func failure(_ error: [String: Any]?) -> AppFailure {
-        // Never echo arbitrary provider messages: they can contain user input or credentials.
-        let code = error?["code"] as? String ?? ""
+        func text(_ key: String) -> String {
+            (error?[key] as? String) ?? (error?[key] as? NSNumber).map { "\($0)" } ?? ""
+        }
+        return failure(
+            RealtimeError.errorEvent(
+                type: text("type"), code: text("code"), param: text("param"), message: text("message")))
+    }
+    /// Mochi's words for a classified error event: the provider code picks among them, and the class decides the
+    /// rest. Never the provider's message: it can contain user input or credentials.
+    static func failure(_ event: RealtimeError) -> AppFailure {
+        let error = event.withoutProviderMessage
+        let code = error.code
         switch code {
         case "invalid_value", "invalid_request_error", "unknown_parameter", "missing_required_parameter",
             "invalid_parameter", "decimal_max_decimal_places_exceeded":
-            let param = error?["param"] as? String ?? ""
+            let param = error.param
             let field =
                 (param == "session.audio.output.speed"
                     || param.range(of: #"^item\.content\[[0-9]{1,2}\]\.type$"#, options: .regularExpression) != nil)
                 ? "; field: \(param)" : ""
-            return AppFailure("OpenAI rejected Mochi's request format (\(code)\(field)).")
+            return AppFailure("OpenAI rejected Mochi's request format (\(code)\(field)).", underlying: error)
         case "invalid_api_key", "authentication_error":
-            return AppFailure("Your Codex sign-in was rejected. Sign in through Codex again, then retry.")
-        case "rate_limit_exceeded", "insufficient_quota":
-            return AppFailure("OpenAI usage limit reached (\(code)). Check your usage or retry later.")
+            return AppFailure(
+                "Your Codex sign-in was rejected. Sign in through Codex again, then retry.", underlying: error)
         case "model_not_found":
-            return AppFailure("OpenAI could not access the selected model. Check the model in Settings.")
-        default:
-            return AppFailure("OpenAI rejected this request. Please retry; the cause could not be identified.")
+            return AppFailure(
+                "OpenAI could not access the selected model. Check the model in Settings.", underlying: error)
+        default: break
         }
+        if error.type == "authentication_error" {
+            return AppFailure(
+                "Your Codex sign-in was rejected. Sign in through Codex again, then retry.", underlying: error)
+        }
+        if error.errorClass == .rateLimited {
+            let named = code.isEmpty ? error.type : code
+            return AppFailure(
+                "OpenAI usage limit reached (\(named)). Check your usage or retry later.", underlying: error)
+        }
+        return AppFailure(
+            "OpenAI rejected this request. Please retry; the cause could not be identified.", underlying: error)
+    }
+}
+extension RealtimeError {
+    /// The error without the provider's free text, which can hold user input; class, status, code and request id stay
+    /// for diagnostics.
+    var withoutProviderMessage: RealtimeError {
+        var error = self
+        error.message = ""
+        return error
     }
 }
 public struct RealtimeAccumulator {

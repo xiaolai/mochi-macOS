@@ -2,6 +2,7 @@ import AppKit
 import MochiCore
 import MochiKernel
 import MochiProviders
+import PCM16
 
 /// The conversation itself: sending text and voice, replies, transcription and the spoken greeting.
 extension AppModel {
@@ -251,7 +252,8 @@ extension AppModel {
         if !reply.audio.isEmpty {
             let name = "reply-\(UUID().uuidString).wav"
             do {
-                try writeReplyAudio(PCM.wav(reply.audio), store.root.appendingPathComponent(name))
+                try writeReplyAudio(
+                    PCM.wav(reply.audio, rate: PCM.sampleRate), store.root.appendingPathComponent(name))
                 filename = name
             } catch { audioFailure = error }
         }
@@ -453,7 +455,7 @@ extension AppModel {
                     : (text: setup, pattern: nil)
                 let text = greeting.text
                 do {
-                    let url = try await speech.referenceAudio(text, service, store.root, false)
+                    let url = try await speech.referenceAudio(text, spoken.language, service, store.root, false)
                     guard !Task.isCancelled, turn.epoch == generationToken, selectedID == id,
                         !practice, writableConversation,
                         let index = library.conversations.firstIndex(where: { $0.id == id })

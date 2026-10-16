@@ -94,31 +94,3 @@ public enum PitchAnalyzer {
         return output.map(Double.init)
     }
 }
-public enum PCM {
-    public static func wav(_ pcm: Data, sampleRate: UInt32 = 24000) -> Data {
-        var data = Data()
-        func text(_ s: String) { data.append(contentsOf: s.utf8) }
-        func u32(_ n: UInt32) {
-            var v = n.littleEndian
-            withUnsafeBytes(of: &v) { data.append(contentsOf: $0) }
-        }
-        func u16(_ n: UInt16) {
-            var v = n.littleEndian
-            withUnsafeBytes(of: &v) { data.append(contentsOf: $0) }
-        }
-        text("RIFF")
-        u32(UInt32(pcm.count + 36))
-        text("WAVEfmt ")
-        u32(16)
-        u16(1)
-        u16(1)
-        u32(sampleRate)
-        u32(sampleRate * 2)
-        u16(2)
-        u16(16)
-        text("data")
-        u32(UInt32(pcm.count))
-        data.append(pcm)
-        return data
-    }
-}

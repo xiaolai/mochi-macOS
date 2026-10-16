@@ -1,5 +1,6 @@
 import MochiCore
 import MochiKernel
+import PCM16
 import XCTest
 
 @testable import MochiApp
@@ -109,7 +110,7 @@ final class TranscriptEvidenceModelTests: XCTestCase {
         app.resume()
         app.newChat()
         let wav = app.store.root.appendingPathComponent("voice.wav")
-        try PCM.wav(Data(repeating: 0, count: 4800)).write(to: wav)
+        try PCM.wav(Data(repeating: 0, count: 4800), rate: PCM.sampleRate).write(to: wav)
         var voice = Message(role: "user", text: "", audio: "voice.wav")
         voice.recording = RecordingMetadata(model: "recorded-model")
         voice.transcriptionState = .failed

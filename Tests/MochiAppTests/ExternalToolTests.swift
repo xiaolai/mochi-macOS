@@ -1,6 +1,7 @@
 import MochiAutomation
 import MochiCore
 import MochiKernel
+import PCM16
 import XCTest
 
 @testable import MochiApp
@@ -29,7 +30,8 @@ final class ExternalToolTests: XCTestCase {
             arguments.merging(["expected_revision": app.tools.revision]) { _, new in new }
         }
         let id = try XCTUnwrap(app.selectedID).uuidString
-        try PCM.wav(Data(repeating: 0, count: 4800)).write(to: app.store.root.appendingPathComponent("fixture.wav"))
+        try PCM.wav(Data(repeating: 0, count: 4800), rate: PCM.sampleRate).write(
+            to: app.store.root.appendingPathComponent("fixture.wav"))
         app.append(Message(role: "user", text: "Hello"), to: try XCTUnwrap(app.selectedID))
         app.append(
             Message(role: "assistant", text: "Hi there", audio: "fixture.wav"), to: try XCTUnwrap(app.selectedID))

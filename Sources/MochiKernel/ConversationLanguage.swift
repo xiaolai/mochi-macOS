@@ -38,4 +38,8 @@ public enum ConversationLanguage: String, Codable, CaseIterable, Sendable {
 
     /// Whether there is one language to practise, which corrections and Help Me Say This need.
     public var isPractised: Bool { self != .match }
+
+    /// The language tag a reading of a text in this language is checked with (numbers, symbols, abbreviations); none
+    /// for `match`, which names no language, so a text is then matched as written.
+    public var readingTag: String { self == .match ? "" : rawValue }
 }

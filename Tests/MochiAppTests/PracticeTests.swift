@@ -1,5 +1,6 @@
 import MochiCore
 import MochiTestSupport
+import PCM16
 import XCTest
 
 @testable import MochiApp
@@ -10,7 +11,8 @@ final class PracticeTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root)
         app.startHelp()
-        try PCM.wav(Data(repeating: 0, count: 4800)).write(to: root.appendingPathComponent("thought.wav"))
+        try PCM.wav(Data(repeating: 0, count: 4800), rate: PCM.sampleRate).write(
+            to: root.appendingPathComponent("thought.wav"))
         app.help.meaning = "Unfinished thought"
         app.help.thoughtRecording = "thought.wav"
         app.resume()
@@ -115,6 +117,7 @@ final class PracticeTests: XCTestCase {
             var value = Int16(sin(2 * Double.pi * 180 * Double(i) / 24000) * 12000).littleEndian
             withUnsafeBytes(of: &value) { pcm.append(contentsOf: $0) }
         }
-        return PCM.wav(pcm)
+        // Half a second of 24 kHz audio is far inside the header's range, so writing it cannot fail.
+        return try! PCM.wav(pcm, rate: PCM.sampleRate)
     }
 }

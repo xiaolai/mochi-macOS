@@ -1,6 +1,7 @@
 import Foundation
 import MochiCore
 import MochiKernel
+import RealtimeConnection
 
 /// How a listening session decides that the learner has finished a turn.
 public enum TurnDetection: Equatable, Sendable {
@@ -105,14 +106,15 @@ public final class ListeningSession: @unchecked Sendable {
         let service = RealtimeService(model: model)
         return try await open(
             service: service, detection: detection, transcriptionModel: transcriptionModel, languages: languages,
-            credential: { try await service.token() }, connect: RealtimeChannel.live,
+            credential: { try await service.secret() }, connect: { try await RealtimeChannel.live($0) },
             handshakeTimeout: handshakeTimeout)
     }
 
     /// Transport seam: request construction, handshake, deadline and failures.
     static func open(
         service: RealtimeService, detection: TurnDetection, transcriptionModel: String, languages: [String],
-        credential: @escaping @Sendable () async throws -> String, connect: (URLRequest) -> RealtimeChannel,
+        credential: @escaping @Sendable () async throws -> ClientSecret,
+        connect: @escaping @Sendable (RealtimeEndpoint) async throws -> RealtimeChannel,
         handshakeTimeout: UInt64 = 10_000_000_000
     ) async throws -> ListeningSession {
         let transcription = try RealtimeService.transcriptionFields(model: transcriptionModel, languages: languages)
@@ -120,19 +122,17 @@ public final class ListeningSession: @unchecked Sendable {
         do {
             // The deadline settles on the configured channel; the session, whose workers run until it is closed, is
             // made only once the deadline has accepted it, so a handshake rejected at the last moment leaves none.
-            let configured = try await RealtimeDeadline.run(nanoseconds: handshakeTimeout, close: channel.close) {
+            let configured = try await RealtimeDeadline.run(
+                seconds: RealtimeService.seconds(handshakeTimeout), close: channel.close
+            ) {
                 // The deadline cancels a credential request still running when it expires, and stops waiting for it
                 // even if it ignores the cancellation; a credential arriving later is dropped.
-                let pending = Task { try await credential() }
-                let first = FirstResult<String>()
-                Task { first.offer(await pending.result) }
-                channel.onClose {
-                    pending.cancel()
-                    first.offer(.failure(CancellationError()))
-                }
-                let token = try await first.wait()
+                let secret = try await channel.abandoning { try await credential() }
                 try Task.checkCancellation()
-                let opened = connect(service.realtimeRequest(token: token))
+                // The WebSocket handshake gets the same treatment: one that completes after the deadline is closed.
+                let endpoint = service.endpoint(secret)
+                let opened = try await channel.abandoning(
+                    { try await connect(endpoint) }, late: { $0.close() })
                 channel.set(opened)
                 var accumulator = RealtimeAccumulator()
                 try await RealtimeService.waitFor("session.created", into: &accumulator, receive: opened.receive)
@@ -200,11 +200,14 @@ public final class ListeningSession: @unchecked Sendable {
     }
 
     static func failure(_ error: Error) -> AppFailure {
-        if error is RealtimeTimeout {
+        if error is RealtimeDeadline.Expired {
             return AppFailure(
                 "Mochi could not start listening in time. Check your connection; press to send still works.")
         }
-        if let failure = error as? AppFailure { return failure }
+        if let failure = (error as? AppFailure) ?? (CodexSignIn.failure(error) as? AppFailure) { return failure }
+        if let error = error as? RealtimeError, let failure = ServiceHTTP.failure(error, provider: "OpenAI") {
+            return failure
+        }
         if error is URLError { return ServiceHTTP.transportFailure(error, provider: "OpenAI") }
         return AppFailure(
             "The listening connection ended. Check your connection; press to send still works.", underlying: error)
@@ -232,11 +235,12 @@ private final class FirstResult<Value: Sendable>: @unchecked Sendable {
             }
         }
     }
-    func offer(_ result: Result<Value, Error>) {
+    /// True when this result was the first; a later one is dropped and returns false.
+    @discardableResult func offer(_ result: Result<Value, Error>) -> Bool {
         lock.lock()
         guard !settled else {
             lock.unlock()
-            return
+            return false
         }
         settled = true
         let waiting = waiter
@@ -244,6 +248,7 @@ private final class FirstResult<Value: Sendable>: @unchecked Sendable {
         if waiting == nil { early = result }
         lock.unlock()
         waiting?.resume(with: result)
+        return true
     }
 }
 
@@ -265,6 +270,23 @@ private final class OpenedChannel: @unchecked Sendable {
         if !late { cancellations.append(cancel) }
         lock.unlock()
         if late { cancel() }
+    }
+    /// Runs `work` until it finishes or this channel closes, whichever is first. Closing cancels it and stops waiting
+    /// for it even if it ignores the cancellation; a value it delivers after that goes to `late`.
+    func abandoning<Value: Sendable>(
+        _ work: @escaping @Sendable () async throws -> Value, late: @escaping @Sendable (Value) -> Void = { _ in }
+    ) async throws -> Value {
+        let pending = Task { try await work() }
+        let first = FirstResult<Value>()
+        Task {
+            let result = await pending.result
+            if !first.offer(result), case .success(let value) = result { late(value) }
+        }
+        onClose {
+            pending.cancel()
+            first.offer(.failure(CancellationError()))
+        }
+        return try await first.wait()
     }
     @Sendable func close() {
         lock.lock()

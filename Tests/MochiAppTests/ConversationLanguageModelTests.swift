@@ -73,6 +73,31 @@ import XCTest
         app.leavePractice()
     }
 
+    /// A saved expression keeps its language when it is reopened in a conversation held in another one, and its
+    /// example is checked with that language's rules: in French `3` is `trois`, so `three` must not pass.
+    func testAnExpressionsExampleIsCheckedInItsOwnLanguage() async throws {
+        let app = app()
+        let id = try XCTUnwrap(app.selectedID)
+        let expression = PracticeExpression(
+            conversationID: id, meaning: "", english: "J'ai 3 chats.", language: .french)
+        app.library.expressions = [expression]
+        app.openExpression(expression)
+        await waitUntil { !app.busy }
+        XCTAssertTrue(app.practice)
+        XCTAssertEqual(app.conversation?.preferences.language, .english)
+        var checkedIn: ConversationLanguage?
+        app.speech.referenceAudio = { _, language, _, _, _ in
+            checkedIn = language
+            throw CancellationError()
+        }
+        app.render(force: true)
+        await waitUntil { checkedIn != nil }
+        XCTAssertEqual(checkedIn, .french)
+        XCTAssertEqual(ConversationLanguage.french.readingTag, "fr")
+        XCTAssertEqual(ConversationLanguage.match.readingTag, "", "No language: the text is matched as written")
+        app.leavePractice()
+    }
+
     func testAssistantsReadAndSetTheLanguage() throws {
         let app = app()
         let id = try XCTUnwrap(app.selectedID).uuidString
@@ -94,12 +119,15 @@ import XCTest
         app.media.record = { _ in }
         app.audio.makePlayer = { _ in throw CancellationError() }
         var spoken = ""
-        app.speech.referenceAudio = { text, _, root, _ in
+        var checkedIn: ConversationLanguage?
+        app.speech.referenceAudio = { text, language, _, root, _ in
             spoken = text
+            checkedIn = language
             return root.appendingPathComponent("greeting.wav")
         }
         app.toggleConversationVoice()
         await waitUntil { !spoken.isEmpty && app.conversation?.voiceIntroduced == true }
+        XCTAssertEqual(checkedIn, .german, "The greeting's reading is checked with German's rules")
         XCTAssertTrue(
             Greetings.patterns(.german).map { $0.replacingOccurrences(of: "{name}", with: "Mochi") }.contains(spoken),
             spoken)

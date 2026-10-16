@@ -39,7 +39,7 @@ extension VoiceModelTests {
         let player = TestPlayer()
         app.audio.makePlayer = { _ in player }
         let fixture = fixtureURL("reference.mp3")
-        app.speech.referenceAudio = { _, _, root, _ in
+        app.speech.referenceAudio = { _, _, _, root, _ in
             let url = root.appendingPathComponent("preview-test.mp3")
             if !FileManager.default.fileExists(atPath: url.path) {
                 try FileManager.default.copyItem(at: fixture, to: url)

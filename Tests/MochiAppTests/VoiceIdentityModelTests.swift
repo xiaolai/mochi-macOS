@@ -1,6 +1,7 @@
 import MochiCore
 import MochiKernel
 import MochiTestSupport
+import PCM16
 import XCTest
 
 @testable import MochiApp
@@ -25,7 +26,7 @@ final class VoiceIdentityModelTests: XCTestCase {
         app.select(chat.id)
         app.media.permission = { true }
         app.media.record = { _ in }
-        app.speech.referenceAudio = { _, _, root, _ in root.appendingPathComponent("greeting.wav") }
+        app.speech.referenceAudio = { _, _, _, root, _ in root.appendingPathComponent("greeting.wav") }
         return app
     }
     @MainActor func testGreetingSavesThenListensAndNeverRepeatsOrListensOnReplay() async {
@@ -34,7 +35,7 @@ final class VoiceIdentityModelTests: XCTestCase {
         app.audio.makePlayer = { _ in player }
         var renderCount = 0
         var recordCount = 0
-        app.speech.referenceAudio = { text, service, root, _ in
+        app.speech.referenceAudio = { text, _, service, root, _ in
             renderCount += 1
             XCTAssertTrue(VoiceIdentity.greetings.contains(text))
             XCTAssertEqual(service.voice, app.settings.conversationVoice)
@@ -75,7 +76,7 @@ final class VoiceIdentityModelTests: XCTestCase {
         var renders = 0
         var records = 0
         app.media.record = { _ in records += 1 }
-        app.speech.referenceAudio = { _, _, _, _ in
+        app.speech.referenceAudio = { _, _, _, _, _ in
             renders += 1
             throw AppFailure("Greeting failed")
         }
@@ -99,7 +100,7 @@ final class VoiceIdentityModelTests: XCTestCase {
         let app = app()
         let gate = TestGate()
         var records = 0
-        app.speech.referenceAudio = { _, _, root, _ in
+        app.speech.referenceAudio = { _, _, _, root, _ in
             await gate.wait()
             return root.appendingPathComponent("late.wav")
         }
@@ -169,7 +170,7 @@ final class VoiceIdentityModelTests: XCTestCase {
                 if waitingForPermission { await gate.wait() }
                 return true
             }
-            app.speech.referenceAudio = { _, _, root, _ in
+            app.speech.referenceAudio = { _, _, _, root, _ in
                 renders += 1
                 if !waitingForPermission { await gate.wait() }
                 return root.appendingPathComponent("late.wav")
@@ -198,9 +199,9 @@ final class VoiceIdentityModelTests: XCTestCase {
         }
         let app = makeApp(root: root, preferences: prefs)
         app.media.permission = { true }
-        app.speech.referenceAudio = { _, _, root, _ in
+        app.speech.referenceAudio = { _, _, _, root, _ in
             let url = root.appendingPathComponent("greeting.wav")
-            try PCM.wav(Data(repeating: 0, count: 24000)).write(to: url)
+            try PCM.wav(Data(repeating: 0, count: 24000), rate: PCM.sampleRate).write(to: url)
             return url
         }
         app.audio.makePlayer = { _ in GreetingPlayer() }
@@ -221,7 +222,7 @@ final class VoiceIdentityModelTests: XCTestCase {
             prefs.stringArray(forKey: "voiceGreetingHistory"),
             Array(greetings.suffix(3)).map { $0.replacingOccurrences(of: "Mochi", with: "{name}") })
         var rendered = false
-        reopened.speech.referenceAudio = { _, _, root, _ in
+        reopened.speech.referenceAudio = { _, _, _, root, _ in
             rendered = true
             return root.appendingPathComponent("unexpected.wav")
         }
@@ -245,7 +246,7 @@ final class VoiceIdentityModelTests: XCTestCase {
             await gate.wait()
             return true
         }
-        app.speech.referenceAudio = { text, _, root, _ in
+        app.speech.referenceAudio = { text, _, _, root, _ in
             rendered = text
             return root.appendingPathComponent("greeting.wav")
         }
@@ -273,7 +274,7 @@ extension VoiceIdentityModelTests {
         app.library.conversations[index].preferences.speed = 0.8
         app.media.permission = { true }
         var speed: Double?
-        app.speech.referenceAudio = { _, service, _, _ in
+        app.speech.referenceAudio = { _, _, service, _, _ in
             speed = service.options.speed
             throw AppFailure("Stop after capturing the service.")
         }

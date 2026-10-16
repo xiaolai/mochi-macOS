@@ -2,6 +2,8 @@ import Foundation
 import MochiAutomation
 import MochiCore
 import MochiKernel
+import PCM16
+import RealtimeConnection
 
 public struct RealtimeService {
     public static let defaultModel = "gpt-realtime"
@@ -35,15 +37,18 @@ public struct RealtimeService {
     }
     /// Mochi's per-reply output cap; a reply that reaches it is kept and marked `truncated`.
     static let maximumOutputTokens = 700
-    public func referenceAudio(text: String, root: URL, force: Bool = false) async throws -> URL {
-        try await referenceAudio(text: text, root: root, force: force) { try await reply($0) }
+    /// Spoken audio for exactly `text`, checked against it with `language`'s reading rules: the language the text is
+    /// written in, which for a saved expression is its own and not the conversation's.
+    public func referenceAudio(text: String, language: String, root: URL, force: Bool = false) async throws -> URL {
+        try await referenceAudio(text: text, language: language, root: root, force: force) { try await reply($0) }
     }
     func referenceAudio(
-        text: String, root: URL, force: Bool, replying: (ConversationRequest) async throws -> RealtimeAccumulator
+        text: String, language: String, root: URL, force: Bool,
+        replying: (ConversationRequest) async throws -> RealtimeAccumulator
     ) async throws -> URL {
         try options.validate()
         let url = root.appendingPathComponent(
-            ReferenceSpeech.cacheName(text: text, model: model, voice: voice, options: options))
+            ReferenceSpeech.cacheName(text: text, language: language, model: model, voice: voice, options: options))
         if !force && FileManager.default.fileExists(atPath: url.path) {
             // A cache hit counts as use, so the cleanup keeps examples that are still being played.
             try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
@@ -51,34 +56,26 @@ public struct RealtimeService {
         }
         let result = try await replying(ConversationRequest(history: [], text: text, spoken: true, reference: true))
         // A reply cut off at the output limit may end mid-sentence even when its transcript looks complete.
-        guard !result.audio.isEmpty, !result.truncated, ReferenceSpeech.matches(text, result.text) else {
+        guard !result.audio.isEmpty, !result.truncated, ReferenceSpeech.matches(text, result.text, language: language)
+        else {
             throw AppFailure(
                 "The example did not match the sentence exactly. Generate it again; your sentence has not been changed.",
                 underlying: ReferenceSpeech.Mismatch())
         }
         try Task.checkCancellation()
-        try PCM.wav(result.audio).write(to: url, options: .atomic)
+        try PCM.wav(result.audio, rate: PCM.sampleRate).write(to: url, options: .atomic)
         return url
     }
-    func token() async throws -> String {
-        try await Self.sessionToken(model: model)
+    /// A client secret for one session of this model, minted with the Codex sign-in.
+    func secret() async throws -> ClientSecret {
+        try await Self.secret(model: model, minter: OpenAIConnection.minter)
     }
-    static func sessionToken(
-        model: String,
-        codexToken: () async throws -> String = { try await Credentials.codexToken() },
-        transport: (URLRequest) async throws -> Data = { try await ServiceHTTP.data($0, provider: "OpenAI") }
-    ) async throws -> String {
-
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/realtime/client_secrets")!)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(try await codexToken())", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["session": ["type": "realtime", "model": model]])
-        let data = try await transport(request)
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let value = object["value"] as? String, !value.isEmpty
-        else { throw AppFailure("OpenAI did not issue a session credential.") }
-        return value
+    /// Mochi's session object is the model alone; every other setting goes in `session.update`.
+    static func secret(model: String, minter: any SecretSource) async throws -> ClientSecret {
+        let session = try JSONSerialization.data(withJSONObject: ["type": "realtime", "model": model])
+        do { return try await minter.secret(session: session) } catch let error as RealtimeError
+            where error.errorClass == .cancelled
+        { throw CancellationError() } catch { throw CodexSignIn.failure(error) }
     }
     func sessionConfiguration(_ input: ConversationRequest, toolsEnabled: Bool) throws -> [String: Any] {
         var configuration: [String: Any] = [
@@ -100,13 +97,9 @@ public struct RealtimeService {
         }
         return configuration
     }
-    /// The authenticated WebSocket request for one Realtime session.
-    func realtimeRequest(token: String) -> URLRequest {
-        var components = URLComponents(string: "wss://api.openai.com/v1/realtime")!
-        components.queryItems = [URLQueryItem(name: "model", value: model)]
-        var request = URLRequest(url: components.url!)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        return request
+    /// Where a session of this model connects with `secret`.
+    func endpoint(_ secret: ClientSecret) -> RealtimeEndpoint {
+        RealtimeEndpoint(url: RealtimeSession.url(model: model), secret: secret)
     }
     public func reply(
         _ input: ConversationRequest,
@@ -115,30 +108,38 @@ public struct RealtimeService {
         onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil
     ) async throws -> RealtimeAccumulator {
         try await reply(
-            input, credential: { try await token() }, connect: RealtimeChannel.live, onResponse: onResponse,
+            input, credential: { try await secret() }, connect: RealtimeChannel.live, onResponse: onResponse,
             onTranscription: onTranscription, onTool: onTool)
     }
     /// Full session lifecycle seam: handshake, history, audio upload, deadlines and cancellation.
     func reply(
         _ input: ConversationRequest,
-        credential: () async throws -> String,
-        connect: (URLRequest) -> RealtimeChannel,
+        credential: () async throws -> ClientSecret,
+        connect: (RealtimeEndpoint) async throws -> RealtimeChannel,
         replyTimeout: UInt64 = 90_000_000_000,
         onResponse: (@MainActor (RealtimeAccumulator) throws -> Void)? = nil,
         onTranscription: (@MainActor (RealtimeAccumulator) -> Void)? = nil,
         onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil
     ) async throws -> RealtimeAccumulator {
         try validate(input)
-        let token = try await credential()
-        try Task.checkCancellation()
-        let channel = connect(realtimeRequest(token: token))
+        let channel: RealtimeChannel
+        do {
+            let secret = try await credential()
+            try Task.checkCancellation()
+            channel = try await connect(endpoint(secret))
+        } catch {
+            if Task.isCancelled || error is CancellationError { throw CancellationError() }
+            throw Self.replyFailure(error)
+        }
         defer { channel.close() }
         return try await withTaskCancellationHandler(
             operation: {
                 let send = channel.send
                 let receive = channel.receive
                 do {
-                    var accumulator = try await RealtimeDeadline.run(nanoseconds: replyTimeout, close: channel.close) {
+                    var accumulator = try await RealtimeDeadline.run(
+                        seconds: Self.seconds(replyTimeout), close: channel.close
+                    ) {
                         var accumulator = RealtimeAccumulator()
                         try await Self.waitFor("session.created", into: &accumulator, receive: receive)
                         let configuration = try sessionConfiguration(input, toolsEnabled: onTool != nil)
@@ -222,11 +223,18 @@ public struct RealtimeService {
             try await send(RealtimeEvents.message(role: "user", text: input.text))
         }
     }
+    /// Mochi's nanosecond timeouts as the seconds the shared deadline takes.
+    static func seconds(_ nanoseconds: UInt64) -> TimeInterval { TimeInterval(nanoseconds) / 1_000_000_000 }
+    /// The words for a failed reply. A sign-in and a classified connection failure have their own; anything else is
+    /// a connection that ended.
     static func replyFailure(_ error: Error) -> AppFailure {
-        if error is RealtimeTimeout {
+        if error is RealtimeDeadline.Expired {
             return AppFailure("Mochi’s reply timed out. Your message is saved; retry the reply.")
         }
-        if let failure = error as? AppFailure { return failure }
+        if let failure = (error as? AppFailure) ?? (CodexSignIn.failure(error) as? AppFailure) { return failure }
+        if let error = error as? RealtimeError, let failure = ServiceHTTP.failure(error, provider: "OpenAI") {
+            return failure
+        }
         if error is URLError { return ServiceHTTP.transportFailure(error, provider: "OpenAI") }
         return AppFailure(
             "The conversation connection ended. Check your connection and account access, then retry.",
@@ -240,7 +248,7 @@ public struct RealtimeService {
     ) async throws -> RealtimeAccumulator {
         var accumulator = initial
         do {
-            try await RealtimeDeadline.run(nanoseconds: timeoutNanoseconds, close: close) {
+            try await RealtimeDeadline.run(seconds: seconds(timeoutNanoseconds), close: close) {
                 while accumulator.transcriptionState == .pending {
                     try Task.checkCancellation()
                     let event = try await receive()
@@ -248,7 +256,7 @@ public struct RealtimeService {
                     try accumulator.accept(event)
                 }
             }
-        } catch is CancellationError { throw CancellationError() } catch is RealtimeTimeout {
+        } catch is CancellationError { throw CancellationError() } catch is RealtimeDeadline.Expired {
             accumulator.transcriptionState = .timedOut
             accumulator.transcriptionError =
                 "Transcription did not finish. Your recording is saved; retry transcription or add text."

@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 
+SOURCES = Path(__file__).resolve().parents[1] / "Sources"
 VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 BUILD_PATTERN = re.compile(r"[1-9][0-9]*")
 
@@ -68,9 +69,6 @@ def validate_distribution_symbols(app_strings, helper_symbols, app_symbols=""):
     for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray", "smokeHandsFree", "smokeBargeIn"):
         if symbol in app_symbols:
             raise ValueError("Development probe symbols cannot ship in the distribution app")
-    for retired in ("OPENAI_API_KEY",):
-        if retired in app_strings or retired in app_symbols:
-            raise ValueError("OpenAI API-key fallback cannot ship")
     for retired in ("api.elevenlabs.io", "ELEVENLABS_API_KEY", "ElevenLabs"):
         if retired in app_strings or retired in app_symbols or retired in helper_symbols:
             raise ValueError("The retired ElevenLabs provider cannot ship")
@@ -79,11 +77,24 @@ def validate_distribution_symbols(app_strings, helper_symbols, app_symbols=""):
             raise ValueError("Provider and credential code cannot ship in the MCP helper")
 
 
-def check_distribution(app, helper, *, run=subprocess.run):
+def validate_sources(sources=SOURCES):
+    """Mochi has no API-key path. The shared sign-in package names OPENAI_API_KEY in the binary, to remove it from
+    Codex's environment and to refuse an API-key sign-in, so the gate is on Mochi's own sources, which are where a
+    fallback would have to be written."""
+    files = sorted(Path(sources).rglob("*.swift"))
+    if not files:
+        raise ValueError(f"No Swift sources under {sources}")
+    for path in files:
+        if "OPENAI_API_KEY" in path.read_text(encoding="utf-8"):
+            raise ValueError(f"OpenAI API-key fallback cannot ship: {path}")
+
+
+def check_distribution(app, helper, *, run=subprocess.run, sources=SOURCES):
     app_strings = run(["strings", app], check=True, capture_output=True, text=True).stdout
     app_symbols = run(["nm", app], check=True, capture_output=True, text=True).stdout
     helper_symbols = run(["nm", helper], check=True, capture_output=True, text=True).stdout
     validate_distribution_symbols(app_strings, helper_symbols, app_symbols)
+    validate_sources(sources)
 
 
 def render_cask(template, digest, version):

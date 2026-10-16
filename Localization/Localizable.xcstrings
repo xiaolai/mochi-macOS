@@ -3765,6 +3765,62 @@
         }
       }
     },
+    "Codex is set to a model provider that doesn’t use your ChatGPT sign-in. Check Codex’s settings, then retry." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codexに、ChatGPTのサインインを使用しないモデルプロバイダが設定されています。Codexの設定を確認してから、再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex에 ChatGPT 로그인을 사용하지 않는 모델 제공자가 설정되어 있습니다. Codex 설정을 확인한 다음 다시 시도하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex 当前设置的模型提供方不使用你的 ChatGPT 登录。请检查 Codex 的设置，然后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex 目前設定的模型供應商不使用你的 ChatGPT 登入。請檢查 Codex 的設定，然後重試。"
+          }
+        }
+      }
+    },
+    "Codex is signed in a way Mochi can’t use. Sign in to Codex with ChatGPT, then retry." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CodexはMochiが使用できない方法でサインインしています。ChatGPTでCodexにサインインしてから、再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex가 Mochi에서 사용할 수 없는 방식으로 로그인되어 있습니다. ChatGPT로 Codex에 로그인한 다음 다시 시도하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex 的登录方式 Mochi 无法使用。请在 Codex 中使用 ChatGPT 登录，然后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex 的登入方式 Mochi 無法使用。請以 ChatGPT 登入 Codex，然後重試。"
+          }
+        }
+      }
+    },
     "Codex is signed in with an API key. Mochi uses your ChatGPT sign-in: sign in to Codex with ChatGPT, then retry." : {
       "localizations" : {
         "ja" : {
@@ -3793,86 +3849,58 @@
         }
       }
     },
-    "Codex’s sign-in file could not be read. Check its permissions, or sign in through Codex again." : {
+    "Codex on this Mac is too old for Mochi. Update Codex to %@ or later, then retry." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Codexのサインインファイルを読み込めませんでした。アクセス権を確認するか、Codexでもう一度サインインしてください。"
+            "value" : "このMacのCodexはMochiで使うには古すぎます。Codexを%@以降にアップデートしてから、再試行してください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Codex 로그인 파일을 읽을 수 없습니다. 권한을 확인하거나 Codex를 통해 다시 로그인하십시오."
+            "value" : "이 Mac의 Codex는 Mochi에서 사용하기에 너무 오래되었습니다. Codex를 %@ 이상으로 업데이트한 다음 다시 시도하십시오."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法读取 Codex 的登录文件。请检查其权限，或重新通过 Codex 登录。"
+            "value" : "这台 Mac 上的 Codex 版本过旧，Mochi 无法使用。请将 Codex 更新到 %@ 或更高版本，然后重试。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無法讀取 Codex 的登入檔案。請檢查其權限，或重新透過 Codex 登入。"
+            "value" : "這台 Mac 上的 Codex 版本過舊，Mochi 無法使用。請將 Codex 更新至 %@ 或更新版本，然後重試。"
           }
         }
       }
     },
-    "Codex’s sign-in file has a format Mochi doesn’t recognize. Update Codex and sign in again." : {
+    "Codex’s sign-in file was not found. If Codex keeps your sign-in in the keychain, update Codex so it can share it with Mochi; otherwise sign in through Codex again." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Codexのサインインファイルの形式をMochiが認識できません。Codexをアップデートして、もう一度サインインしてください。"
+            "value" : "Codexのサインインファイルが見つかりませんでした。Codexがサインインをキーチェーンに保存している場合は、Mochiと共有できるようにCodexをアップデートしてください。それ以外の場合は、Codexでもう一度サインインしてください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Codex 로그인 파일의 형식을 Mochi가 인식할 수 없습니다. Codex를 업데이트하고 다시 로그인하십시오."
+            "value" : "Codex 로그인 파일을 찾을 수 없습니다. Codex가 로그인 정보를 키체인에 보관하는 경우 Mochi와 공유할 수 있도록 Codex를 업데이트하십시오. 그렇지 않으면 Codex를 통해 다시 로그인하십시오."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Codex 的登录文件格式无法被 Mochi 识别。请更新 Codex 并重新登录。"
+            "value" : "未找到 Codex 的登录文件。如果 Codex 将你的登录信息保存在钥匙串中，请更新 Codex，以便它与 Mochi 共享；否则请重新通过 Codex 登录。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Codex 登入檔案的格式無法被 Mochi 辨識。請更新 Codex 並重新登入。"
-          }
-        }
-      }
-    },
-    "Codex’s sign-in file is not a regular file owned by you, so Mochi did not read it. Sign in through Codex again." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Codexのサインインファイルがあなたの所有する通常のファイルではないため、Mochiは読み込みませんでした。Codexでもう一度サインインしてください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Codex 로그인 파일이 사용자가 소유한 일반 파일이 아니어서 Mochi가 읽지 않았습니다. Codex를 통해 다시 로그인하십시오."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Codex 的登录文件不是你拥有的常规文件，因此 Mochi 没有读取它。请重新通过 Codex 登录。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Codex 的登入檔案不是屬於你的一般檔案，因此 Mochi 沒有讀取它。請重新透過 Codex 登入。"
+            "value" : "找不到 Codex 的登入檔案。如果 Codex 將你的登入資訊儲存在鑰匙圈中，請更新 Codex，讓它能與 Mochi 共用；否則請重新透過 Codex 登入。"
           }
         }
       }
@@ -10404,6 +10432,34 @@
         }
       }
     },
+    "Mochi could not get your sign-in from Codex. Check that Codex works on this Mac, then retry." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MochiはCodexからサインインを取得できませんでした。このMacでCodexが動作することを確認してから、再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 Codex에서 로그인 정보를 가져오지 못했습니다. 이 Mac에서 Codex가 작동하는지 확인한 다음 다시 시도하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 无法从 Codex 获取你的登录信息。请确认 Codex 在这台 Mac 上可以正常运行，然后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 無法從 Codex 取得你的登入資訊。請確認 Codex 在這台 Mac 上能正常運作，然後重試。"
+          }
+        }
+      }
+    },
     "Mochi could not move your library into its folder: %@ Your data has not been changed. Reveal the data folder from Settings to review it." : {
       "localizations" : {
         "ja" : {
@@ -10596,34 +10652,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mochi 在你的資料庫中發現不一致之處，因此沒有儲存。你已儲存的資料庫未被更改。"
-          }
-        }
-      }
-    },
-    "Mochi ignored CODEX_HOME because it is not a folder you own inside your home folder. Unset it or point it at your Codex folder." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CODEX_HOME がホームフォルダ内のあなたが所有するフォルダではないため、Mochiはこれを無視しました。設定を解除するか、Codexのフォルダを指定してください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CODEX_HOME이 홈 폴더 안에 있는 사용자 소유 폴더가 아니어서 Mochi가 무시했습니다. 설정을 해제하거나 Codex 폴더를 가리키도록 하십시오."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mochi 忽略了 CODEX_HOME，因为它不是你个人文件夹中由你拥有的文件夹。请取消设置它，或将其指向你的 Codex 文件夹。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mochi 已忽略 CODEX_HOME，因為它不是你個人專屬檔案夾中屬於你的檔案夾。請取消設定，或將它指向你的 Codex 檔案夾。"
           }
         }
       }
@@ -12640,34 +12668,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OpenAI 無法存取所選的模型。請在「設定」中檢查模型。"
-          }
-        }
-      }
-    },
-    "OpenAI did not issue a session credential." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OpenAIがセッションの認証情報を発行しませんでした。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OpenAI가 세션 자격 증명을 발급하지 않았습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OpenAI 未签发会话凭证。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OpenAI 未核發工作階段憑證。"
           }
         }
       }
@@ -20876,6 +20876,34 @@
         }
       }
     },
+    "This version of Codex can’t share its sign-in with Mochi. Update Codex, then retry." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このバージョンのCodexはMochiとサインインを共有できません。Codexをアップデートしてから、再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 버전의 Codex는 Mochi와 로그인 정보를 공유할 수 없습니다. Codex를 업데이트한 다음 다시 시도하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的 Codex 无法与 Mochi 共享登录信息。请更新 Codex，然后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的 Codex 無法與 Mochi 共用登入資訊。請更新 Codex，然後重試。"
+          }
+        }
+      }
+    },
     "This voice is not available in this version of Mochi, so the Settings voice speaks instead." : {
       "localizations" : {
         "ja" : {
@@ -21712,34 +21740,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "還原刪除訊息"
-          }
-        }
-      }
-    },
-    "Unexpected Realtime response." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "予期しないRealtime応答です。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "예상치 못한 Realtime 응답입니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "意外的 Realtime 响应。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "非預期的 Realtime 回應。"
           }
         }
       }
@@ -23144,30 +23144,30 @@
         }
       }
     },
-    "Your Codex sign-in has expired. Use Codex once so it can renew the sign-in, or sign in again, then retry." : {
+    "Your Codex sign-in has expired and Codex could not renew it. Sign in through Codex again, then retry." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Codexのサインインの有効期限が切れています。Codexを一度使用してサインインを更新するか、もう一度サインインしてから、再試行してください。"
+            "value" : "Codexのサインインの有効期限が切れ、Codexが更新できませんでした。Codexでもう一度サインインしてから、再試行してください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Codex 로그인이 만료되었습니다. Codex를 한 번 사용하여 로그인을 갱신하거나 다시 로그인한 다음 다시 시도하십시오."
+            "value" : "Codex 로그인이 만료되었으며 Codex가 갱신하지 못했습니다. Codex를 통해 다시 로그인한 다음 다시 시도하십시오."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的 Codex 登录已过期。请使用一次 Codex 以续期登录，或重新登录，然后重试。"
+            "value" : "你的 Codex 登录已过期，且 Codex 无法续期。请重新通过 Codex 登录，然后重试。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的 Codex 登入已過期。請使用一次 Codex 讓它更新登入，或重新登入，然後重試。"
+            "value" : "你的 Codex 登入已過期，且 Codex 無法更新登入。請重新透過 Codex 登入，然後重試。"
           }
         }
       }

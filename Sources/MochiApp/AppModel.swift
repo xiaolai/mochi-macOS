@@ -297,7 +297,7 @@ struct MessageDeletionUndo {
         observeListeningConditions()
         if !demo { refreshCodex() }
     }
-    /// Reads Codex's sign-in file and model list in the background; the answer lands in `codex`.
+    /// Asks Codex for its sign-in and reads its model list in the background; the answer lands in `codex`.
     func refreshCodex() {
         let status = speech.codexStatus
         Task { [weak self] in

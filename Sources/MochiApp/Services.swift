@@ -20,11 +20,11 @@ struct SpeechServices {
     var conversationReply: (RealtimeService, ConversationRequest, ReplyCallbacks) async throws -> Void
     /// A text-only reply, used for Help Me Say This and the connection check.
     var textReply: (RealtimeService, ConversationRequest) async throws -> String
-    /// Spoken audio for exact text: (text, service, folder, regenerate).
-    var referenceAudio: (String, RealtimeService, URL, Bool) async throws -> URL
+    /// Spoken audio for exact text: (text, the language it is written in, service, folder, regenerate).
+    var referenceAudio: (String, ConversationLanguage, RealtimeService, URL, Bool) async throws -> URL
     /// Transcribes a saved recording: (file, session model, transcription model).
     var transcribe: (URL, String, String) async throws -> TranscriptResult
-    /// Whether Codex is signed in and which models it lists; reads local files and sends nothing.
+    /// Whether Codex is signed in and which models it lists; asks Codex on this Mac and sends nothing of the user's.
     var codexStatus: () async -> CodexStatus = { CodexStatus() }
     /// Help Me Say This through Codex's text endpoint, which enforces the reply shape; nil where it is not wired.
     var codexHelpReply: ((ConversationRequest, CodexModel, String?) async throws -> String)?
@@ -38,8 +38,8 @@ struct SpeechServices {
                     onTool: callbacks.tool)
             },
             textReply: { service, request in try await service.reply(request).text },
-            referenceAudio: { text, service, root, force in
-                try await service.referenceAudio(text: text, root: root, force: force)
+            referenceAudio: { text, language, service, root, force in
+                try await service.referenceAudio(text: text, language: language.readingTag, root: root, force: force)
             },
             transcribe: { url, model, transcriptionModel in
                 try await RealtimeService(model: model).transcribe(

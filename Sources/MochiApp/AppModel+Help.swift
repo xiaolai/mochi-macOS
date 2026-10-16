@@ -225,13 +225,15 @@ extension AppModel {
         ensureExpression()
 
         let text = help.english
+        // The expression's own language: one reopened in a conversation held in another language keeps it.
+        let language = help.expression?.language ?? .english
         let label = settings.practiceVoiceLabel
         let root = store.root
         let referenceAudio = speech.referenceAudio
         let service = settings.practiceService()
         runExclusive("Create example", progress: "Creating your example…") { [weak self] job in
             guard let self else { return }
-            let url = try await referenceAudio(text, service, root, force)
+            let url = try await referenceAudio(text, language, service, root, force)
             let pitch = try await AudioFile.pitchInBackground(url)
             guard job.isCurrent() else { return }
             help.expression?.reference = url.lastPathComponent
@@ -258,7 +260,7 @@ extension AppModel {
             onFailure: { [weak self] in self?.voicePreviewFailed = true },
             { [weak self] job in
                 guard let self else { return }
-                let url = try await referenceAudio(ReferenceSpeech.preview, service, root, false)
+                let url = try await referenceAudio(ReferenceSpeech.preview, .english, service, root, false)
                 guard job.isCurrent() else { return }
                 job.finish()
                 play(

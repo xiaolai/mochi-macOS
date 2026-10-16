@@ -118,9 +118,9 @@ final class TranscriptionExperimentLiveTests: XCTestCase {
                 let service = RealtimeService()
                 let request = ConversationRequest(history: [], text: "", pcm: pcm)
                 let result = try await service.reply(
-                    request, credential: { try await service.token() },
-                    connect: { request in
-                        let live = RealtimeChannel.live(request)
+                    request, credential: { try await service.secret() },
+                    connect: { endpoint in
+                        let live = try await RealtimeChannel.live(endpoint)
                         return RealtimeChannel(
                             send: { event in
                                 if event["type"] as? String == "input_audio_buffer.commit" {
@@ -169,9 +169,9 @@ final class TranscriptionExperimentLiveTests: XCTestCase {
             let service = RealtimeService()
             let result = try await service.transcribe(
                 pcm, transcriptionModel: configuration.model, languages: configuration.languages,
-                credential: { try await service.token() },
-                connect: { request in
-                    let live = RealtimeChannel.live(request)
+                credential: { try await service.secret() },
+                connect: { endpoint in
+                    let live = try await RealtimeChannel.live(endpoint)
                     return RealtimeChannel(
                         send: { event in
                             if event["type"] as? String == "input_audio_buffer.commit" {

@@ -1,4 +1,6 @@
 import MochiKernel
+import MochiTestSupport
+import RealtimeConnection
 import XCTest
 
 @testable import MochiProviders
@@ -55,13 +57,10 @@ final class RealtimeLifecycleTests: XCTestCase {
         ])
         let service = RealtimeService(model: "selected-model")
         let text = try await service.transcribe(
-            Data(repeating: 0, count: 4800), credential: { "test-session" },
-            connect: { request in
-                XCTAssertEqual(request.url?.scheme, "wss")
-                XCTAssertEqual(
-                    URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first?.value,
-                    "selected-model")
-                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-session")
+            Data(repeating: 0, count: 4800), credential: { testSecret("ek_test-session") },
+            connect: { endpoint in
+                XCTAssertEqual(endpoint.url.absoluteString, "wss://api.openai.com/v1/realtime?model=selected-model")
+                XCTAssertEqual(endpoint.secret.bearer, "ek_test-session")
                 return socket.channel
             })
         XCTAssertEqual(text.text, "Known speech")
@@ -71,7 +70,7 @@ final class RealtimeLifecycleTests: XCTestCase {
         let socket = SocketFixture()
         do {
             _ = try await RealtimeService().transcribe(
-                Data(repeating: 0, count: 4800), credential: { "test" }, connect: { _ in socket.channel },
+                Data(repeating: 0, count: 4800), credential: { testSecret() }, connect: { _ in socket.channel },
                 timeoutNanoseconds: 10_000_000)
             XCTFail("Expected timeout")
         } catch { XCTAssertTrue(error.localizedDescription.contains("timed out")) }
@@ -83,7 +82,7 @@ final class RealtimeLifecycleTests: XCTestCase {
         socket.onWait = { waiting.fulfill() }
         let task = Task {
             try await RealtimeService().transcribe(
-                Data(repeating: 0, count: 4800), credential: { "test" }, connect: { _ in socket.channel })
+                Data(repeating: 0, count: 4800), credential: { testSecret() }, connect: { _ in socket.channel })
         }
         await fulfillment(of: [waiting], timeout: 2)
         task.cancel()
@@ -94,14 +93,12 @@ final class RealtimeLifecycleTests: XCTestCase {
         XCTAssertGreaterThan(socket.closeCount, 0)
     }
     func testCodexCredentialFailureNeverConnectsOrReadsApiKey() async throws {
+        StubProtocol.response = (403, Data())
+        defer { StubProtocol.response = nil }
         do {
             _ = try await RealtimeService().transcribe(
                 Data(repeating: 0, count: 4800),
-                credential: {
-                    try await RealtimeService.sessionToken(
-                        model: "gpt-realtime", codexToken: { "fake" },
-                        transport: { _ in throw ServiceHTTP.failure(status: 403, provider: "OpenAI") })
-                },
+                credential: { try await RealtimeService.secret(model: "gpt-realtime", minter: stubMinter()) },
                 connect: { _ in
                     XCTFail("Must not connect with rejected credentials")
                     return SocketFixture().channel
@@ -140,7 +137,7 @@ final class RealtimeLifecycleTests: XCTestCase {
         let socket = SocketFixture()
         do {
             _ = try await RealtimeDeadline.run(
-                nanoseconds: 10_000_000, close: { socket.close() },
+                seconds: 0.01, close: { socket.close() },
                 operation: {
                     try await RealtimeService.deliverResponse(
                         RealtimeAccumulator(), receive: { try await socket.receive() }, onResponse: nil,
@@ -148,7 +145,7 @@ final class RealtimeLifecycleTests: XCTestCase {
                 })
             XCTFail("Expected reply timeout")
         } catch {
-            XCTAssertTrue(error is RealtimeTimeout)
+            XCTAssertTrue(error is RealtimeDeadline.Expired)
             XCTAssertTrue(RealtimeService.replyFailure(error).message.contains("reply timed out"))
         }
         XCTAssertGreaterThan(socket.closeCount, 0)
@@ -159,7 +156,7 @@ final class RealtimeLifecycleTests: XCTestCase {
     func testAConnectionCancelledUnderneathFailsInsteadOfPassingForCancellation() async throws {
         do {
             _ = try await RealtimeService(model: "test-model").reply(
-                ConversationRequest(history: [], text: "Hello", reference: true), credential: { "session" },
+                ConversationRequest(history: [], text: "Hello", reference: true), credential: { testSecret() },
                 connect: { _ in
                     RealtimeChannel(
                         send: { _ in },

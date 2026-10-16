@@ -1,3 +1,4 @@
+import CodexAuth
 import MochiKernel
 import MochiTestSupport
 import XCTest
@@ -17,6 +18,13 @@ final class CodexCatalogTests: XCTestCase {
         return url
     }
 
+    /// The catalog with Codex's file source reading `home`: the shared package's own sign-in, never the real one.
+    private func status(_ home: URL) async throws -> CodexStatus {
+        let signIn = try Credentials(
+            CodexAuthConfiguration(margin: 600, timeout: 5, source: .file, home: home.path, environment: [:]))
+        return await CodexCatalog.status(signIn: signIn, environment: [:], home: home)
+    }
+
     private let cache = """
         {"models":[
           {"slug":"big","display_name":"Big","visibility":"list","priority":1,"default_reasoning_level":"medium",
@@ -29,20 +37,20 @@ final class CodexCatalogTests: XCTestCase {
         """
 
     func testListedModelsAreReadInCodexOrderAndHiddenOnesAreLeftOut() async throws {
-        let status = await CodexCatalog.status(environment: [:], home: try home(cache: cache), now: Date())
+        let status = try await status(home(cache: cache))
         XCTAssertNil(status.signInProblem)
         XCTAssertEqual(status.models.map(\.slug), ["big", "mid", "small"])
         XCTAssertEqual(status.models.map(\.name), ["Big", "mid", "Small"])
     }
 
     func testLowEffortIsUsedWhenSupportedOtherwiseTheModelsDefault() async throws {
-        let models = await CodexCatalog.status(environment: [:], home: try home(cache: cache), now: Date()).models
+        let models = try await status(home(cache: cache)).models
         XCTAssertEqual(models.first { $0.slug == "big" }?.lightestEffort, "low")
         XCTAssertEqual(models.first { $0.slug == "small" }?.lightestEffort, "medium")
     }
 
     func testAChosenEffortIsUsedOnlyWhileTheModelSupportsIt() async throws {
-        let models = await CodexCatalog.status(environment: [:], home: try home(cache: cache), now: Date()).models
+        let models = try await status(home(cache: cache)).models
         let big = try XCTUnwrap(models.first { $0.slug == "big" })
         XCTAssertEqual(big.effort(selected: "high"), "high")
         XCTAssertEqual(big.effort(selected: "ultra"), "low")
@@ -50,7 +58,7 @@ final class CodexCatalogTests: XCTestCase {
     }
 
     func testTheChosenModelIsUsedWhileListedOtherwiseTheLightest() async throws {
-        let models = await CodexCatalog.status(environment: [:], home: try home(cache: cache), now: Date()).models
+        let models = try await status(home(cache: cache)).models
         XCTAssertEqual(CodexModel.resolve(selected: "mid", in: models)?.slug, "mid")
         XCTAssertEqual(CodexModel.resolve(selected: nil, in: models)?.slug, "small")
         XCTAssertEqual(CodexModel.resolve(selected: "retired", in: models)?.slug, "small")
@@ -59,17 +67,15 @@ final class CodexCatalogTests: XCTestCase {
 
     func testAMissingOrUnreadableCacheListsNothingButStaysSignedIn() async throws {
         for content in [nil, "not json", #"{"models":"x"}"#, String(repeating: "x", count: 5_000_000)] {
-            let status = await CodexCatalog.status(
-                environment: [:], home: try home(cache: content), now: Date())
+            let status = try await status(home(cache: content))
             XCTAssertNil(status.signInProblem)
             XCTAssertEqual(status.models, [])
         }
     }
 
     func testNoSignInReportsTheProblemAndNoModels() async throws {
-        let status = await CodexCatalog.status(
-            environment: [:], home: try home(auth: nil, cache: cache), now: Date())
-        XCTAssertEqual(status.signInProblem, Credentials.SignIn.missing.failure.message)
+        let status = try await status(home(auth: nil, cache: cache))
+        XCTAssertEqual(status.signInProblem, CodexSignIn.failure(.noSignInFile).message)
         XCTAssertEqual(status.models, [])
     }
 }

@@ -4,6 +4,7 @@
     import MochiKernel
     import MochiCore
     import MochiProviders
+    import PCM16
 
     /// Scripted development runs: native smoke tests, tray checks and live provider probes.
     /// Compiled only into development builds; the release gate rejects their strings and symbols.
@@ -592,7 +593,7 @@
                 }
                 await capture("conversation-notice-dismissed.png")
                 let deletedRecording = "message-delete-fixture.wav"
-                try? PCM.wav(Data(repeating: 0, count: 48000)).write(
+                try? PCM.wav(Data(repeating: 0, count: 48000), rate: PCM.sampleRate).write(
                     to: model.store.root.appendingPathComponent(deletedRecording))
                 let deleteFixture = Message(
                     role: "user", text: "Could we practise this sentence?", audio: deletedRecording)
@@ -991,7 +992,7 @@
                 await capture("help-practice.png")
                 model.editThought()
                 let thoughtName = "thought-fixture.wav"
-                try? PCM.wav(Data(repeating: 0, count: 144000)).write(
+                try? PCM.wav(Data(repeating: 0, count: 144000), rate: PCM.sampleRate).write(
                     to: model.store.root.appendingPathComponent(thoughtName))
                 model.help.thoughtRecording = thoughtName
                 model.recordingWarning =
@@ -1012,7 +1013,7 @@
                 model.saveExpression()
                 model.resume()
                 if let id = model.selectedID {
-                    try? PCM.wav(Data(repeating: 0, count: 144000)).write(
+                    try? PCM.wav(Data(repeating: 0, count: 144000), rate: PCM.sampleRate).write(
                         to: model.store.root.appendingPathComponent(thoughtName))
                     var failed = Message(role: "user", text: "", audio: thoughtName)
                     failed.transcriptionState = .failed
@@ -1311,9 +1312,9 @@
                 model.media.permission = { true }
                 model.media.record = { _ in }
                 model.media.recordingActive = { true }
-                model.speech.referenceAudio = { _, _, root, _ in
+                model.speech.referenceAudio = { _, _, _, root, _ in
                     let url = root.appendingPathComponent("greeting-fixture.wav")
-                    try PCM.wav(Data(repeating: 0, count: 144000)).write(to: url)
+                    try PCM.wav(Data(repeating: 0, count: 144000), rate: PCM.sampleRate).write(to: url)
                     return url
                 }
                 model.toggleConversationVoice()
@@ -1338,10 +1339,10 @@
                 // A conversation's own greeting is spoken as written, in the conversation's voice.
                 model.newChat()
                 var greetings: [(text: String, voice: String)] = []
-                model.speech.referenceAudio = { text, service, root, _ in
+                model.speech.referenceAudio = { text, _, service, root, _ in
                     greetings.append((text, service.voice))
                     let url = root.appendingPathComponent("greeting-own-fixture.wav")
-                    try PCM.wav(Data(repeating: 0, count: 144000)).write(to: url)
+                    try PCM.wav(Data(repeating: 0, count: 144000), rate: PCM.sampleRate).write(to: url)
                     return url
                 }
                 if let id = model.selectedID, var own = model.conversation.map(ConversationSettingsDraft.init) {
@@ -1504,7 +1505,8 @@
                         ConversationRequest(history: [], text: "Say hello briefly.", spoken: true))
                     lines.append("Realtime audio generation: \(!spoken.audio.isEmpty ? "PASS" : "FAIL") (not played)")
                     let reference = try await model.settings.practiceService().referenceAudio(
-                        text: "I would like a little more time to think.", root: model.store.root, force: true)
+                        text: "I would like a little more time to think.", language: "en", root: model.store.root,
+                        force: true)
                     let samples = try AudioFile.samples(reference)
                     lines.append(
                         "Exact practice reference and local decode: \(!samples.samples.isEmpty ? "PASS" : "FAIL") (not played)"

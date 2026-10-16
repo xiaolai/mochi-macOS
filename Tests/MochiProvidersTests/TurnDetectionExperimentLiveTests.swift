@@ -171,9 +171,9 @@ final class TurnDetectionExperimentLiveTests: XCTestCase {
             let session = try await ListeningSession.open(
                 service: service, detection: .semantic(eagerness: "low"),
                 transcriptionModel: RealtimeService.transcriptionModel, languages: [],
-                credential: { try await service.token() },
-                connect: { request in
-                    let live = RealtimeChannel.live(request)
+                credential: { try await service.secret() },
+                connect: { endpoint in
+                    let live = try await RealtimeChannel.live(endpoint)
                     return RealtimeChannel(
                         send: live.send,
                         receive: {
@@ -293,9 +293,9 @@ final class TurnDetectionExperimentLiveTests: XCTestCase {
         let service = RealtimeService()
         let session = try await ListeningSession.open(
             service: service, detection: detection, transcriptionModel: RealtimeService.transcriptionModel,
-            languages: [], credential: { try await service.token() },
-            connect: { request in
-                let live = RealtimeChannel.live(request)
+            languages: [], credential: { try await service.secret() },
+            connect: { endpoint in
+                let live = try await RealtimeChannel.live(endpoint)
                 return RealtimeChannel(
                     send: live.send,
                     receive: {

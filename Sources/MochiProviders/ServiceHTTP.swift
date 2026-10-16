@@ -1,5 +1,6 @@
 import Foundation
 import MochiKernel
+import RealtimeConnection
 
 public enum ServiceHTTP {
     /// Only session credentials travel over plain HTTPS; anything larger is a fault.
@@ -42,6 +43,40 @@ public enum ServiceHTTP {
         default: message = "Cannot reach \(provider). Check your connection and retry."
         }
         return AppFailure(message, underlying: error)
+    }
+    /// Mochi's words for a classified failure of the shared connection (minting, the WebSocket handshake, a dropped
+    /// connection); nil when the class has none of its own, so the caller's message for its step applies. A refused
+    /// redirect, a status and a broken connection read as they did before the move to the shared package.
+    public static func failure(_ classified: RealtimeError, provider: String) -> AppFailure? {
+        // A refused reply's message is the provider's; the package's own messages describe the failure.
+        let refused = classified.status != 0 && !(200..<300).contains(classified.status)
+        let error = refused ? classified.withoutProviderMessage : classified
+        switch error.errorClass {
+        case .network:
+            let message = transportFailure(URLError(urlCode(of: error)), provider: provider).message
+            return AppFailure(verbatim: message, underlying: error)
+        case .protocol where (200..<300).contains(error.status):
+            return error.message.contains("exceeds")
+                ? AppFailure("\(provider) response was too large.", underlying: error)
+                : AppFailure("\(provider) returned an invalid response.", underlying: error)
+        case .routeDenied:
+            return AppFailure(verbatim: failure(status: 403, provider: provider).message, underlying: error)
+        case .rateLimited where error.status == 0:
+            return AppFailure(verbatim: failure(status: 429, provider: provider).message, underlying: error)
+        case .cancelled, .internal, .codexError, .authMode:
+            return nil
+        default:
+            guard error.status != 0 else { return nil }
+            return AppFailure(verbatim: failure(status: error.status, provider: provider).message, underlying: error)
+        }
+    }
+    /// The URL error a broken connection reported: the package keeps its code as `URLError <code>`, and a deadline
+    /// it enforced itself as "timed out".
+    static func urlCode(of error: RealtimeError) -> URLError.Code {
+        if error.cause.hasPrefix("URLError "), let raw = Int(error.cause.dropFirst("URLError ".count)) {
+            return URLError.Code(rawValue: raw)
+        }
+        return error.message.contains("timed out") ? .timedOut : .networkConnectionLost
     }
     static var configuration: URLSessionConfiguration {
         let config = URLSessionConfiguration.ephemeral

@@ -2,6 +2,7 @@ import AVFoundation
 import Darwin
 import MochiCore
 import MochiKernel
+import PCM16
 import XCTest
 
 @testable import MochiApp
@@ -15,7 +16,7 @@ final class MediaAndFilesModelTests: XCTestCase {
             withUnsafeBytes(of: &value) { pcm.append(contentsOf: $0) }
         }
         let url = folder.appendingPathComponent(name)
-        try PCM.wav(pcm).write(to: url)
+        try PCM.wav(pcm, rate: PCM.sampleRate).write(to: url)
         return url
     }
 

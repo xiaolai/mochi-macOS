@@ -5,7 +5,7 @@ import XCTest
 @testable import MochiProviders
 
 final class CodexTextServiceTests: XCTestCase {
-    private let signIn = Credentials.CodexSignIn(token: "token-value", accountID: "account-1")
+    private let signIn = CodexAccount(token: "token-value", accountID: "account-1")
     private let model = CodexModel(
         slug: "listed-model", name: "Listed", priority: 3, efforts: ["low", "high"], defaultEffort: "medium")
 
@@ -57,7 +57,7 @@ final class CodexTextServiceTests: XCTestCase {
         do {
             _ = try await CodexTextService(model: model).help(
                 ConversationRequest(history: [], text: "x", help: true),
-                signIn: { Credentials.CodexSignIn(token: "t", accountID: nil) },
+                signIn: { CodexAccount(token: "t", accountID: nil) },
                 transport: { _ in
                     XCTFail("no request without an account")
                     return Data()

@@ -2,6 +2,7 @@ import MochiAutomation
 import MochiCore
 import MochiKernel
 import MochiTestSupport
+import PCM16
 import XCTest
 
 @testable import MochiApp
@@ -631,7 +632,8 @@ extension AutomationTests {
             var item = PracticeExpression(conversationID: id, meaning: "", english: "Hello", language: .english)
             item.reference = "fixture.wav"
             app.library.expressions = [item]
-            try PCM.wav(Data(repeating: 0, count: 4800)).write(to: app.store.root.appendingPathComponent("fixture.wav"))
+            try PCM.wav(Data(repeating: 0, count: 4800), rate: PCM.sampleRate).write(
+                to: app.store.root.appendingPathComponent("fixture.wav"))
             var args: [String: Any] = ["conversation_id": id.uuidString, "expression_id": item.id.uuidString]
             if name == "seek_audio" { args["seconds"] = 1 }
             let token = app.turn.begin(.generating)

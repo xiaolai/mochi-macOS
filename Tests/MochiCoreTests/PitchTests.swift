@@ -1,3 +1,4 @@
+import PCM16
 import XCTest
 
 @testable import MochiCore
@@ -16,8 +17,8 @@ final class PitchTests: XCTestCase {
         XCTAssertEqual(median(150), 150, accuracy: 3)
         XCTAssertEqual(median(300), 300, accuracy: 4)
     }
-    func testWAVContainer() {
-        let wav = PCM.wav(Data(repeating: 0, count: 48000))
+    func testWAVContainer() throws {
+        let wav = try PCM.wav(Data(repeating: 0, count: 48000), rate: PCM.sampleRate)
         XCTAssertEqual(String(data: wav.prefix(4), encoding: .ascii), "RIFF")
         XCTAssertEqual(wav.count, 48044)
     }
