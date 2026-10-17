@@ -34,6 +34,7 @@ final class TranscriptionExperimentLiveTests: XCTestCase {
         var echoed: Any = NSNull()
         var committed: Date?
         var completed: Date?
+        var firstText: Date?
     }
 
     func testTranscriptionConfigurations() async throws {
@@ -112,7 +113,6 @@ final class TranscriptionExperimentLiveTests: XCTestCase {
         for item in items {
             let pcm = try Data(contentsOf: URL(fileURLWithPath: try XCTUnwrap(item["pcm"] as? String)))
             let observation = Observation()
-            var firstText: Date?
             var row: [String: Any] = ["arm": item["arm"] ?? "", "id": item["id"] ?? ""]
             do {
                 let service = RealtimeService()
@@ -134,7 +134,7 @@ final class TranscriptionExperimentLiveTests: XCTestCase {
                                 case "conversation.item.input_audio_transcription.completed":
                                     observation.completed = Date()
                                 case "response.output_text.delta", "response.text.delta":
-                                    if firstText == nil { firstText = Date() }
+                                    if observation.firstText == nil { observation.firstText = Date() }
                                 default: break
                                 }
                                 return event
@@ -149,7 +149,9 @@ final class TranscriptionExperimentLiveTests: XCTestCase {
                 if let completed = observation.completed {
                     row["commit_to_transcript_ms"] = Int(completed.timeIntervalSince(committed) * 1000)
                 }
-                if let firstText { row["commit_to_reply_ms"] = Int(firstText.timeIntervalSince(committed) * 1000) }
+                if let firstText = observation.firstText {
+                    row["commit_to_reply_ms"] = Int(firstText.timeIntervalSince(committed) * 1000)
+                }
             }
             lines.append(
                 String(decoding: try JSONSerialization.data(withJSONObject: row, options: [.sortedKeys]), as: UTF8.self)

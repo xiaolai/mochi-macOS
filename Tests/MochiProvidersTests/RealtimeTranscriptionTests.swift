@@ -293,12 +293,12 @@ final class RealtimeTranscriptionTests: XCTestCase {
         XCTAssertEqual(several, ["model": "gpt-transcribe", "languages": ["en", "zh"]])
     }
     func testALanguageListForAModelThatRefusesOneFailsBeforeAnyCredential() async {
-        var asked = false
+        let asked = Locked(false)
         do {
             _ = try await RealtimeService().transcribe(
                 Data(repeating: 0, count: 4800), transcriptionModel: "gpt-4o-mini-transcribe", languages: ["en", "zh"],
                 credential: {
-                    asked = true
+                    asked.value = true
                     return testSecret()
                 },
                 connect: { _ in
@@ -307,7 +307,7 @@ final class RealtimeTranscriptionTests: XCTestCase {
                 })
             XCTFail("An unsupported combination must fail")
         } catch {
-            XCTAssertFalse(asked)
+            XCTAssertFalse(asked.value)
         }
         XCTAssertNoThrow(try RealtimeService.transcriptionFields(model: "gpt-4o-mini-transcribe", languages: ["en"]))
         XCTAssertNoThrow(try RealtimeService.transcriptionFields(model: "gpt-transcribe", languages: ["en", "zh"]))

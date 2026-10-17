@@ -108,15 +108,16 @@ public struct RealtimeService {
         onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil
     ) async throws -> RealtimeAccumulator {
         try await reply(
-            input, credential: { try await secret() }, connect: RealtimeChannel.live,
+            input, credential: { try await secret() }, connect: { try await RealtimeChannel.live($0) },
             onResponse: onResponse,
             onTranscription: onTranscription, onTool: onTool)
     }
     /// Full session lifecycle seam: handshake, history, audio upload, deadlines and cancellation.
     func reply(
         _ input: ConversationRequest,
-        credential: () async throws -> ClientSecret,
-        connect: (RealtimeEndpoint) async throws -> RealtimeChannel,
+        credential: @escaping @Sendable () async throws -> ClientSecret,
+        connect: @escaping @Sendable (RealtimeEndpoint) async throws -> RealtimeChannel,
+        connectTimeout: UInt64 = RealtimeService.connectTimeout,
         replyTimeout: UInt64 = 90_000_000_000,
         onResponse: (@MainActor (RealtimeAccumulator) throws -> Void)? = nil,
         onTranscription: (@MainActor (RealtimeAccumulator) -> Void)? = nil,
@@ -125,9 +126,7 @@ public struct RealtimeService {
         try validate(input)
         let channel: RealtimeChannel
         do {
-            let secret = try await credential()
-            try Task.checkCancellation()
-            channel = try await connect(endpoint(secret))
+            channel = try await open(credential: credential, connect: connect, timeout: connectTimeout)
         } catch {
             if Task.isCancelled || error is CancellationError { throw CancellationError() }
             throw Self.replyFailure(error)

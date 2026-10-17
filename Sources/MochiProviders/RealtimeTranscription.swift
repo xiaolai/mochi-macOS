@@ -21,22 +21,21 @@ extension RealtimeService {
     ) async throws -> TranscriptResult {
         try await transcribe(
             pcm, transcriptionModel: transcriptionModel, languages: languages, credential: { try await secret() },
-            connect: RealtimeChannel.live)
+            connect: { try await RealtimeChannel.live($0) })
     }
     /// Full transport lifecycle seam: request construction, deadlines and cancellation.
     func transcribe(
         _ pcm: Data, transcriptionModel: String = RealtimeService.transcriptionModel, languages: [String] = [],
-        credential: () async throws -> ClientSecret, connect: (RealtimeEndpoint) async throws -> RealtimeChannel,
-        timeoutNanoseconds: UInt64 = 60_000_000_000
+        credential: @escaping @Sendable () async throws -> ClientSecret,
+        connect: @escaping @Sendable (RealtimeEndpoint) async throws -> RealtimeChannel,
+        connectTimeout: UInt64 = RealtimeService.connectTimeout, timeoutNanoseconds: UInt64 = 60_000_000_000
     ) async throws -> TranscriptResult {
         try Self.validateTranscriptionAudio(pcm)
         // An unsupported model and language combination fails here, before any credential or connection.
         _ = try Self.transcriptionFields(model: transcriptionModel, languages: languages)
         try Task.checkCancellation()
         do {
-            let secret = try await credential()
-            try Task.checkCancellation()
-            let channel = try await connect(endpoint(secret))
+            let channel = try await open(credential: credential, connect: connect, timeout: connectTimeout)
             defer { channel.close() }
             return try await RealtimeDeadline.run(seconds: Self.seconds(timeoutNanoseconds), close: channel.close) {
                 try await Self.transcribeTurn(

@@ -64,17 +64,17 @@ final class ConversationRequestTests: XCTestCase {
         let channel = RealtimeChannel(send: { sent.append($0) }, receive: { events.removeFirst() }, close: {})
         let history = (0..<31).map { Message(role: $0.isMultiple(of: 2) ? "user" : "assistant", text: "Message \($0)") }
         let request = ConversationRequest(history: history, text: "", pcm: Data(count: 100_000), spoken: true)
-        var requested: RealtimeEndpoint?
+        let requested = Locked<RealtimeEndpoint?>(nil)
         let reply = try await RealtimeService(model: "test-model").reply(
             request, credential: { testSecret("ek_reply-session") },
             connect: {
-                requested = $0
+                requested.value = $0
                 return channel
             })
         XCTAssertEqual(reply.text, "Hi.")
         XCTAssertEqual(reply.inputTranscript, "Spoken words")
-        XCTAssertEqual(requested?.secret.bearer, "ek_reply-session")
-        XCTAssertEqual(requested?.url.absoluteString, "wss://api.openai.com/v1/realtime?model=test-model")
+        XCTAssertEqual(requested.value?.secret.bearer, "ek_reply-session")
+        XCTAssertEqual(requested.value?.url.absoluteString, "wss://api.openai.com/v1/realtime?model=test-model")
         let types = sent.map { $0["type"] as? String ?? "" }
         XCTAssertEqual(types.first, "session.update")
         XCTAssertEqual(types.filter { $0 == "conversation.item.create" }.count, 30)
@@ -87,12 +87,12 @@ final class ConversationRequestTests: XCTestCase {
 
     func testInvalidVoiceMessageAudioIsRejectedBeforeSigningIn() async {
         for pcm in [Data(), Data(count: 4799), Data(count: 4801), Data(count: 65 * 48000 + 2)] {
-            var signedIn = false
+            let signedIn = Locked(false)
             do {
                 _ = try await RealtimeService().reply(
                     ConversationRequest(history: [], text: "", pcm: pcm, spoken: true),
                     credential: {
-                        signedIn = true
+                        signedIn.value = true
                         return testSecret()
                     },
                     connect: { _ in
@@ -103,7 +103,7 @@ final class ConversationRequestTests: XCTestCase {
             } catch {
                 XCTAssertTrue(error is AppFailure)
             }
-            XCTAssertFalse(signedIn)
+            XCTAssertFalse(signedIn.value)
         }
     }
 }
