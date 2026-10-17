@@ -66,8 +66,10 @@ CHECKS = (
                                                     "scripts/tests/fixtures/"),
         command="python3 scripts/tests/single_instance_e2e.py --allow-native",
         evidence="build/evidence/single-instance-e2e/report.json"),
-    *(Check(f"audition-{suite}", ("MochiProvidersTests",), command=AUDITION.format(suite), evidence=suite,
-            live=True, timeout=1800)
+    # The provider tests read the shipped catalogs at run time (TemplateAuditionTests checks its greetings against
+    # them), so the catalogs are an input of every suite in that target.
+    *(Check(f"audition-{suite}", ("MochiProvidersTests",), ("Localization/",), command=AUDITION.format(suite),
+            evidence=suite, live=True, timeout=1800)
       for suite in ("CoachingAuditionTests", "StartAgainAuditionTests", "HelpSuggestionLiveTests",
                     "TemplateAuditionTests")),
 )

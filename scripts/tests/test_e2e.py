@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -22,6 +23,21 @@ TREE = {
     "Sources/Providers/P.swift": "v1", "Sources/App/A.swift": "a1", "Tests/Support/S.swift": "s1",
     "Tests/ProvidersTests/T.swift": "t1", "README.md": "m1", "scripts/build-app.sh": "b1",
 }
+# A test reads a committed file by a path from the repository root: `repository.appendingPathComponent("Localization/
+# Localizable.xcstrings")`, or the same through `#filePath`. The literal may sit on the next line or end in an
+# interpolation.
+REPOSITORY_READ = re.compile(
+    r'(?:appendingPathComponent\(|appending\((?:path|component):|fileURLWithPath:|contentsOfFile:)\s*"([^"]*)"')
+
+
+def repository_reads(text, top_level):
+    """The repository-relative paths a Swift source reads: literals whose first component is committed at the top."""
+    for literal in REPOSITORY_READ.findall(text):
+        path = literal.split("\\(")[0]
+        if path.split("/")[0] in top_level:
+            yield path
+
+
 HOST = {"host": "Mini", "macos": "27.0.1 26A434", "swift": "Swift 6.4", "codex": "codex-cli 0.163.0"}
 APP = e2e.Check("ui", ("App",), ("scripts/build-app.sh",), ("--smoke-test",), evidence="smoke.txt")
 LIVE = e2e.Check("live", ("ProvidersTests",), command="swift test", evidence="Suite", live=True)
@@ -59,6 +75,33 @@ class DependencyTests(unittest.TestCase):
         package = e2e.package_graph()
         for check in e2e.CHECKS:
             e2e.inputs_digest(tree, e2e.inputs(check, package))
+
+    def test_the_scanner_finds_repository_reads_in_every_form(self):
+        text = (
+            'let a = repository.appendingPathComponent("Localization/Localizable.xcstrings")\n'
+            'let b = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent(\n'
+            '    "scripts/tests/fixtures/InstanceLock.c")\n'
+            'let c = root.appendingPathComponent("build/evidence/\\(name)")\n'
+            'let d = root.appending(path: "VERSION")\n'
+            'let e = folder.appendingPathComponent("replies.jsonl")\n')
+        top = {"Localization", "scripts", "VERSION", "Sources"}
+        self.assertEqual(list(repository_reads(text, top)),
+                         ["Localization/Localizable.xcstrings", "scripts/tests/fixtures/InstanceLock.c", "VERSION"])
+
+    def test_every_file_a_checks_tests_read_is_one_of_its_inputs(self):
+        # A test that reads a committed file at run time depends on it as much as on its own source: an edit to
+        # the file has to make the check run again.
+        tree = e2e.committed_tree()
+        package = e2e.package_graph()
+        top = {path.split("/")[0] for path in tree}
+        for check in e2e.CHECKS:
+            prefixes = e2e.inputs(check, package)
+            sources = [p for p in tree if p.endswith(".swift") and p.startswith("Tests/") and e2e.covered_by(p, prefixes)]
+            for source in sources:
+                for path in repository_reads((e2e.ROOT / source).read_text(encoding="utf-8"), top):
+                    with self.subTest(check=check.name, source=source, path=path):
+                        self.assertTrue(e2e.covered_by(path, prefixes) or path.rstrip("/") + "/" in prefixes,
+                                        f"{source} reads {path}, which is not an input of {check.name}")
 
 
 class LedgerTests(unittest.TestCase):
