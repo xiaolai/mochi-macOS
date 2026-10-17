@@ -1,5 +1,7 @@
 import AppKit
 import Darwin
+import MochiCore
+import MochiProviders
 import XCTest
 
 @testable import MochiApp
@@ -92,6 +94,55 @@ final class TrayControllerTests: XCTestCase {
         XCTAssertNotNil(app.error)
         XCTAssertEqual(chmod(root.path, 0o700), 0)
         XCTAssertTrue(TrayController.finishWork(app))
+    }
+
+    /// Talking to the desktop Mochi with the workspace closed is supported, so closing it saves without cancelling a
+    /// reply being prepared; the reply still arrives. Quitting still cancels it.
+    @MainActor func testClosingTheWorkspaceKeepsAPendingReply() async throws {
+        let root = makeTemporaryFolder()
+        let app = makeApp(root: root)
+        let tray = TrayController()
+        let workspace = window()
+        tray.attach(workspace, model: app)
+        app.playReply = { _ in }
+        let gate = TestGate()
+        let started = expectation(description: "Reply started")
+        app.speech.conversationReply = { _, _, callbacks in
+            started.fulfill()
+            await gate.wait()
+            try Task.checkCancellation()
+            var reply = RealtimeAccumulator()
+            reply.text = "Here is my answer."
+            reply.done = true
+            try callbacks.response(reply)
+        }
+        app.draft = "A question"
+        app.send()
+        await fulfillment(of: [started], timeout: 2)
+        app.draft = "Typed while waiting"
+        XCTAssertFalse(tray.windowShouldClose(workspace), "The workspace hides rather than closes")
+        XCTAssertEqual(app.turn.activity, .generating, "Closing the workspace keeps the reply being prepared")
+        XCTAssertNil(app.notice)
+        let id = try XCTUnwrap(app.selectedID)
+        XCTAssertEqual(
+            try LibraryStore(root: root).load().conversations.first { $0.id == id }?.draft, "Typed while waiting",
+            "Closing the workspace saves")
+        await gate.release()
+        await waitUntil { !app.busy }
+        XCTAssertEqual(app.conversation?.messages.last?.text, "Here is my answer.")
+        XCTAssertNil(app.error)
+        // A save that fails keeps the workspace open, so the failure stays visible.
+        var hidden = 0
+        tray.visibilityChanged = { hidden += 1 }
+        defer { chmod(root.path, 0o700) }
+        XCTAssertEqual(chmod(root.path, 0o500), 0)
+        app.draft = "Unsaved words"
+        _ = tray.windowShouldClose(workspace)
+        XCTAssertEqual(hidden, 0)
+        XCTAssertNotNil(app.error)
+        XCTAssertEqual(chmod(root.path, 0o700), 0)
+        _ = tray.windowShouldClose(workspace)
+        XCTAssertEqual(hidden, 1)
     }
 
     @MainActor private func window() -> NSWindow {

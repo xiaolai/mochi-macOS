@@ -409,6 +409,17 @@ struct MessageDeletionUndo {
         removeUnreferencedRecording(unfinishedRecording?.lastPathComponent)
         return saved
     }
+    /// Saves before the workspace is hidden; false when the library could not be saved. Unlike Stop, a reply being
+    /// prepared goes on and still arrives, since the desktop Mochi can be talked to with the workspace closed, and
+    /// hands-free listening is left to pause while the workspace is hidden. Anything else that owns the turn, such
+    /// as a recording or playback, ends as Stop ends it.
+    @discardableResult func finishWorkBeforeHiding() -> Bool {
+        let unfinishedRecording = pendingReplyMessageID == nil ? cancelTurn() : nil
+        stageHelpDraft()
+        let saved = save()
+        removeUnreferencedRecording(unfinishedRecording?.lastPathComponent)
+        return saved
+    }
     /// Stop, and every transcription with it, for quitting: nothing is left running to finish later.
     @discardableResult func stopForQuit() -> Bool {
         transcripts.cancelAll()
