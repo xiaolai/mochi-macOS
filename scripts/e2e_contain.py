@@ -13,12 +13,6 @@ import os, re, signal, subprocess, sys, time
 GRACE = 5  # seconds between SIGTERM and SIGKILL
 
 
-class Interrupted(Exception):
-    def __init__(self, signum):
-        super().__init__(signum)
-        self.signum = signum
-
-
 def pids_naming(folder, own=frozenset()):
     """The processes whose command line names `folder`, except this runner's own."""
     pattern = re.sub(r"([.^$*+?()\[\]{}|\\])", r"\\\1", folder.rstrip("/") + "/")
@@ -57,20 +51,22 @@ def group_alive(group):
 
 
 def run(timeout, folder, command):
-    def interrupted(signum, frame):
-        raise Interrupted(signum)
-
+    # A signal is only noted: raising from the handler could land inside Popen after the child started and lose it.
+    received = []
     for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
-        signal.signal(signum, interrupted)
+        signal.signal(signum, lambda signum, frame: received.append(signum))
     child = subprocess.Popen(command, start_new_session=True)
-    try:
-        code = child.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
+    deadline = time.monotonic() + timeout
+    while child.poll() is None and not received and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if received:
+        print(f"interrupted by signal {received[0]}", file=sys.stderr, flush=True)
+        code = 128 + received[0]
+    elif child.returncode is None:
         print(f"timed out after {timeout} s", file=sys.stderr, flush=True)
         code = 124
-    except Interrupted as error:
-        print(f"interrupted by signal {error.signum}", file=sys.stderr, flush=True)
-        code = 128 + error.signum
+    else:
+        code = child.returncode
     # Ignore further signals while ending, so a second interrupt cannot leave the group half ended.
     for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(signum, signal.SIG_IGN)
