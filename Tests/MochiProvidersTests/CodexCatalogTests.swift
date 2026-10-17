@@ -73,13 +73,16 @@ final class CodexCatalogTests: XCTestCase {
         }
     }
 
-    /// A check cancelled while Codex renewed the sign-in found out nothing, so it reports no sign-in problem.
+    /// A check cancelled while Codex was asked for the sign-in found out nothing, so it reports no sign-in problem.
     func testACancelledCheckIsACancellationNotASignInProblem() async throws {
-        do {
-            let status = try await CodexCatalog.status(
-                signIn: CancelledSignIn(), environment: [:], home: home(cache: cache))
+        let codex = try HangingCodex()
+        let signIn = try codex.credentials()
+        let home = try home(cache: cache)
+        let error = await codex.errorWhenCancelled {
+            let status = try await CodexCatalog.status(signIn: signIn, environment: [:], home: home)
             XCTFail("A cancelled check reported \(status)")
-        } catch { XCTAssertTrue(error is CancellationError, "\(error)") }
+        }
+        XCTAssertTrue(error is CancellationError, "\(String(describing: error))")
     }
 
     func testNoSignInReportsTheProblemAndNoModels() async throws {

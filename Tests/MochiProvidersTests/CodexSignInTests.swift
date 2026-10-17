@@ -1,22 +1,60 @@
+import CodexAuth
 import MochiKernel
 import MochiTestSupport
 import RealtimeConnection
 import XCTest
 
-@testable import CodexAuth
 @testable import MochiProviders
 
-/// A sign-in whose fetch or renewal the caller cancelled, as the shared package reports it: the state it stopped in,
-/// with the class cancelled.
-struct CancelledSignIn: CredentialSource {
-    var state = CodexAuthState.expired
-    var error: CodexAuthError {
-        var error = CodexAuthError(state, message: "the refresh was cancelled")
-        error.errorClass = .cancelled
-        return error
+/// A Codex that starts its app-server, answers the handshake, then never answers again. A sign-in fetched through it
+/// is still running when the caller cancels, so the shared package reports that cancellation exactly as it reports a
+/// real one: the state the fetch stopped in, with the class cancelled.
+struct HangingCodex {
+    let folder = TestScratch.folder("hanging-codex")
+    var script: URL { folder.appendingPathComponent("codex") }
+    /// Written once the handshake is done and the fetch is waiting on Codex.
+    var reached: URL { folder.appendingPathComponent("reached") }
+
+    init() throws {
+        let python = try XCTUnwrap(
+            ["/usr/bin/python3", "/opt/homebrew/bin/python3", "/usr/local/bin/python3"].first {
+                FileManager.default.isExecutableFile(atPath: $0)
+            }, "No python3 to play Codex")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let body = """
+            #!\(python)
+            import sys, json, time
+            m = json.loads(sys.stdin.readline())
+            print(json.dumps({'id': m['id'], 'result': {'userAgent': 'codex_cli_rs/\(minimumCodexVersion)'}}), flush=True)
+            sys.stdin.readline()
+            open(\(String(reflecting: reached.path)), 'w').close()
+            time.sleep(60)
+
+            """
+        try Data(body.utf8).write(to: script)
+        guard chmod(script.path, 0o755) == 0 else { throw CocoaError(.fileWriteNoPermission) }
     }
-    func token() async throws -> Token { throw error }
-    func refresh(after stale: Token) async throws -> Token { throw error }
+
+    func credentials() throws -> Credentials {
+        try Credentials(
+            CodexAuthConfiguration(
+                margin: 600, timeout: 30, source: .codex, executable: script.path, home: folder.path,
+                environment: [:]))
+    }
+
+    /// What `operation` throws when it is cancelled while the sign-in waits on Codex.
+    func errorWhenCancelled(_ operation: @escaping @Sendable () async throws -> Void) async -> Error? {
+        let task = Task { try await operation() }
+        for _ in 0..<500 where !FileManager.default.fileExists(atPath: reached.path) {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: reached.path), "Codex was never asked")
+        task.cancel()
+        do {
+            try await task.value
+            return nil
+        } catch { return error }
+    }
 }
 
 final class CodexSignInTests: XCTestCase {
@@ -60,17 +98,12 @@ final class CodexSignInTests: XCTestCase {
         XCTAssertEqual(account, CodexAccount(token: fresh, accountID: "account-7"))
     }
 
-    /// A fetch or renewal the caller cancelled is that cancellation, never a sign-in that expired or failed.
-    func testACancelledFetchOrRenewalIsACancellation() async {
-        for state in [CodexAuthState.expired, .codexError] {
-            XCTAssertTrue(CodexSignIn.failure(CancelledSignIn(state: state).error) is CancellationError, "\(state)")
-            do {
-                _ = try await CodexSignIn.account(CancelledSignIn(state: state))
-                XCTFail("A cancelled sign-in was accepted")
-            } catch {
-                XCTAssertTrue(error is CancellationError, "\(state): \(error)")
-            }
-        }
+    /// A fetch the caller cancelled while Codex ran is that cancellation, never a sign-in that failed.
+    func testACancelledFetchIsACancellation() async throws {
+        let codex = try HangingCodex()
+        let credentials = try codex.credentials()
+        let error = await codex.errorWhenCancelled { _ = try await CodexSignIn.account(credentials) }
+        XCTAssertTrue(error is CancellationError, "\(String(describing: error))")
         XCTAssertTrue(CodexSignIn.failure(CancellationError()) is CancellationError)
         // The same state, not cancelled, is still the sign-in's own failure.
         XCTAssertEqual(
