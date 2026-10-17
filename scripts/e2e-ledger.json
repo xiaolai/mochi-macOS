@@ -316,6 +316,32 @@
     ],
     "timeout": 1800
    }
+  },
+  {
+   "check": "audition-HelpSuggestionLiveTests",
+   "commit": "b753418c95b8226db455793a27ccd5bb7b798cda",
+   "env": {
+    "codex": "codex-cli 0.163.0",
+    "host": "db9a95d66b1e",
+    "macos": "27.0.1 26A434",
+    "swift": "swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "HelpSuggestionLiveTests passed",
+   "fingerprint": "4a9a094a94191aee2dd39436c45b47e045b86517befbdd7baf7c4bcc7193ea8d",
+   "inputs": "24b25838a76a9063610487996afbfb7fc728e19d467e5803af489420a230b209",
+   "ran_at": "2026-10-17T12:37:39+08:00",
+   "spec": {
+    "app_args": [],
+    "command": "MOCHI_LIVE_AUDITION=1 RUST_LOG=codex_app_server=debug,codex_core=info swift test --filter HelpSuggestionLiveTests",
+    "evidence": "HelpSuggestionLiveTests",
+    "extra": [],
+    "live": true,
+    "name": "audition-HelpSuggestionLiveTests",
+    "roots": [
+     "MochiProvidersTests"
+    ],
+    "timeout": 1800
+   }
   }
  ],
  "schema": 1
