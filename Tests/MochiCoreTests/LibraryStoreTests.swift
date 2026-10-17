@@ -201,6 +201,22 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(orphan).path))
     }
 
+    func testCleanupRemovesWriteStagingLeftByACrashButNeverFollowsALink() throws {
+        let root = try folder()
+        let outside = try folder().appendingPathComponent("kept.json")
+        try Data("outside".utf8).write(to: outside)
+        let staged = [".library-write-", ".library-previous-", ".backup-write-"].map {
+            root.appendingPathComponent("\($0)\(UUID()).json")
+        }
+        for url in staged { try Data("{}".utf8).write(to: url) }
+        let link = root.appendingPathComponent(".library-write-\(UUID()).json")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+        try LibraryStore(root: root).cleanupOrphanedAudio(Library())
+        for url in staged { XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), url.lastPathComponent) }
+        XCTAssertNotNil(try? FileManager.default.destinationOfSymbolicLink(atPath: link.path))
+        XCTAssertEqual(try String(contentsOf: outside), "outside")
+    }
+
     func testCleanupRemovesExportStagingLeftByAForceQuit() throws {
         let root = try folder()
         let staging = root.appendingPathComponent("\(LibraryStore.exportStagingPrefix)\(UUID())")

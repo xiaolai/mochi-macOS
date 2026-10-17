@@ -176,6 +176,11 @@ public final class LibraryStore {
     }
     /// Folders of hard links that keep an export's recordings; one left by a force quit is removed at cleanup.
     public static let exportStagingPrefix = ".export-"
+    /// Files a save writes before renaming them into place. One left by a crash may hold a conversation deleted since,
+    /// so any left is removed at cleanup.
+    static let libraryStagingPrefix = ".library-write-"
+    static let previousStagingPrefix = ".library-previous-"
+    static let backupStagingPrefix = ".backup-write-"
     /// How long an unreferenced generated example or preview stays cached after its last use.
     public static let cacheLifetime: TimeInterval = 7 * 24 * 3600
     /// Removes audio Mochi created that nothing references: abandoned recordings and replies at once,
@@ -183,6 +188,7 @@ public final class LibraryStore {
     public func cleanupOrphanedAudio(_ library: Library, now: Date = Date()) throws {
         try library.validate()
         let referenced = library.referencedAudio.union(previousReferencedAudio()).union(try unreadableReferencedAudio())
+        let staging = [Self.libraryStagingPrefix, Self.previousStagingPrefix, Self.backupStagingPrefix]
         let keys: Set<URLResourceKey> = [
             .isRegularFileKey, .isSymbolicLinkKey, .isDirectoryKey, .contentModificationDateKey,
         ]
@@ -191,6 +197,13 @@ public final class LibraryStore {
             if name.hasPrefix(Self.exportStagingPrefix) {
                 let values = try url.resourceValues(forKeys: keys)
                 if values.isDirectory == true, values.isSymbolicLink != true {
+                    try FileManager.default.removeItem(at: url)
+                }
+                continue
+            }
+            if staging.contains(where: name.hasPrefix) {
+                let values = try url.resourceValues(forKeys: keys)
+                if values.isRegularFile == true, values.isSymbolicLink != true {
                     try FileManager.default.removeItem(at: url)
                 }
                 continue
@@ -260,7 +273,7 @@ public final class LibraryStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(library)
-        let staging = root.appendingPathComponent(".library-write-\(UUID().uuidString).json")
+        let staging = root.appendingPathComponent("\(Self.libraryStagingPrefix)\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: staging) }
         try writeDurably(data, to: staging)
         if current != nil { keepPrevious() }
@@ -317,7 +330,7 @@ public final class LibraryStore {
     }
     /// Keeps the file about to be replaced as `library.previous.json`. Losing this copy never blocks a save.
     private func keepPrevious() {
-        let staging = root.appendingPathComponent(".library-previous-\(UUID().uuidString).json")
+        let staging = root.appendingPathComponent("\(Self.previousStagingPrefix)\(UUID().uuidString).json")
         guard Darwin.link(file.path, staging.path) == 0 else {
             MochiLog.failure(
                 MochiLog.library, "Keep previous library", POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO),
@@ -342,7 +355,7 @@ public final class LibraryStore {
     }
     /// Creates a complete 0600 copy that never replaces an existing file, so a failed write cannot leave a partial or briefly readable backup under the final name.
     private func writeNewPrivateFile(_ data: Data, to destination: URL) throws {
-        let staging = root.appendingPathComponent(".backup-write-\(UUID().uuidString).json")
+        let staging = root.appendingPathComponent("\(Self.backupStagingPrefix)\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: staging) }
         try writeDurably(data, to: staging)
         guard renamex_np(staging.path, destination.path, UInt32(RENAME_EXCL)) == 0 else {
