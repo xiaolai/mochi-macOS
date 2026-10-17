@@ -74,11 +74,10 @@ struct RealtimeChannel: @unchecked Sendable {
             return event
         }
     }
-    /// The type of a malformed event Mochi does not consume, or nil. The shared package names the type of an event it
-    /// could not read only in its message, `realtime event <type>: <why>`; a malformed event without a readable type
-    /// is never skipped.
+    /// The type of a malformed event Mochi does not consume, or nil. A malformed event without a readable type is
+    /// never skipped.
     static func unconsumedType(of error: RealtimeError) -> String? {
-        unconsumedTypes.first { error.message.hasPrefix("realtime event \($0): ") }
+        unconsumedTypes.contains(error.eventType) ? error.eventType : nil
     }
 }
 extension RealtimeChannel {

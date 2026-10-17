@@ -6,7 +6,7 @@ let package = Package(
     products: [
         .executable(name: "Mochi", targets: ["MochiApp"]), .executable(name: "mochi-mcp", targets: ["MochiMCP"]),
     ],
-    dependencies: [.package(url: "https://github.com/xiaolai/sayso.git", from: "0.3.0")],
+    dependencies: [.package(url: "https://github.com/xiaolai/sayso.git", from: "0.4.0")],
     targets: [
         .target(name: "MochiKernel"),
         .target(name: "MochiAutomation", dependencies: ["MochiKernel"]),
