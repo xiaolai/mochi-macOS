@@ -31,6 +31,32 @@ import MochiKernel
     var isRunning: Bool { tapInstalled && engine?.isRunning == true }
     /// True while the engine runs at all; the microphone is in use whenever it does.
     var engineRunning: Bool { engine?.isRunning == true }
+    /// Makes a new engine, with voice processing on when asked; tests make engines that never open a device.
+    private let makeEngine: @MainActor (_ voiceProcessing: Bool) throws -> AVAudioEngine
+    /// The default devices now, which a voice-processing failure is remembered for.
+    private let currentDevices: @MainActor () -> AudioDevicePair
+
+    init(
+        makeEngine: @escaping @MainActor (_ voiceProcessing: Bool) throws -> AVAudioEngine = StreamingCapture
+            .deviceEngine,
+        devices: @escaping @MainActor () -> AudioDevicePair = AudioDevicePair.current
+    ) {
+        self.makeEngine = makeEngine
+        currentDevices = devices
+    }
+
+    /// An engine on the default devices. Voice processing ducks other apps' audio by default; Mochi needs only its
+    /// own echo removed.
+    static func deviceEngine(voiceProcessing: Bool) throws -> AVAudioEngine {
+        let engine = AVAudioEngine()
+        guard voiceProcessing else { return engine }
+        do { try engine.inputNode.setVoiceProcessingEnabled(true) } catch {
+            throw AppFailure("Could not start the microphone. Check Sound settings and retry.", underlying: error)
+        }
+        engine.inputNode.voiceProcessingOtherAudioDuckingConfiguration = .init(
+            enableAdvancedDucking: false, duckingLevel: .min)
+        return engine
+    }
 
     /// Starts capturing. `deliver` receives each converted piece; `interrupted` is called once when the input
     /// device changes or stops underneath the capture, after which the capture has stopped.
@@ -38,7 +64,7 @@ import MochiKernel
         deliver: @escaping @MainActor (Data) -> Void, interrupted: @escaping @MainActor () -> Void
     ) throws {
         stop()
-        let devices = AudioDevicePair.current()
+        let devices = currentDevices()
         let failure = try Self.preferVoiceProcessing(unless: voiceProcessingFailed.contains(devices)) {
             voiceProcessing in
             let engine = try prepareEngine(voiceProcessing: voiceProcessing)
@@ -162,7 +188,7 @@ import MochiKernel
             guard engineProcessesVoice else { return nil }
             engine = current
         } else {
-            guard !voiceProcessingFailed.contains(AudioDevicePair.current()) else { return nil }
+            guard !voiceProcessingFailed.contains(currentDevices()) else { return nil }
             // Started here rather than on play, so a voice-processing failure leaves the reply to an ordinary player.
             // It is not remembered: only a plain capture that then starts proves the microphone itself works.
             do {
@@ -196,15 +222,7 @@ import MochiKernel
     /// either way: one exists here only while a reply plays through it, which needs voice processing.
     private func prepareEngine(voiceProcessing: Bool) throws -> AVAudioEngine {
         if let engine { return engine }
-        let engine = AVAudioEngine()
-        if voiceProcessing {
-            do { try engine.inputNode.setVoiceProcessingEnabled(true) } catch {
-                throw AppFailure("Could not start the microphone. Check Sound settings and retry.", underlying: error)
-            }
-            // Voice processing ducks other apps' audio by default; Mochi needs only its own echo removed.
-            engine.inputNode.voiceProcessingOtherAudioDuckingConfiguration = .init(
-                enableAdvancedDucking: false, duckingLevel: .min)
-        }
+        let engine = try makeEngine(voiceProcessing)
         _ = engine.mainMixerNode
         self.engine = engine
         engineProcessesVoice = voiceProcessing

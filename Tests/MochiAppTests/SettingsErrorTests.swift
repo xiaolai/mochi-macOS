@@ -1,3 +1,4 @@
+import MochiProviders
 import XCTest
 
 @testable import MochiApp
@@ -50,5 +51,32 @@ extension SettingsErrorTests {
         app.previewBuiltIn("cedar")
         await waitUntil { !app.busy && app.error != nil }
         XCTAssertEqual(app.errorTab, .voices)
+    }
+
+    /// Codex checks overlap when Settings opens while one runs; only the latest answer may land, whatever order
+    /// they finish in.
+    func testAnOlderCodexCheckThatFinishesLastIsIgnored() async {
+        let app = makeApp(root: makeTemporaryFolder())
+        let older = TestGate()
+        let newer = TestGate()
+        var calls = 0
+        app.speech.codexStatus = {
+            calls += 1
+            if calls == 1 {
+                await older.wait()
+                return CodexStatus(signInProblem: "Older answer")
+            }
+            await newer.wait()
+            return CodexStatus(signInProblem: "Newer answer")
+        }
+        app.refreshCodex()
+        await waitUntil { calls == 1 }
+        app.refreshCodex()
+        await waitUntil { calls == 2 }
+        await newer.release()
+        await waitUntil { app.codex.signInProblem == "Newer answer" }
+        await older.release()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(app.codex.signInProblem, "Newer answer", "A superseded check never overwrites a newer one")
     }
 }

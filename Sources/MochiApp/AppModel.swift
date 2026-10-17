@@ -46,6 +46,8 @@ struct MessageDeletionUndo {
     @ObservationIgnored var recordingStartedAt: Date?
     /// The reply audio playing for the first time, which an interruption may cut; nil once it ends or stops.
     @ObservationIgnored var unheardReply: String?
+    /// The turn of the latest conversation reply request, and the user message it answers.
+    @ObservationIgnored var replyRequest: (token: UUID, messageID: UUID)?
     /// The recording that started by itself after a reply; it is discarded if Mochi is locked or hidden meanwhile.
     @ObservationIgnored var unattendedRecording: UUID?
     /// The instructions or template sheet, and the drafts it edits.
@@ -60,7 +62,15 @@ struct MessageDeletionUndo {
     /// The local control server and the caches that make tool calls safe to retry.
     let automation = AutomationController()
     @ObservationIgnored var allowDemoAutomation = false
-    var selectedID: UUID? { didSet { if oldValue != selectedID { find.close() } } }
+    var selectedID: UUID? {
+        didSet {
+            guard oldValue != selectedID else { return }
+            find.close()
+            transcriptEditID = nil
+        }
+    }
+    /// The voice message whose transcript the Edit Transcript sheet is correcting; listening pauses while it is open.
+    var transcriptEditID: UUID?
     /// Find in the open conversation.
     let find = ConversationFind()
     var canFindInConversation: Bool {
@@ -99,6 +109,8 @@ struct MessageDeletionUndo {
     @ObservationIgnored var playReply: ((String) -> Void)?
     /// Writes a reply's audio file; replaceable so a failed audio write can be tested while the library still saves.
     @ObservationIgnored var writeReplyAudio: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
+    /// Decodes a saved recording for a retried reply, off the main actor; replaceable so tests can see where it runs.
+    @ObservationIgnored var readRecording: @Sendable (URL) throws -> Data = { try AudioFile.pcm($0) }
     var greetingActive = false
     @ObservationIgnored var recordingNow: () -> Date = Date.init
     @ObservationIgnored var recordingSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
@@ -186,6 +198,8 @@ struct MessageDeletionUndo {
     var serviceStatus = String(localized: "Not checked")
     /// Codex's sign-in and model list, read at launch and whenever Settings opens or the connection is checked.
     var codex = CodexStatus()
+    /// The Codex check whose answer `codex` waits for; an older check that finishes later is ignored.
+    @ObservationIgnored var codexCheck: UUID?
     /// The model text requests use now: the user's choice while Codex lists it, otherwise the lightest listed.
     /// The reasoning effort text requests use now: the user's choice while the model supports it, otherwise low.
     var textEffort: String? {
@@ -208,6 +222,10 @@ struct MessageDeletionUndo {
     @ObservationIgnored var recordingClock: Task<Void, Never>?
     /// When the meter last heard sound in the current take, in seconds since it started.
     @ObservationIgnored var lastAudibleRecordingTime: Double = 0
+    /// Whether the meter has heard sound at all in the current take.
+    @ObservationIgnored var recordingHeardSound = false
+    /// A take that started by itself after a reply and has heard nothing for this many seconds ends, and is discarded.
+    static let unattendedSilenceLimit: Double = 8
     /// The recorder stops itself after this many seconds.
     static let recordingLimit: Double = 60
     /// How long the input must stay quiet before the take warns about it.
@@ -307,13 +325,17 @@ struct MessageDeletionUndo {
         observeListeningConditions()
         if !demo { refreshCodex() }
     }
-    /// Asks Codex for its sign-in and reads its model list in the background; the answer lands in `codex`.
+    /// Asks Codex for its sign-in and reads its model list in the background; the answer lands in `codex`. Checks
+    /// can overlap and finish in any order, so only the latest one's answer is kept.
     func refreshCodex() {
         let status = speech.codexStatus
+        let check = UUID()
+        codexCheck = check
         Task { [weak self] in
             // A cancelled check learned nothing, so what Mochi knew before stands.
             guard let result = try? await status() else { return }
-            self?.codex = result
+            guard let self, codexCheck == check else { return }
+            codex = result
         }
     }
     /// Preview launches create a fresh library each time; remove it so previews leave nothing behind.
@@ -382,18 +404,26 @@ struct MessageDeletionUndo {
             return
         }
     }
-    /// True while Stop has something to end: a reply, recording, playback or preview owning the turn, listening or
-    /// its permission request, or a transcription in flight.
-    var canStop: Bool { busy || listening.isOn || listeningRequest != nil || !transcripts.isIdle }
+    /// True while Stop has something to end: a reply, recording, playback or preview owning the turn, or listening or
+    /// its permission request. A transcription alone is not: Stop lets it finish (see `stop()`), and the one carried
+    /// by a reply being prepared is covered by `busy`.
+    var canStop: Bool { busy || listening.isOn || listeningRequest != nil }
+    /// The reply being prepared is cancelled together with its voice message's transcription. Other transcriptions,
+    /// such as one still arriving for a reply already delivered or a retried one, finish across Stop and a change of
+    /// conversation: they write by conversation, and never into one archived or deleted meanwhile.
     /// False when the library could not be saved; the failure is already reported.
     @discardableResult func stop() -> Bool {
+        let pendingVoice = pendingReplyMessageID.flatMap { transcribingMessageIDs.contains($0) ? $0 : nil }
         // Playback ends first, so stopping listening has no reply left to move off the listening engine.
         let unfinishedRecording = cancelTurn()
         stopListening()
-        transcripts.cancelAll()
+        if let pendingVoice { transcripts.cancel(pendingVoice) }
+        // A transcript still marked pending with no job left to finish it never will be.
         for ci in library.conversations.indices {
             for mi in library.conversations[ci].messages.indices
-            where library.conversations[ci].messages[mi].transcriptionState == .pending {
+            where library.conversations[ci].messages[mi].transcriptionState == .pending
+                && !transcribingMessageIDs.contains(library.conversations[ci].messages[mi].id)
+            {
                 library.conversations[ci].messages[mi].transcriptionState = .interrupted
             }
         }
@@ -402,6 +432,27 @@ struct MessageDeletionUndo {
         let saved = save()
         removeUnreferencedRecording(unfinishedRecording?.lastPathComponent)
         return saved
+    }
+    /// Saves before the workspace is hidden; false when the library could not be saved. Unlike Stop, a reply being
+    /// prepared goes on and still arrives, since the desktop Mochi can be talked to with the workspace closed, and
+    /// hands-free listening is left to pause while the workspace is hidden. Anything else that owns the turn, such
+    /// as a recording or playback, ends as Stop ends it.
+    @discardableResult func finishWorkBeforeHiding() -> Bool {
+        let unfinishedRecording = pendingReplyMessageID == nil ? cancelTurn() : nil
+        stageHelpDraft()
+        let saved = save()
+        removeUnreferencedRecording(unfinishedRecording?.lastPathComponent)
+        return saved
+    }
+    /// Stop, and every transcription with it, for quitting: nothing is left running to finish later.
+    @discardableResult func stopForQuit() -> Bool {
+        transcripts.cancelAll()
+        return stop()
+    }
+    /// The user message the reply now being prepared answers; nil while no reply is being prepared.
+    var pendingReplyMessageID: UUID? {
+        guard let replyRequest, turn.epoch == replyRequest.token, turn.activity == .generating else { return nil }
+        return replyRequest.messageID
     }
     /// True while the turn is still the one a voice preview started; any other activity takes a new epoch.
     var previewActive: Bool { previewEpoch == turn.epoch && turn.activity != .idle }
@@ -422,7 +473,7 @@ struct MessageDeletionUndo {
         return kept
     }
     /// Ends whatever owns the turn and returns the unfinished recording, if any, for the caller to discard.
-    private func cancelTurn() -> URL? {
+    func cancelTurn() -> URL? {
         unheardReply = nil
         deferredToolAction = nil
         greetingActive = false

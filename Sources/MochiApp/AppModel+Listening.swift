@@ -101,7 +101,9 @@ extension AppModel {
         if screenLocked { blockers.insert(.screenLocked) }
         if workspaceHidden { blockers.insert(.windowHidden) }
         if showExpressions { blockers.insert(.expressionsOpen) }
-        if customization.isPresented || history.isEditing || panelOpen || (practice && help.stage != .practice) {
+        if customization.isPresented || history.isEditing || transcriptEditID != nil || panelOpen
+            || (practice && help.stage != .practice)
+        {
             blockers.insert(.sheetOpen)
         }
         return blockers
@@ -453,6 +455,8 @@ extension AppModel {
         }
         listeningRuntime.turnAudio = Data()
         listeningRuntime.macJudgesTurn = false
+        // The quiet reopen allowed since the last turn is available again from here.
+        listeningRuntime.quietReopens = 0
         closeListeningLine()
         syncListening()
         deliverListeningTurn(audio, to: context)

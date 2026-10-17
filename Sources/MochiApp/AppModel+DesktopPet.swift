@@ -51,7 +51,7 @@ extension AppModel {
     }
 
     func setShortcut(_ shortcut: Shortcut?, for action: ShortcutAction) {
-        settings.shortcuts[action] = shortcut
+        settings.setShortcut(shortcut, for: action)
         shortcuts.apply()
     }
 

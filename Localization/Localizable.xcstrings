@@ -12728,6 +12728,34 @@
         }
       }
     },
+    "Nothing was heard after the reply, so the microphone is off." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返信のあとに何も聞こえなかったため、マイクをオフにしました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "답장 후 아무 소리도 들리지 않아 마이크를 껐습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回复后没有听到任何声音，因此已关闭麦克风。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回覆後沒有聽到任何聲音，因此已關閉麥克風。"
+          }
+        }
+      }
+    },
     "Number out of range: %@." : {
       "localizations" : {
         "ja" : {
@@ -19920,6 +19948,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法讀取已儲存的錄音。請錄製新訊息以繼續。"
+          }
+        }
+      }
+    },
+    "The saved shortcut could not be read, so this action has none. Record a new one." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存されたショートカットを読み込めなかったため、この操作にはショートカットがありません。新しく記録してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 단축키를 읽을 수 없어 이 동작에는 단축키가 없습니다. 새 단축키를 기록하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取已存储的快捷键，因此此操作没有快捷键。请录制新的快捷键。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法讀取已儲存的快速鍵，因此此動作沒有快速鍵。請錄製新的快速鍵。"
           }
         }
       }

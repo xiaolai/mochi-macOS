@@ -7,6 +7,36 @@ import XCTest
 @testable import MochiApp
 
 final class HelpFlowTests: XCTestCase {
+    /// Typing a sentence is written after a pause, like the composer, not on every keystroke; an edit that drops the
+    /// saved expression is written at once, and Stop writes whatever typing is still waiting.
+    @MainActor func testTypingTheSentenceIsWrittenAfterAPause() throws {
+        let root = makeTemporaryFolder()
+        let app = makeApp(root: root)
+        let id = try XCTUnwrap(app.selectedID)
+        func saved() throws -> HelpDraft? {
+            try LibraryStore(root: root).load().conversations.first { $0.id == id }?.helpDraft
+        }
+        app.saveDelay = 60_000_000_000
+        app.startHelp()
+        XCTAssertEqual(try saved()?.english, "", "Opening Help writes its draft")
+        app.editEnglish("Let me")
+        app.editEnglish("Let me think")
+        XCTAssertTrue(app.hasPendingSave, "Typing waits for a pause")
+        XCTAssertEqual(try saved()?.english, "", "Nothing is written on a keystroke itself")
+        XCTAssertTrue(app.saveExpression())
+        let expression = try XCTUnwrap(app.help.expression?.id)
+        XCTAssertEqual(try saved()?.expressionID, expression)
+        app.editEnglish("Let me think about it")
+        XCTAssertNil(app.help.expression)
+        XCTAssertFalse(app.hasPendingSave, "Dropping the saved expression is written at once")
+        XCTAssertNil(try saved()?.expressionID)
+        XCTAssertEqual(try saved()?.english, "Let me think about it")
+        app.editEnglish("Let me think about it more")
+        XCTAssertTrue(app.hasPendingSave)
+        app.stop()
+        XCTAssertFalse(app.hasPendingSave)
+        XCTAssertEqual(try saved()?.english, "Let me think about it more", "Stop writes the waiting typing")
+    }
     @MainActor func testHelpDraftSeedDismissAndRelaunchPreserveMeaningAndEnglish() throws {
         let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }

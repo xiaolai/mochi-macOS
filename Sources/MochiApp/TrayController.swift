@@ -108,28 +108,29 @@ import SwiftUI
         statusItem?.button?.setAccessibilityValue(statusDescription)
     }
 
-    /// Ends in-progress work and saves. False only when a readable library could not be written.
+    /// Ends in-progress work and saves, for quitting. False only when a readable library could not be written.
     static func finishWork(_ model: AppModel) -> Bool {
-        let saved = model.stop()
+        let saved = model.stopForQuit()
         return !model.libraryReadable || saved
     }
 
-    /// Hiding the workspace is refused while its latest changes are unsaved, so the failure stays visible.
-    private func finishWork() -> Bool {
+    /// Saves before the workspace hides, leaving a reply being prepared to arrive. Hiding is refused while the
+    /// latest changes are unsaved, so the failure stays visible.
+    private func finishWorkBeforeHiding() -> Bool {
         guard let model else { return true }
-        return Self.finishWork(model)
+        return model.finishWorkBeforeHiding() || !model.libraryReadable
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard sender === window else { return true }
-        guard finishWork() else { return false }
+        guard finishWorkBeforeHiding() else { return false }
         sender.orderOut(nil)
         visibilityChanged?()
         return false
     }
 
     @objc func closeToTray() {
-        guard finishWork() else { return }
+        guard finishWorkBeforeHiding() else { return }
         window?.orderOut(nil)
         visibilityChanged?()
         // Hide settings and attached panels too, while retaining the status item.

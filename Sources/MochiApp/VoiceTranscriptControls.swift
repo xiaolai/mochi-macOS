@@ -5,7 +5,6 @@ import SwiftUI
 struct VoiceTranscriptControls: View {
     @Bindable var app: AppModel
     let message: Message
-    @State private var editing = false
     @State private var text = ""
     @State private var saveError: String?
     @FocusState private var editorFocused: Bool
@@ -21,7 +20,7 @@ struct VoiceTranscriptControls: View {
                 Button(message.contextText == nil ? "Add transcript…" : "Edit transcript…") {
                     text = message.contextText ?? ""
                     saveError = nil
-                    editing = true
+                    app.transcriptEditID = message.id
                 }.disabled(app.busy)
                 if recovering {
                     Button("Cancel transcription") { app.cancelTranscription(message.id) }.disabled(app.busy)
@@ -52,7 +51,12 @@ struct VoiceTranscriptControls: View {
                 ? "Transcribing…"
                 : message.contextText == nil ? "Transcript unavailable — retry or add text" : "Message actions"
         )
-        .sheet(isPresented: $editing) {
+        // The open sheet lives in the model, so hands-free listening pauses while the transcript is corrected.
+        .sheet(
+            isPresented: Binding(
+                get: { app.transcriptEditID == message.id },
+                set: { if !$0, app.transcriptEditID == message.id { app.transcriptEditID = nil } })
+        ) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("What did you say?").font(.title2).fontWeight(.semibold)
                 Text("Correct the transcript without sending another message to Mochi.").foregroundStyle(.secondary)
@@ -64,11 +68,11 @@ struct VoiceTranscriptControls: View {
                         .foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                 }
                 HStack {
-                    Button("Cancel") { editing = false }.keyboardShortcut(.cancelAction)
+                    Button("Cancel") { app.transcriptEditID = nil }.keyboardShortcut(.cancelAction)
                     Spacer()
                     Button("Save transcript") {
                         if app.editTranscript(message.id, text: text) {
-                            editing = false
+                            app.transcriptEditID = nil
                         } else {
                             saveError = app.error ?? String(localized: "The transcript could not be saved.")
                         }

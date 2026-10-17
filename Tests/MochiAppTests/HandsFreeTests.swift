@@ -470,6 +470,40 @@ final class HandsFreeTests: XCTestCase {
         app.stop()
     }
 
+    /// The one quiet reopen is per turn: a drop many turns after an earlier one is reopened quietly too.
+    @MainActor func testADropAfterADeliveredTurnIsReopenedQuietlyAgain() async throws {
+        let listening = FakeListening()
+        let app = handsFreeApp(listening)
+        let player = TestPlayer()
+        app.audio.makePlayer = { _ in player }
+        var requests = 0
+        app.speech.conversationReply = { _, _, callbacks in
+            requests += 1
+            var reply = RealtimeAccumulator()
+            reply.text = "Go on."
+            reply.audio = Data(repeating: 1, count: 4800)
+            reply.done = true
+            try callbacks.response(reply)
+        }
+        let first = await startedLine(app, listening)
+        first.fail(AppFailure("Dropped."))
+        let reopened = await startedLineAfter(app, listening, lines: 2)
+        XCTAssertNil(app.error)
+        speak(listening)
+        reopened.emit(.speechStarted(audioMilliseconds: 300))
+        await waitUntil { app.listeningRuntime.apiHeardSpeech }
+        reopened.emit(.speechStopped(audioMilliseconds: 1300))
+        await waitUntil { requests == 1 && app.turn.activity == .playing }
+        app.audio.finishPlayback(player, successfully: true)
+        let later = await startedLineAfter(app, listening, lines: 3)
+        later.fail(AppFailure("Dropped much later."))
+        _ = await startedLineAfter(app, listening, lines: 4)
+        XCTAssertEqual(app.listening.phase, .listening)
+        XCTAssertFalse(app.handsFreeFallback)
+        XCTAssertNil(app.error)
+        app.stop()
+    }
+
     @MainActor func testAConnectionThatCannotOpenFallsBack() async throws {
         let listening = FakeListening()
         listening.refuseSession = AppFailure("OpenAI usage limit reached (rate_limit_exceeded).")
@@ -1000,6 +1034,48 @@ final class HandsFreeTests: XCTestCase {
         app.stop()
     }
 
+    /// Deleting a message is not a reason to stop listening.
+    @MainActor func testDeletingAMessageKeepsListening() async throws {
+        let listening = FakeListening()
+        let app = handsFreeApp(listening)
+        let id = try XCTUnwrap(app.selectedID)
+        let message = Message(role: "user", text: "Delete me")
+        app.append(message, to: id)
+        _ = await startedLine(app, listening)
+        app.deleteMessage(message.id)
+        XCTAssertTrue(app.listening.isOn)
+        XCTAssertTrue(app.settings.talkingMode == .handsFree && app.handsFree)
+        XCTAssertTrue(listening.capturing)
+        app.notice = nil
+        app.stop()
+    }
+
+    /// Correcting a transcript is a sheet like any other: what the learner says while editing is never a turn.
+    @MainActor func testEditingATranscriptPausesListening() async throws {
+        let listening = FakeListening()
+        let app = handsFreeApp(listening)
+        let id = try XCTUnwrap(app.selectedID)
+        var voice = Message(role: "user", text: "Misheard", audio: "saved.wav")
+        voice.transcriptionState = .completed
+        app.append(voice, to: id)
+        let line = await startedLine(app, listening)
+        let deliver = try XCTUnwrap(listening.deliver)
+        app.transcriptEditID = voice.id
+        XCTAssertEqual(app.listeningBlockers, [.sheetOpen])
+        deliver(audio(0.5))
+        deliver(audio(1, decibels: -20))
+        XCTAssertTrue(line.sent.isEmpty, "Speech while the transcript sheet is open is never sent")
+        await waitUntil { app.listening.pauses == [.sheetOpen] }
+        XCTAssertFalse(listening.capturing)
+        app.transcriptEditID = nil
+        await waitUntil { app.listening.phase == .listening && listening.capturing }
+        // Leaving the conversation closes the sheet with it, so it never holds listening paused.
+        app.transcriptEditID = voice.id
+        app.newChat()
+        XCTAssertNil(app.transcriptEditID)
+        app.stop()
+    }
+
     @MainActor func testAudioHeardBeforeABlockerIsNotSentWhenTheConnectionOpensLate() async throws {
         let listening = FakeListening()
         let gate = TestGate()
@@ -1470,6 +1546,91 @@ final class HandsFreeTests: XCTestCase {
                 XCTAssertFalse(asked, "Off by default: press to send stays as it is")
             }
         }
+    }
+
+    /// Press to send with Start Listening After Mochi Replies, and a reply that a recording starts after by itself.
+    /// The meter reads `level`; each tick of the recording clock moves time on by 0.1 s.
+    @MainActor private func listenAfterReplyApp(level: Float) -> (app: AppModel, player: TestPlayer, replies: () -> Int)
+    {
+        let app = makeApp(demo: true)
+        app.resume()
+        app.newChat()
+        app.settings.listenAfterReply = true
+        let player = TestPlayer()
+        app.audio.makePlayer = { _ in player }
+        var replies = 0
+        app.speech.conversationReply = { _, _, callbacks in
+            replies += 1
+            var reply = RealtimeAccumulator()
+            reply.text = "Hello."
+            reply.audio = Data(repeating: 1, count: 4800)
+            reply.done = true
+            try callbacks.response(reply)
+        }
+        app.media.permission = { true }
+        var take: URL?
+        app.media.record = { url in
+            try PCM.wav(audio(1, decibels: level > -48 ? -20 : nil), rate: PCM.sampleRate).write(to: url)
+            take = url
+        }
+        app.media.stopRecording = {
+            defer { take = nil }
+            return take
+        }
+        app.media.meter = { level }
+        var now = Date()
+        app.recordingNow = { now }
+        app.recordingSleep = { _ in
+            now = now.addingTimeInterval(0.1)
+            await Task.yield()
+        }
+        return (app, player, { replies })
+    }
+
+    /// With nobody there, a take that started by itself hears nothing: it ends early, is neither sent nor kept, and no
+    /// reply comes to start another one, so the microphone does not loop until the screen locks.
+    @MainActor func testASilentRecordingAfterAReplyIsDiscardedAndEndsTheLoop() async throws {
+        let (app, player, replies) = listenAfterReplyApp(level: -70)
+        var takes: [URL] = []
+        let record = app.media.record
+        app.media.record = { url in
+            takes.append(url)
+            try record(url)
+        }
+        app.draft = "Hi"
+        app.send()
+        await waitUntil { app.turn.activity == .playing }
+        app.audio.finishPlayback(player, successfully: true)
+        await waitUntil { app.turn.activity == .recording }
+        let started = try XCTUnwrap(app.recordingStartedAt)
+        await waitUntil { app.turn.activity == .idle }
+        let ended = app.recordingNow()
+        XCTAssertLessThan(
+            ended.timeIntervalSince(started), AppModel.recordingLimit / 2, "It ends long before the recording limit")
+        XCTAssertEqual(replies(), 1, "The silent take is not sent")
+        XCTAssertEqual(app.conversation?.messages.count, 2, "Nothing is added for it")
+        XCTAssertEqual(takes.count, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: try XCTUnwrap(takes.first).path), "Its file is removed")
+        XCTAssertNotNil(app.notice)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(takes.count, 1, "No new recording starts")
+        XCTAssertEqual(app.turn.activity, .idle)
+    }
+
+    /// A take that started by itself and heard the learner speak is sent as any take is.
+    @MainActor func testARecordingAfterAReplyWithSpeechIsStillSent() async throws {
+        let (app, player, replies) = listenAfterReplyApp(level: -20)
+        app.draft = "Hi"
+        app.send()
+        await waitUntil { app.turn.activity == .playing }
+        app.audio.finishPlayback(player, successfully: true)
+        await waitUntil { app.turn.activity == .recording }
+        await waitUntil { replies() == 2 }
+        let voice = try XCTUnwrap(app.conversation?.messages.first { $0.audio != nil && $0.role == "user" })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: app.store.root.appendingPathComponent(voice.audio!).path))
+        XCTAssertNil(app.notice)
+        app.settings.listenAfterReply = false
+        app.stop()
     }
 
     @MainActor func testListenAndSendNowShortcutDefaults() {

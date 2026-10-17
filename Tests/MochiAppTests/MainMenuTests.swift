@@ -37,7 +37,9 @@ final class MainMenuTests: XCTestCase {
         XCTAssertTrue(MainMenuState(app: permission).stop, "Listening waiting for microphone permission")
         let transcribing = conversationApp()
         _ = transcribing.transcripts.begin(UUID())
-        XCTAssertTrue(MainMenuState(app: transcribing).stop, "A transcription in flight")
+        XCTAssertFalse(
+            MainMenuState(app: transcribing).stop,
+            "A transcription alone finishes across Stop, so there is nothing to end")
         let find = conversationApp()
         find.find.open()
         XCTAssertFalse(find.canStop)
