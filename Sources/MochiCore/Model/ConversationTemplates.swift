@@ -15,6 +15,10 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
     public var personality = ""
     public var greeting = ""
     public var phrases: [String] = []
+    /// When an assistant deleted this user template; nil while it is in the catalog. A deleted template waits in
+    /// Recently Deleted until the user recovers it or deletes it permanently. Added in library version 6.
+    public var deletedAt: Date?
+    public var isDeleted: Bool { deletedAt != nil }
     public init(
         title: String, description: String = "", characterName: String? = nil, instructions: String = "",
         preferences: ConversationPreferences = ConversationPreferences()
@@ -31,7 +35,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
     }
     private enum CodingKeys: String, CodingKey {
         case id, revision, title, description, characterName, instructions, preferences, createdAt, updatedAt
-        case personality, greeting, phrases
+        case personality, greeting, phrases, deletedAt
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -47,6 +51,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         personality = try c.decodeIfPresent(String.self, forKey: .personality) ?? ""
         greeting = try c.decodeIfPresent(String.self, forKey: .greeting) ?? ""
         phrases = try c.decodeIfPresent([String].self, forKey: .phrases) ?? []
+        deletedAt = try c.decodeIfPresent(Date.self, forKey: .deletedAt)
     }
     /// Settings added after version 3 are written only when set. Built-in revisions hash this encoding, so a built-in
     /// without them keeps the revision it had before they existed.
@@ -64,6 +69,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         if !personality.isEmpty { try c.encode(personality, forKey: .personality) }
         if !greeting.isEmpty { try c.encode(greeting, forKey: .greeting) }
         if !phrases.isEmpty { try c.encode(phrases, forKey: .phrases) }
+        try c.encodeIfPresent(deletedAt, forKey: .deletedAt)
     }
     public var isBuiltin: Bool { Self.reservedIDs.contains(id) }
     /// Whether `text` is a revision Mochi generates: a UUID for a user's template or character, or the lowercase

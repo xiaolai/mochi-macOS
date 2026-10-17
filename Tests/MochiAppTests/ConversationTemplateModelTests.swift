@@ -13,7 +13,14 @@ final class ConversationTemplateModelTests: XCTestCase {
         let app = makeApp(root: root, preferences: makePreferences())
         app.externalControlEnabled = true
         app.selectedID = nil
+        // Template changes wait for the same activity as every other change.
         _ = app.turn.begin(.generating)
+        XCTAssertThrowsError(
+            try app.tools.execute(
+                "create_conversation_template", arguments: ["title": "Loki", "character_name": "Loki"],
+                origin: .external))
+        XCTAssertTrue(app.library.conversationTemplates.isEmpty)
+        _ = app.turn.finish(app.turn.epoch)
         app.error = "Keep provider error"
         app.notice = "Keep notice"
         let created = try app.tools.execute(
@@ -23,7 +30,7 @@ final class ConversationTemplateModelTests: XCTestCase {
         let rev = try XCTUnwrap(t["template_revision"] as? String)
         XCTAssertEqual(app.error, "Keep provider error")
         XCTAssertEqual(app.notice, "Keep notice")
-        XCTAssertEqual(app.turn.activity, .generating)
+        XCTAssertNil(app.selectedID, "A template change opens no conversation")
         let updated = try app.tools.execute(
             "update_conversation_template",
             arguments: ["template_id": id, "expected_template_revision": rev, "instructions": "Discuss books"],
@@ -33,7 +40,6 @@ final class ConversationTemplateModelTests: XCTestCase {
                 "delete_conversation_template", arguments: ["template_id": id, "expected_template_revision": rev],
                 origin: .external))
         let newRev = (updated["template"] as! [String: Any])["template_revision"] as! String
-        _ = app.turn.finish(app.turn.epoch)
         let chat = try app.tools.execute(
             "create_conversation", arguments: ["template_id": id, "expected_revision": app.tools.revision],
             origin: .external)
@@ -43,7 +49,87 @@ final class ConversationTemplateModelTests: XCTestCase {
             "delete_conversation_template", arguments: ["template_id": id, "expected_template_revision": newRev],
             origin: .external)
         XCTAssertEqual(app.conversation?.instructions, "Discuss books")
-        XCTAssertTrue(app.library.conversationTemplates.isEmpty)
+        XCTAssertFalse(app.templates.all.contains { $0.id.uuidString == id })
+        XCTAssertEqual(
+            app.templates.recentlyDeleted.map(\.id.uuidString), [id], "An assistant's deletion is recoverable")
+    }
+    /// An assistant's deletion moves a template to Recently Deleted, out of every tool and picker; the user can
+    /// recover it unchanged or delete it permanently.
+    @MainActor func testAssistantDeletionIsRecoverableInMochi() throws {
+        let app = controlledApp()
+        let template = try app.templates.create(
+            .init(title: "Zyzzyva drills", settings: .init(instructions: "Ask me words")))
+        _ = try app.tools.execute(
+            "delete_conversation_template",
+            arguments: ["template_id": template.id.uuidString, "expected_template_revision": template.revision],
+            origin: .external)
+        XCTAssertEqual(app.library.conversationTemplates.count, 1, "Nothing is removed")
+        XCTAssertNotNil(app.library.conversationTemplates[0].deletedAt)
+        XCTAssertFalse(app.templates.all.contains { $0.id == template.id })
+        XCTAssertTrue(app.templates.sections(matching: "Zyzzyva").isEmpty)
+        let listed = try app.tools.execute(
+            "list_conversation_templates", arguments: ["origin": "user"], origin: .external)
+        XCTAssertEqual((listed["templates"] as? [[String: Any]])?.count, 0)
+        for name in ["get_conversation_template", "update_conversation_template", "delete_conversation_template"] {
+            var arguments: [String: Any] = ["template_id": template.id.uuidString]
+            if name != "get_conversation_template" { arguments["expected_template_revision"] = template.revision }
+            if name == "update_conversation_template" { arguments["title"] = "Changed" }
+            XCTAssertThrowsError(try app.tools.execute(name, arguments: arguments, origin: .external), name)
+        }
+        XCTAssertThrowsError(
+            try app.tools.execute(
+                "create_conversation",
+                arguments: ["template_id": template.id.uuidString, "expected_revision": app.tools.revision],
+                origin: .external))
+
+        try app.templates.recover(id: template.id)
+        XCTAssertEqual(app.templates.all.last, template, "Recovered unchanged, revision included")
+        XCTAssertTrue(app.templates.recentlyDeleted.isEmpty)
+
+        let again = try app.tools.execute(
+            "delete_conversation_template",
+            arguments: ["template_id": template.id.uuidString, "expected_template_revision": template.revision],
+            origin: .external)
+        XCTAssertEqual(again["deleted_template_id"] as? String, template.id.uuidString)
+        try app.templates.delete(id: template.id, revision: template.revision)
+        XCTAssertTrue(app.library.conversationTemplates.isEmpty, "The user can still delete it for good")
+    }
+    /// Template changes are refused while a panel is open or Mochi is busy, as other changes are; reads still work.
+    @MainActor func testTemplateChangesObeyTheActivityAndPanelGates() throws {
+        let app = controlledApp()
+        let template = try app.templates.create(.init(title: "Recall", settings: .init(instructions: "Ask me words")))
+        let changes: [(String, [String: Any])] = [
+            ("create_conversation_template", ["title": "New", "character_name": "Loki"]),
+            (
+                "update_conversation_template",
+                [
+                    "template_id": template.id.uuidString, "expected_template_revision": template.revision,
+                    "title": "Changed",
+                ]
+            ),
+            (
+                "delete_conversation_template",
+                ["template_id": template.id.uuidString, "expected_template_revision": template.revision]
+            ),
+        ]
+        func assertRefused(_ state: String) {
+            for (name, arguments) in changes {
+                XCTAssertThrowsError(try app.tools.execute(name, arguments: arguments, origin: .external), state)
+            }
+            XCTAssertNoThrow(try app.tools.execute("list_conversation_templates", arguments: [:], origin: .external))
+            XCTAssertEqual(app.library.conversationTemplates, [template], state)
+        }
+        for activity in [Activity.recording, .generating] {
+            _ = app.turn.begin(activity)
+            assertRefused("\(activity)")
+            _ = app.turn.finish(app.turn.epoch)
+        }
+        app.openTemplateManager()
+        assertRefused("template manager open")
+        app.customization.closeTemplates()
+        XCTAssertNoThrow(try app.tools.execute(changes[0].0, arguments: changes[0].1, origin: .external))
+        XCTAssertNoThrow(try app.tools.execute(changes[2].0, arguments: changes[2].1, origin: .external))
+        XCTAssertEqual(app.templates.recentlyDeleted.map(\.id), [template.id])
     }
     @MainActor func testNameOnlyMutationPreservesOversizedInstructionsAndNoOpRevision() throws {
         let app = makeApp(demo: true)
@@ -105,9 +191,13 @@ extension ConversationTemplateModelTests {
             }
         } while true
         XCTAssertEqual(ids.count, 120 + ConversationTemplate.builtins.count)
-        _ = try app.tools.execute(
-            "create_conversation_template", arguments: ["title": "New", "character_name": "Loki"], origin: .external)
+        XCTAssertThrowsError(
+            try app.tools.execute(
+                "create_conversation_template", arguments: ["title": "New", "character_name": "Loki"],
+                origin: .external),
+            "The open picker is a panel, so template changes wait until it closes")
         XCTAssertEqual(app.customization.templatePresentation, .picker)
+        app.library.conversationTemplates.append(ConversationTemplate(title: "New", instructions: "Discuss"))
         XCTAssertThrowsError(
             try app.tools.execute(
                 "list_conversation_templates", arguments: ["expected_catalog_revision": revision], origin: .external))

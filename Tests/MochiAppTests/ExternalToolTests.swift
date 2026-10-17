@@ -232,6 +232,29 @@ final class ExternalToolTests: XCTestCase {
         clock += CreationLimit.window
         XCTAssertNoThrow(try save(300))
     }
+    /// Searching every expression lists them as My Expressions does, but never names a conversation the tools
+    /// cannot see: archived, deleted or gone.
+    @MainActor func testSearchAllExpressionsNamesOnlyActiveConversations() throws {
+        let app = controlledApp()
+        let active = try XCTUnwrap(app.selectedID)
+        var archived = Conversation(title: "Archived")
+        archived.archived = true
+        var deleted = Conversation(title: "Deleted")
+        deleted.deletedAt = Date()
+        app.library.conversations += [archived, deleted]
+        for (index, owner) in [active, archived.id, deleted.id, UUID()].enumerated() {
+            app.library.expressions.append(
+                PracticeExpression(conversationID: owner, meaning: "", english: "Line \(index)", language: .english))
+        }
+        let found = try app.tools.execute("search_all_expressions", arguments: ["query": "Line"], origin: .external)
+        let items = try XCTUnwrap(found["expressions"] as? [[String: Any]])
+        XCTAssertEqual(items.count, 4)
+        let owners = Dictionary(uniqueKeysWithValues: items.map { ($0["text"] as! String, $0["conversation_id"]!) })
+        XCTAssertEqual(owners["Line 0"] as? String, active.uuidString)
+        for text in ["Line 1", "Line 2", "Line 3"] { XCTAssertTrue(owners[text] is NSNull, text) }
+        let tool = try XCTUnwrap(MochiTools.catalog(origin: .external).first { $0.name == .searchAllExpressions })
+        XCTAssertEqual(Self.schemaProblems(found, tool.outputSchema), [])
+    }
     @MainActor func testRenameAndArchiveActOnAnyActiveConversation() throws {
         let app = controlledApp()
         let open = try XCTUnwrap(app.selectedID)
@@ -310,7 +333,9 @@ final class ExternalToolTests: XCTestCase {
     @MainActor func testSearchAllExpressionsSpansConversationsNewestFirst() throws {
         let app = controlledApp()
         let open = try XCTUnwrap(app.selectedID)
-        let elsewhere = UUID()
+        let other = Conversation(title: "Elsewhere")
+        app.library.conversations.append(other)
+        let elsewhere = other.id
         func expression(_ text: String, in conversation: UUID, at time: TimeInterval) -> PracticeExpression {
             var item = PracticeExpression(conversationID: conversation, meaning: "", english: text, language: .english)
             item.date = Date(timeIntervalSince1970: time)

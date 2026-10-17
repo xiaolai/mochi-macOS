@@ -1161,30 +1161,30 @@
         }
       }
     },
-    "A connected assistant can read active conversations, configure a conversation, save expressions, open practice, and control playback. Recording always starts with you. The connection stays on this Mac and is available only to your macOS user." : {
+    "A connected assistant can read your active conversations, saved expressions, templates and characters. It can create, open, rename, archive and set up conversations; save expressions, prepare one in Help Me Say This and open practice; create, edit and delete templates, which go to Recently Deleted in Manage Templates for you to recover; and control playback. Its changes are refused while you record, Mochi replies, or an editing, template or practice panel is open. Recording always starts with you. The connection stays on this Mac and is available only to your macOS user." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "接続したアシスタントは、アクティブな会話の読み取り、会話の設定、表現の保存、練習画面の表示、再生の操作を行えます。録音は必ずあなた自身が開始します。接続はこのMac内に限られ、あなたのmacOSユーザだけが利用できます。"
+            "value" : "接続したアシスタントは、アクティブな会話、保存した表現、テンプレート、キャラクターを読み取れます。会話の作成・表示・名前の変更・アーカイブ・設定、表現の保存、「言い方を教えて」での表現の準備、練習画面の表示、テンプレートの作成・編集・削除（削除したテンプレートは「テンプレートを管理」の「最近削除した項目」に移り、あなたが復元できます）、再生の操作を行えます。録音中、Mochi の返答中、または編集・テンプレート・練習のパネルを開いている間は、変更は拒否されます。録音は必ずあなた自身が開始します。接続はこのMac内に限られ、あなたのmacOSユーザだけが利用できます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "연결된 어시스턴트는 활성 대화를 읽고, 대화를 구성하고, 표현을 저장하고, 연습을 열고, 재생을 제어할 수 있습니다. 녹음은 항상 사용자가 시작합니다. 연결은 이 Mac에만 유지되며 사용자의 macOS 계정에서만 사용할 수 있습니다."
+            "value" : "연결된 어시스턴트는 활성 대화, 저장한 표현, 템플릿과 캐릭터를 읽을 수 있습니다. 대화를 만들고, 열고, 이름을 바꾸고, 보관하고, 설정할 수 있으며, 표현을 저장하고, ‘말하기 도우미’에서 표현을 준비하고, 연습을 열 수 있습니다. 템플릿을 만들고, 편집하고, 삭제할 수 있으며 삭제한 템플릿은 ‘템플릿 관리’의 ‘최근 삭제된 항목’으로 이동해 사용자가 복구할 수 있습니다. 재생도 제어할 수 있습니다. 녹음 중이거나 Mochi가 답하는 중이거나 편집, 템플릿, 연습 패널이 열려 있으면 변경이 거부됩니다. 녹음은 항상 사용자가 시작합니다. 연결은 이 Mac에만 유지되며 사용자의 macOS 계정에서만 사용할 수 있습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已连接的助手可以读取进行中的对话、配置对话、保存表达、打开练习以及控制播放。录音始终由你开始。连接仅限于这台 Mac，且只对你的 macOS 用户可用。"
+            "value" : "已连接的助手可以读取进行中的对话、已保存的表达、模板和角色。它可以创建、打开、重命名、归档和设置对话；保存表达、在“帮我说出来”中准备表达以及打开练习；创建、编辑和删除模板，删除的模板会移到“管理模板”中的“最近删除”，由你恢复；以及控制播放。在你录音、Mochi 回复或编辑、模板、练习面板打开时，它的更改会被拒绝。录音始终由你开始。连接仅限于这台 Mac，且只对你的 macOS 用户可用。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "連接的助理可以讀取進行中的對話、設定對話、儲存表達、打開練習，以及控制播放。錄音一律由你開始。連線僅保留在這台 Mac 上，且只供你的 macOS 使用者使用。"
+            "value" : "連接的助理可以讀取進行中的對話、已儲存的表達、範本和角色。它可以建立、打開、重新命名、封存和設定對話；儲存表達、在「幫我說出來」中準備表達，以及打開練習；建立、編輯和刪除範本，刪除的範本會移到「管理範本」中的「最近刪除」，由你復原；以及控制播放。在你錄音、Mochi 回覆，或編輯、範本、練習面板打開時，它的變更會被拒絕。錄音一律由你開始。連線僅保留在這台 Mac 上，且只供你的 macOS 使用者使用。"
           }
         }
       }
@@ -5273,6 +5273,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法保護自動化檔案夾。請檢查其權限，然後重新啟用控制。"
+          }
+        }
+      }
+    },
+    "Could not recover template." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートを復元できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿을 복구할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法恢复模板。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法復原範本。"
           }
         }
       }

@@ -281,14 +281,15 @@ public enum MochiTools {
             Definition(
                 name: .searchAllExpressions, title: "Search All Expressions",
                 description:
-                    "Search saved expressions across every conversation, newest first. To practise one, open its conversation, then call start_practice.",
+                    "Search every saved expression, as My Expressions lists them, newest first. conversation_id names the expression's active conversation, or is null when that conversation is archived, deleted or gone. To practise one, open its conversation, then call start_practice.",
                 properties: [
                     "query": described(
                         text, "Text to find in an expression or its meaning, ignoring case. Omit to list all."),
                     "limit": limit, "offset": offset,
                 ], required: [],
                 output: [
-                    "expressions": list(object(expressionItem.merging(["conversation_id": string]) { _, new in new })),
+                    "expressions": list(
+                        object(expressionItem.merging(["conversation_id": nullable("string")]) { _, new in new })),
                     "has_more": flag, "next_offset": nextOffset,
                 ], readOnly: true, idempotent: true, scope: .app, origins: [.external]),
             Definition(
@@ -431,7 +432,7 @@ public enum MochiTools {
             Definition(
                 name: .deleteConversationTemplate, title: "Delete Conversation Template",
                 description:
-                    "Delete a user template using its revision. Existing conversations retain their snapshots.",
+                    "Delete a user template using its revision. It moves to Recently Deleted in Mochi's template manager, where only the user can recover it or delete it permanently. Existing conversations retain their snapshots.",
                 properties: ["template_id": templateID, "expected_template_revision": templateRevision],
                 required: ["template_id", "expected_template_revision"],
                 output: ["deleted_template_id": string, "catalog_revision": catalogRevision], destructive: true,

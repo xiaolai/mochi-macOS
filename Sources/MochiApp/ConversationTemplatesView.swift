@@ -66,13 +66,12 @@ struct ConversationTemplatesView: View {
         List(selection: $selection) {
             ForEach(app.templates.sections(matching: query), id: \.section) { group in
                 Section(group.section.title) {
-                    ForEach(group.templates) { t in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(t.displayTitle).fontWeight(.medium)
-                            Text(t.displayDescription).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        }.frame(maxWidth: .infinity, alignment: .leading).tag(t.id)
-                    }
+                    ForEach(group.templates) { row($0) }
                 }
+            }
+            // Templates an assistant deleted wait here until the user recovers them or deletes them permanently.
+            if mode == .manager, !deleted.isEmpty {
+                Section("Recently Deleted") { ForEach(deleted) { row($0) } }
             }
         }.frame(width: 195).focused($listFocused)
             .onAppear {
@@ -81,11 +80,27 @@ struct ConversationTemplatesView: View {
             }
             .onChange(of: selection) { _, id in
                 guard let id, app.customization.templateDraft?.value.id != id,
-                    let t = app.templates.all.first(where: { $0.id == id })
+                    let t = (app.templates.all + app.templates.recentlyDeleted).first(where: { $0.id == id })
                 else { return }
                 app.customization.previewTemplate(t)
                 error = nil
             }
+    }
+    /// Recently deleted templates whose stored or translated title or description contains the search text.
+    private var deleted: [ConversationTemplate] {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return app.templates.recentlyDeleted.filter { t in
+            term.isEmpty
+                || [t.title, t.description, t.displayTitle, t.displayDescription].contains {
+                    $0.localizedCaseInsensitiveContains(term)
+                }
+        }
+    }
+    private func row(_ t: ConversationTemplate) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(t.displayTitle).fontWeight(.medium)
+            Text(t.displayDescription).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+        }.frame(maxWidth: .infinity, alignment: .leading).tag(t.id)
     }
     @ViewBuilder private var preview: some View {
         if let draft = app.customization.templateDraft {
@@ -97,23 +112,44 @@ struct ConversationTemplatesView: View {
                 } else {
                     TemplateSummary(app: app, template: draft.value)
                 }
-                sourceStatus(draft)
-                HStack {
-                    Button("Duplicate…") {
-                        app.customization.editTemplate(draft.value, duplicate: true)
-                        error = nil
-                    }
-                    if mode == .manager && !draft.value.isBuiltin {
-                        Button("Edit…") {
-                            app.customization.editTemplate(draft.value)
-                            error = nil
+                if draft.value.isDeleted {
+                    HStack {
+                        Button("Recover") {
+                            do {
+                                try app.templates.recover(id: draft.value.id)
+                                if let recovered = app.templates.all.first(where: { $0.id == draft.value.id }) {
+                                    app.customization.previewTemplate(recovered)
+                                }
+                                error = nil
+                            } catch {
+                                self.error =
+                                    (error as? AppFailure)?.message ?? String(localized: "Could not recover template.")
+                            }
                         }
-                        Button("Delete…", role: .destructive) { pendingDelete = draft.value }
+                        Button("Delete Permanently…", role: .destructive) { pendingDelete = draft.value }
                     }
+                } else {
+                    sourceStatus(draft)
+                    templateActions(draft)
                 }
             }
         } else {
             Text("Select a template to preview it.").foregroundStyle(.secondary)
+        }
+    }
+    @ViewBuilder private func templateActions(_ draft: TemplateEditorDraft) -> some View {
+        HStack {
+            Button("Duplicate…") {
+                app.customization.editTemplate(draft.value, duplicate: true)
+                error = nil
+            }
+            if mode == .manager && !draft.value.isBuiltin {
+                Button("Edit…") {
+                    app.customization.editTemplate(draft.value)
+                    error = nil
+                }
+                Button("Delete…", role: .destructive) { pendingDelete = draft.value }
+            }
         }
     }
     @ViewBuilder private func sourceStatus(_ draft: TemplateEditorDraft) -> some View {

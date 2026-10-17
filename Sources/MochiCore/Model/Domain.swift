@@ -212,9 +212,9 @@ public struct PracticeExpression: Codable, Identifiable {
 }
 public struct Library: Codable {
     /// The format this version of Mochi writes. Version 4 added characters and each setup's personality, greeting,
-    /// phrases and voice; version 5 added review state, recording metadata and transcript evidence. Older Mochi
-    /// refuses a newer format rather than dropping what it does not know.
-    public static let currentVersion = 5
+    /// phrases and voice; version 5 added review state, recording metadata and transcript evidence; version 6 added
+    /// Recently Deleted for templates. Older Mochi refuses a newer format rather than dropping what it does not know.
+    public static let currentVersion = 6
     public var conversationTemplates: [ConversationTemplate] = []
     /// The user's own characters; the built-in ones are defined in code.
     public var characters: [ConversationCharacter] = []

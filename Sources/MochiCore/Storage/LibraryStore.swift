@@ -17,6 +17,8 @@ public final class LibraryStore {
     public static let characterLibraryBackupPrefix = "library-before-character-library-v4"
     /// Names the copies of a version-4 library kept before its first version-5 save.
     public static let reviewLibraryBackupPrefix = "library-before-review-v5"
+    /// Names the copies of a version-5 library kept before its first version-6 save.
+    public static let templateRecoveryLibraryBackupPrefix = "library-before-template-recovery-v6"
     private struct FileIdentity: Equatable {
         let device: Int32
         let inode: UInt64
@@ -272,6 +274,7 @@ public final class LibraryStore {
         if version < 3 { try keepUpgradeBackup(original, named: "library-before-character-templates-v3") }
         if version == 3 { try keepUpgradeBackup(original, named: Self.characterLibraryBackupPrefix) }
         if version == 4 { try keepUpgradeBackup(original, named: Self.reviewLibraryBackupPrefix) }
+        if version == 5 { try keepUpgradeBackup(original, named: Self.templateRecoveryLibraryBackupPrefix) }
         let instructionsBackup = root.appendingPathComponent("library-before-conversation-instructions.json")
         if !FileManager.default.fileExists(atPath: instructionsBackup.path) {
             try writeNewPrivateFile(original, to: instructionsBackup)
