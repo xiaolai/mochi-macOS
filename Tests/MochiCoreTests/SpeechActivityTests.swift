@@ -56,6 +56,50 @@ final class SpeechActivityTests: XCTestCase {
         XCTAssertNotNil(detector.feed(audio(0.5, decibels: -20)), "Speech above the fan is still heard")
     }
 
+    func testASteadySoundThatStartsSuddenlyStopsCountingAsSpeech() {
+        var detector = SpeechActivityDetector()
+        detector.feed(audio(1, decibels: nil))
+        // A fan switches on far above the floor: at first it cannot be told from speech...
+        XCTAssertNotNil(detector.feed(audio(0.5, decibels: -35)))
+        // ...but it never dips the way speech does, so after the adaptation period it is the room.
+        detector.feed(audio(4, decibels: -35))
+        XCTAssertGreaterThan(detector.noiseFloor, -37)
+        XCTAssertEqual(detector.trailingSilence, 4.5, accuracy: 0.05, "The turn it started holds no speech")
+        detector.reset()
+        XCTAssertNil(detector.feed(audio(2, decibels: -35)), "Once learnt it starts nothing")
+        XCTAssertNotNil(detector.feed(audio(0.5, decibels: -15)), "Speech over it is still heard")
+    }
+
+    func testASoundStartingDuringSpeechLetsTheTurnEndAfterTheSpeech() {
+        var detector = SpeechActivityDetector()
+        detector.feed(audio(1, decibels: nil))
+        XCTAssertNotNil(detector.feed(audio(1, decibels: -20)))
+        detector.feed(audio(4, decibels: -40))
+        XCTAssertEqual(detector.trailingSilence, 4, accuracy: 0.05, "Quiet since the speech, not since the floor moved")
+    }
+
+    func testARoomAlreadyNoisyWhenListeningStartsIsLearnt() {
+        // A café from the moment listening starts: steady, so it is the room once the adaptation period has passed.
+        var detector = SpeechActivityDetector()
+        XCTAssertEqual(detector.feed(audio(3.5, decibels: -40)), 0)
+        XCTAssertEqual(detector.noiseFloor, -40, accuracy: 1)
+        XCTAssertEqual(detector.trailingSilence, 3.5, accuracy: 0.05, "The turn it started holds no speech")
+        detector.reset()
+        XCTAssertNil(detector.feed(audio(1, decibels: -40)))
+        XCTAssertEqual(detector.feed(audio(0.5, decibels: -15)), 108_000, "Speech still starts on its first frames")
+    }
+
+    func testContinuousSpeechWithItsGapsNeverBecomesTheFloor() {
+        var detector = SpeechActivityDetector()
+        detector.feed(audio(1, decibels: nil))
+        // Syllables and the short gaps between them, for longer than the adaptation period.
+        var pattern = Data()
+        for _ in 0..<12 { pattern += audio(0.3, decibels: -25) + audio(0.1, decibels: nil) }
+        XCTAssertNotNil(detector.feed(pattern))
+        XCTAssertLessThan(detector.noiseFloor, -55)
+        XCTAssertLessThanOrEqual(detector.trailingSilence, 0.1)
+    }
+
     func testQuietSpeechBelowTheMinimumIsIgnored() {
         var detector = SpeechActivityDetector()
         detector.feed(audio(1, decibels: nil))

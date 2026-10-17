@@ -14,6 +14,11 @@ public struct SpeechActivityDetector: Sendable {
     /// Loud frames needed within `windowFrames` before speech counts as started: 160 ms of the last 240 ms.
     public var speechFrames = 8
     public var windowFrames = 12
+    /// The floor rises to the quietest frame of the last 3 s. Speech always dips between syllables within that time;
+    /// a steady sound (a fan switching on, a café) never does, so it becomes the floor however suddenly it began, or
+    /// however loud the room already was when listening started. Until then it cannot be told from speech that starts
+    /// with the stream, so it is heard as speech for that long.
+    public var floorFrames = 150
     public private(set) var noiseFloor: Float = -60
     /// Where speech started, in samples since the detector was created or restarted; nil until it has.
     public private(set) var speechStart: Int?
@@ -29,6 +34,8 @@ public struct SpeechActivityDetector: Sendable {
     /// The recent frames' loudness and where each began, oldest first.
     private var window: [(loud: Bool, start: Int)] = []
     private var quietFramesSinceSpeech = 0
+    /// The levels of the last `floorFrames` frames, oldest first; empty until the first frame.
+    private var levels: [Float] = []
 
     public init() {}
 
@@ -73,15 +80,32 @@ public struct SpeechActivityDetector: Sendable {
         let start = processed
         processed += frame.count
         let loud = level >= max(noiseFloor + marginDecibels, minimumDecibels)
-        if speechStart != nil {
-            quietFramesSinceSpeech = loud ? 0 : quietFramesSinceSpeech + 1
-            return nil
-        }
-        // The floor falls at once to a quieter frame and rises slowly through quiet ones, never through speech.
+        // The floor falls at once to a quieter frame and rises slowly through quiet ones, never through speech. It
+        // also rises to sustained sound, while speech is heard too, so a turn heard over a sound that began during it
+        // can still end.
         if level < noiseFloor {
             noiseFloor = level
         } else if !loud {
             noiseFloor += 0.05 * (level - noiseFloor)
+        }
+        levels.append(level)
+        if levels.count > floorFrames { levels.removeFirst() }
+        var sustained = false
+        if levels.count == floorFrames, let quietest = levels.min(), quietest > noiseFloor {
+            noiseFloor = quietest
+            sustained = true
+        }
+        if let speechStart {
+            quietFramesSinceSpeech = loud ? 0 : quietFramesSinceSpeech + 1
+            if sustained {
+                // The sound just learnt as the floor was counted as loud while it lasted; under the new floor it is
+                // quiet, so a turn it alone started holds no speech.
+                let threshold = max(noiseFloor + marginDecibels, minimumDecibels)
+                let run = levels.reversed().prefix { $0 < threshold }.count
+                quietFramesSinceSpeech = max(
+                    quietFramesSinceSpeech, min(run, (processed - speechStart) / Self.frameSamples))
+            }
+            return nil
         }
         window.append((loud, start))
         if window.count > windowFrames { window.removeFirst() }
