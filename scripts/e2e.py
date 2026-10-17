@@ -218,13 +218,19 @@ def verdict(check, text, exit_code):
     if check.name == "tools-probe":
         line = text.strip().splitlines()[0]
         return line.startswith("Live Realtime instructions and tools: PASS"), line[:120]
-    if check.name in ("hands-free", "barge-in"):
-        results = [c["passed"] for c in json.loads(text).get("checks", [])]
-        return bool(results) and all(results), f"{sum(results)} of {len(results)} checks passed"
-    if check.name == "single-instance":
-        report = json.loads(text)
-        checks = report.get("checks", [])
-        return report.get("result") == "PASS" and bool(checks), f"{report.get('result')}, {len(checks)} checks"
+    if check.name in ("hands-free", "barge-in", "single-instance"):
+        # A crash can leave the report truncated; one bad report fails its check and the run goes on to the next.
+        try:
+            report = json.loads(text)
+            if not isinstance(report, dict) or not isinstance(report.get("checks", []), list):
+                raise ValueError("not an object with a list of checks")
+            checks = report.get("checks", [])
+            if check.name == "single-instance":
+                return report.get("result") == "PASS" and bool(checks), f"{report.get('result')}, {len(checks)} checks"
+            results = [c["passed"] is True for c in checks]
+            return bool(results) and all(results), f"{sum(results)} of {len(results)} checks passed"
+        except (ValueError, KeyError, TypeError) as error:
+            return False, f"{check.evidence} is not a readable report: {type(error).__name__}: {error}"[:200]
     if check.name.startswith("audition-"):
         # A filter that matches nothing also exits 0; the suite itself has to have passed.
         passed = f"Test Suite '{check.evidence}' passed" in text
@@ -313,7 +319,7 @@ def run_check(host, folder, check):
         args = " ".join(f'"{a}"' for a in check.app_args).replace("{learner}", f"{folder}/evidence/learner.pcm")
         body = (f"rm -rf {evidence}; mkdir -p {evidence}; cd {folder}\n"
                 f"perl -e 'alarm shift; exec @ARGV' {check.timeout} open -n -W -F "
-                f"--env MOCHI_EVIDENCE_DIR={evidence} build/Mochi.app --args {args}\n"
+                f"--env MOCHI_EVIDENCE_DIR={evidence} build/Mochi.app --args {args} > {evidence}/launch.txt 2>&1\n"
                 f"code=$?; cat {evidence}/{check.evidence} 2>/dev/null; exit $code")
     else:
         source = f"{folder}/{check.evidence}" if "/" in check.evidence else ""

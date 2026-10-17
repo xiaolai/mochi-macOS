@@ -210,6 +210,28 @@ class VerdictTests(unittest.TestCase):
         self.assertTrue(e2e.verdict(self.check("single-instance"),
                                     json.dumps({"result": "PASS", "checks": [{}]}), 0)[0])
 
+    def test_an_unreadable_report_fails_with_its_reason_instead_of_stopping_the_run(self):
+        unreadable = ('{"checks": [{"passed": tr', "[]", '{"checks": {}}',
+                      'objc: Class X is implemented in both\n{"result": "PASS", "checks": [{}]}')
+        cases = [(name, text) for name in ("hands-free", "barge-in", "single-instance") for text in unreadable]
+        # The hands-free report's verdict reads each check, so a check without its result is unreadable too.
+        cases += [(name, text) for name in ("hands-free", "barge-in") for text in ('{"checks": [1]}', '{"checks": [{}]}')]
+        for name, text in cases:
+            with self.subTest(name=name, text=text):
+                passed, summary = e2e.verdict(self.check(name), text, 0)
+                self.assertFalse(passed)
+                self.assertIn("not a readable report", summary)
+
+    def test_an_app_checks_launch_output_stays_out_of_its_evidence(self):
+        scripts = []
+        def remote(host, script, timeout=120):
+            scripts.append(script)
+            return 0, '{"checks": [{"passed": true}]}'
+        with mock.patch.object(e2e, "remote", remote):
+            passed, _, _ = e2e.run_check("mac", "$HOME/mochi-e2e/x", self.check("hands-free"))
+        self.assertTrue(passed)
+        self.assertIn("> $HOME/mochi-e2e/x/evidence/hands-free/launch.txt 2>&1", scripts[0])
+
     def test_an_audition_that_ran_nothing_does_not_pass(self):
         coaching = self.check("audition-CoachingAuditionTests")
         self.assertFalse(e2e.verdict(coaching, "Executed 0 tests, with 0 failures\n", 0)[0])
