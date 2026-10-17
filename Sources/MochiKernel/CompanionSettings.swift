@@ -11,6 +11,35 @@ public enum SingleLineText {
     public static func isValid(_ text: String) -> Bool { !text.unicodeScalars.contains(where: isForbidden) }
 }
 
+/// A conversation's or template's title: one line, within the limits a template title has always had.
+public enum ConversationTitle {
+    public static let maxCharacters = 160
+    public static let maxBytes = 2048
+    /// Refuses empty text, text over the limits, and line breaks, control characters or text-direction overrides,
+    /// which would reorder or break the title wherever it is listed.
+    public static func validate(_ value: String) throws {
+        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, value.count <= maxCharacters,
+            value.utf8.count <= maxBytes, SingleLineText.isValid(value)
+        else {
+            throw AppFailure(
+                "A conversation title must be one line of 1 to 160 characters and at most 2 KB, without control characters or text-direction overrides."
+            )
+        }
+    }
+}
+
+/// A saved expression and its meaning. Search results show at most 1,000 characters of either, so a longer one could
+/// never be read back whole; the byte limit stops combining marks from hiding a large text in few characters.
+public enum ExpressionText {
+    public static let maxCharacters = 1000
+    public static let maxBytes = 8192
+    public static func validate(_ value: String) throws {
+        guard value.count <= maxCharacters, value.utf8.count <= maxBytes else {
+            throw AppFailure("An expression and its meaning must each fit within 1,000 characters and 8 KB.")
+        }
+    }
+}
+
 /// How the companion comes across: its manner and temperament, kept apart from what the conversation is for.
 public enum ConversationPersonality {
     public static let maxCharacters = 2000

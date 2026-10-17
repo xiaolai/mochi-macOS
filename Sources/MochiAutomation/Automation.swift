@@ -158,13 +158,17 @@ public enum MochiTools {
             ["type": "integer", "minimum": 0, "maximum": 100000],
             "Items to skip. Pass next_offset from the previous page.")
         let conversationTitle = described(
-            ["type": "string", "maxLength": 160], "Conversation title, at most 160 characters.")
+            ["type": "string", "maxLength": ConversationTitle.maxCharacters],
+            "Conversation title: one line of at most 160 characters.")
         let templateID = described(uuid, "ID of a template, from list_conversation_templates.")
         let templateRevision = described(
             text, "template_revision from get_conversation_template. A template changed since then is refused.")
+        let expressionText: [String: Any] = ["type": "string", "maxLength": ExpressionText.maxCharacters]
         let expression: [String: [String: Any]] = [
-            "text": described(text, "The expression, written in the conversation's language."),
-            "meaning": described(text, "Optional. What the user means, in their own words."),
+            "text": described(
+                expressionText, "The expression, written in the conversation's language, at most 1,000 characters."),
+            "meaning": described(
+                expressionText, "Optional. What the user means, in their own words, at most 1,000 characters."),
         ]
         let audio: [String: [String: Any]] = [
             "message_id": described(
@@ -277,14 +281,15 @@ public enum MochiTools {
             Definition(
                 name: .searchAllExpressions, title: "Search All Expressions",
                 description:
-                    "Search saved expressions across every conversation, newest first. To practise one, open its conversation, then call start_practice.",
+                    "Search every saved expression, as My Expressions lists them, newest first. conversation_id names the expression's active conversation, or is null when that conversation is archived, deleted or gone. To practise one, open its conversation, then call start_practice.",
                 properties: [
                     "query": described(
                         text, "Text to find in an expression or its meaning, ignoring case. Omit to list all."),
                     "limit": limit, "offset": offset,
                 ], required: [],
                 output: [
-                    "expressions": list(object(expressionItem.merging(["conversation_id": string]) { _, new in new })),
+                    "expressions": list(
+                        object(expressionItem.merging(["conversation_id": nullable("string")]) { _, new in new })),
                     "has_more": flag, "next_offset": nextOffset,
                 ], readOnly: true, idempotent: true, scope: .app, origins: [.external]),
             Definition(
@@ -354,7 +359,9 @@ public enum MochiTools {
                 name: .renameConversation, title: "Rename Conversation",
                 description: "Rename an active conversation. It does not need to be open.",
                 properties: [
-                    "title": described(["type": "string", "maxLength": 160], "The new title, at most 160 characters.")
+                    "title": described(
+                        ["type": "string", "maxLength": ConversationTitle.maxCharacters],
+                        "The new title: one line of at most 160 characters.")
                 ], required: ["title"], output: conversationResult, destructive: true, idempotent: true,
                 scope: .history, origins: [.external]),
             Definition(
@@ -425,7 +432,7 @@ public enum MochiTools {
             Definition(
                 name: .deleteConversationTemplate, title: "Delete Conversation Template",
                 description:
-                    "Delete a user template using its revision. Existing conversations retain their snapshots.",
+                    "Delete a user template using its revision. It moves to Recently Deleted in Mochi's template manager, where only the user can recover it or delete it permanently. Existing conversations retain their snapshots.",
                 properties: ["template_id": templateID, "expected_template_revision": templateRevision],
                 required: ["template_id", "expected_template_revision"],
                 output: ["deleted_template_id": string, "catalog_revision": catalogRevision], destructive: true,
@@ -543,6 +550,10 @@ public enum MochiTools {
         }
         switch name {
         case .createConversation:
+            if let title = arguments["title"] as? String {
+                let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { try ConversationTitle.validate(trimmed) }
+            }
             if arguments["template_id"] == nil
                 && (arguments["expected_template_revision"] != nil || arguments["clear_character_name"] != nil
                     || arguments["clear_voice"] != nil)
@@ -568,10 +579,13 @@ public enum MochiTools {
             if (arguments["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw AppFailure("An expression is required.")
             }
-        case .renameConversation:
-            if (arguments["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                throw AppFailure("A conversation title is required.")
+            for key in ["text", "meaning"] {
+                if let value = arguments[key] as? String { try ExpressionText.validate(value) }
             }
+        case .renameConversation:
+            let title = (arguments["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if title.isEmpty { throw AppFailure("A conversation title is required.") }
+            try ConversationTitle.validate(title)
         case .setConversationPreferences:
             if arguments["speed"] == nil && arguments["coaching"] == nil && arguments["language"] == nil {
                 throw AppFailure("Specify speed, coaching or language.")

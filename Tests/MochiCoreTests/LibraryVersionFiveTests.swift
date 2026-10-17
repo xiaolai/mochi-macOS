@@ -38,7 +38,8 @@ final class LibraryVersionFiveTests: XCTestCase {
         XCTAssertEqual(
             (try FileManager.default.attributesOfItem(atPath: root.appendingPathComponent("\(v5).json").path)[
                 .posixPermissions] as? NSNumber)?.intValue, 0o600)
-        XCTAssertEqual(try JSONDecoder().decode(Library.self, from: Data(contentsOf: store.file)).version, 5)
+        XCTAssertEqual(
+            try JSONDecoder().decode(Library.self, from: Data(contentsOf: store.file)).version, Library.currentVersion)
         try store.save(try store.load())
         XCTAssertEqual(try backups(root, v5).count, 1, "Later saves add no copies")
         XCTAssertEqual(try backups(root, LibraryStore.characterLibraryBackupPrefix), [])

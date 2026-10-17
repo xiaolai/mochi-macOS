@@ -17,6 +17,8 @@ public final class LibraryStore {
     public static let characterLibraryBackupPrefix = "library-before-character-library-v4"
     /// Names the copies of a version-4 library kept before its first version-5 save.
     public static let reviewLibraryBackupPrefix = "library-before-review-v5"
+    /// Names the copies of a version-5 library kept before its first version-6 save.
+    public static let templateRecoveryLibraryBackupPrefix = "library-before-template-recovery-v6"
     /// Whether `name` names the library or one of the copies Mochi keeps of it: the earlier copy, an upgrade backup or
     /// an unreadable library set aside. Compared as the file system sees names: volumes are case-insensitive by default.
     public static func isLibraryFile(_ name: String) -> Bool {
@@ -24,6 +26,7 @@ public final class LibraryStore {
         return folded.hasPrefix("library-before-character-templates-v3")
             || (folded.hasPrefix(characterLibraryBackupPrefix) && folded.hasSuffix(".json"))
             || (folded.hasPrefix(reviewLibraryBackupPrefix) && folded.hasSuffix(".json"))
+            || (folded.hasPrefix(templateRecoveryLibraryBackupPrefix) && folded.hasSuffix(".json"))
             || folded.hasPrefix(unreadablePrefix) || reservedNames.contains(folded)
     }
     /// Whether `name` names a copy Mochi keeps of the library, which a missing library can be recovered from.
@@ -332,6 +335,7 @@ public final class LibraryStore {
         if version < 3 { try keepUpgradeBackup(original, named: "library-before-character-templates-v3") }
         if version == 3 { try keepUpgradeBackup(original, named: Self.characterLibraryBackupPrefix) }
         if version == 4 { try keepUpgradeBackup(original, named: Self.reviewLibraryBackupPrefix) }
+        if version == 5 { try keepUpgradeBackup(original, named: Self.templateRecoveryLibraryBackupPrefix) }
         let instructionsBackup = root.appendingPathComponent("library-before-conversation-instructions.json")
         if !FileManager.default.fileExists(atPath: instructionsBackup.path) {
             try writeNewPrivateFile(original, to: instructionsBackup)

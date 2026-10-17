@@ -22,6 +22,23 @@ struct RecentResults<Value> {
     }
 }
 
+/// How many items tools may add within a rolling hour. The library is rewritten whole on every save, so each item
+/// a runaway assistant adds costs every later save; the window bounds that growth without limiting what the user
+/// adds in Mochi.
+struct CreationLimit {
+    let limit: Int
+    static let window: TimeInterval = 3600
+    /// When each counted item was added, oldest first; none older than the window.
+    private var dates: [Date] = []
+    init(limit: Int) { self.limit = limit }
+    /// Whether another item may be added at `now`.
+    mutating func allows(at now: Date) -> Bool {
+        dates.removeAll { now.timeIntervalSince($0) >= Self.window }
+        return dates.count < limit
+    }
+    mutating func record(at now: Date) { dates.append(now) }
+}
+
 /// The local control server and the result caches that make external and voice tool calls safe to retry.
 @MainActor @Observable final class AutomationController {
     private(set) var status = String(localized: "Disabled")
@@ -37,6 +54,13 @@ struct RecentResults<Value> {
     @ObservationIgnored var scheduledVoiceToolKey: String?
     /// Template creations by client idempotency key, so a retry after a lost reply cannot duplicate one.
     @ObservationIgnored var templateCreations = RecentResults<(signature: String, template: [String: Any])>()
+    /// Conversations tools created in the last hour. Sixty is one a minute for an hour, beyond any conversation an
+    /// assistant is asked to start; user templates are capped at 200 in total for the same reason.
+    @ObservationIgnored var conversationCreations = CreationLimit(limit: 60)
+    /// Expressions tools saved in the last hour: five a minute for an hour, more than any practice session saves.
+    @ObservationIgnored var expressionCreations = CreationLimit(limit: 300)
+    /// The clock creation limits read; tests replace it.
+    @ObservationIgnored var now: () -> Date = Date.init
 
     /// The latest configuration's callbacks, read on each use so reconfiguring never leaves a stale one running.
     @ObservationIgnored private var recheck: (@MainActor () -> Void)?

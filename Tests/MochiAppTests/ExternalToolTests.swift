@@ -163,6 +163,98 @@ final class ExternalToolTests: XCTestCase {
         XCTAssertNotEqual(japanese, english)
         XCTAssertEqual(app.library.expressions.first { $0.id.uuidString == japanese }?.language, .japanese)
     }
+    /// Character counts alone let one letter carry 120,000 combining marks, and titles could hold line breaks or
+    /// text-direction overrides; titles and expressions are bounded in bytes and titles kept to one line.
+    @MainActor func testTitlesAndExpressionsAreBoundedInBytesAndTitlesStayOnOneLine() throws {
+        let app = controlledApp()
+        let id = try XCTUnwrap(app.selectedID).uuidString
+        let marks = "a" + String(repeating: "\u{0301}", count: 120_000)
+        XCTAssertEqual(marks.count, 1)
+        func refused(_ name: String, _ arguments: [String: Any]) -> String? {
+            let call = arguments.merging(["expected_revision": app.tools.revision]) { _, new in new }
+            do {
+                _ = try app.tools.execute(name, arguments: call, origin: .external)
+                return nil
+            } catch { return (error as? AppFailure)?.message }
+        }
+        let before = app.library.conversations.map(\.title)
+        for title in [marks, "Two\nlines", "Bell\u{0007}", "\u{202E}desrever", "Isolate\u{2066}"] {
+            XCTAssertNotNil(refused("rename_conversation", ["conversation_id": id, "title": title]), title)
+            XCTAssertNotNil(refused("create_conversation", ["title": title]), title)
+        }
+        XCTAssertEqual(app.library.conversations.map(\.title), before)
+        XCTAssertNil(refused("rename_conversation", ["conversation_id": id, "title": "Family 👨‍👩‍👧 trip"]))
+        XCTAssertEqual(app.conversation?.title, "Family 👨‍👩‍👧 trip")
+        for arguments in [["text": marks], ["text": "Hello", "meaning": marks]] {
+            XCTAssertNotNil(refused("save_expression", arguments.merging(["conversation_id": id]) { _, new in new }))
+            XCTAssertNotNil(
+                refused("prepare_expression", arguments.merging(["conversation_id": id]) { _, new in new }))
+        }
+        XCTAssertTrue(app.library.expressions.isEmpty)
+    }
+    /// Tools add at most 60 conversations and 300 expressions in a rolling hour; the hour passing allows more.
+    @MainActor func testToolCreationsAreLimitedPerHour() throws {
+        let app = controlledApp()
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        app.automation.now = { clock }
+        func create(_ index: Int) throws {
+            _ = try app.tools.execute(
+                "create_conversation", arguments: ["title": "Chat \(index)", "expected_revision": app.tools.revision],
+                origin: .external)
+        }
+        let start = app.library.conversations.count
+        for index in 0..<60 { try create(index) }
+        // The first call titled the empty conversation already open instead of adding one.
+        XCTAssertEqual(app.library.conversations.count, start + 59)
+        try create(60)
+        XCTAssertEqual(app.library.conversations.count, start + 60)
+        XCTAssertThrowsError(try create(61)) {
+            XCTAssertEqual(
+                ($0 as? AppFailure)?.message, "Tools can create at most 60 conversations an hour. Try again later.")
+        }
+        clock += CreationLimit.window
+        XCTAssertNoThrow(try create(62))
+
+        let id = try XCTUnwrap(app.selectedID).uuidString
+        func save(_ index: Int) throws {
+            _ = try app.tools.execute(
+                "save_expression",
+                arguments: ["conversation_id": id, "text": "Phrase \(index)", "expected_revision": app.tools.revision],
+                origin: .external)
+        }
+        for index in 0..<300 { try save(index) }
+        XCTAssertNoThrow(try save(0), "Saving an existing expression again adds nothing, so it is not limited")
+        XCTAssertThrowsError(try save(300)) {
+            XCTAssertEqual(
+                ($0 as? AppFailure)?.message, "Tools can save at most 300 expressions an hour. Try again later.")
+        }
+        XCTAssertEqual(app.library.expressions.count, 300)
+        clock += CreationLimit.window
+        XCTAssertNoThrow(try save(300))
+    }
+    /// Searching every expression lists them as My Expressions does, but never names a conversation the tools
+    /// cannot see: archived, deleted or gone.
+    @MainActor func testSearchAllExpressionsNamesOnlyActiveConversations() throws {
+        let app = controlledApp()
+        let active = try XCTUnwrap(app.selectedID)
+        var archived = Conversation(title: "Archived")
+        archived.archived = true
+        var deleted = Conversation(title: "Deleted")
+        deleted.deletedAt = Date()
+        app.library.conversations += [archived, deleted]
+        for (index, owner) in [active, archived.id, deleted.id, UUID()].enumerated() {
+            app.library.expressions.append(
+                PracticeExpression(conversationID: owner, meaning: "", english: "Line \(index)", language: .english))
+        }
+        let found = try app.tools.execute("search_all_expressions", arguments: ["query": "Line"], origin: .external)
+        let items = try XCTUnwrap(found["expressions"] as? [[String: Any]])
+        XCTAssertEqual(items.count, 4)
+        let owners = Dictionary(uniqueKeysWithValues: items.map { ($0["text"] as! String, $0["conversation_id"]!) })
+        XCTAssertEqual(owners["Line 0"] as? String, active.uuidString)
+        for text in ["Line 1", "Line 2", "Line 3"] { XCTAssertTrue(owners[text] is NSNull, text) }
+        let tool = try XCTUnwrap(MochiTools.catalog(origin: .external).first { $0.name == .searchAllExpressions })
+        XCTAssertEqual(Self.schemaProblems(found, tool.outputSchema), [])
+    }
     @MainActor func testRenameAndArchiveActOnAnyActiveConversation() throws {
         let app = controlledApp()
         let open = try XCTUnwrap(app.selectedID)
@@ -241,7 +333,9 @@ final class ExternalToolTests: XCTestCase {
     @MainActor func testSearchAllExpressionsSpansConversationsNewestFirst() throws {
         let app = controlledApp()
         let open = try XCTUnwrap(app.selectedID)
-        let elsewhere = UUID()
+        let other = Conversation(title: "Elsewhere")
+        app.library.conversations.append(other)
+        let elsewhere = other.id
         func expression(_ text: String, in conversation: UUID, at time: TimeInterval) -> PracticeExpression {
             var item = PracticeExpression(conversationID: conversation, meaning: "", english: text, language: .english)
             item.date = Date(timeIntervalSince1970: time)

@@ -273,6 +273,100 @@ extension MCPTests {
         XCTAssertTrue(lines[0].contains("get_session"))
     }
 
+    /// 2025-03-26 is the one accepted revision whose transport requires receiving batches; every other revision
+    /// refuses them whole, and initialization can never be batched.
+    func testBatchesAreAnsweredOnlyForTheRevisionThatRequiresThem() throws {
+        let batch: [Any] = [
+            ["jsonrpc": "2.0", "id": 2, "method": "ping"],
+            ["jsonrpc": "2.0", "method": "notifications/initialized"],
+            ["jsonrpc": "2.0", "id": "call", "method": "tools/call", "params": ["name": "get_session"]],
+            ["jsonrpc": "2.0", "id": 3, "method": "initialize"],
+            42,
+        ]
+        func send(_ server: MochiMCPProtocol, _ value: Any) throws -> Any? {
+            try server.respond(JSONSerialization.data(withJSONObject: value)).map {
+                try JSONSerialization.jsonObject(with: $0)
+            }
+        }
+        let refused = try XCTUnwrap(try send(initialized(), batch) as? [String: Any])
+        XCTAssertEqual(errorCode(refused), -32600)
+        XCTAssertTrue(refused["id"] is NSNull)
+        XCTAssertEqual(errorCode(try send(MochiMCPProtocol(), batch) as? [String: Any]), -32600)
+
+        let server = try initialized(revision: "2025-03-26")
+        let replies = try XCTUnwrap(try send(server, batch) as? [[String: Any]])
+        XCTAssertEqual(replies.count, 4, "\(replies)")
+        XCTAssertNotNil(replies[0]["result"])
+        XCTAssertEqual(replies[0]["id"] as? Int, 2)
+        XCTAssertEqual(replies[1]["id"] as? String, "call")
+        XCTAssertEqual((replies[1]["result"] as? [String: Any])?["isError"] as? Bool, false)
+        XCTAssertEqual(replies[2]["id"] as? Int, 3)
+        XCTAssertEqual(errorCode(replies[2]), -32600)
+        XCTAssertTrue(replies[3]["id"] is NSNull)
+        XCTAssertEqual(errorCode(replies[3]), -32600)
+        XCTAssertEqual(errorCode(try send(server, [Any]()) as? [String: Any]), -32600)
+        XCTAssertNil(try send(server, [["jsonrpc": "2.0", "method": "notifications/initialized"]]))
+    }
+
+    /// An invalid request whose ID is readable is answered with that ID, so the client can match the error.
+    func testInvalidRequestsEchoAReadableID() throws {
+        let server = MochiMCPProtocol()
+        for (request, id) in [
+            (["jsonrpc": "1.0", "id": 5, "method": "ping"], 5),
+            (["jsonrpc": "2.0", "id": "named"], "named"),
+            (["id": 7, "method": "ping"], 7),
+            (["jsonrpc": "2.0", "id": "x", "method": 3], "x"),
+        ] as [([String: Any], AnyHashable)] {
+            let reply = try respond(server, request)
+            XCTAssertEqual(errorCode(reply), -32600, "\(request)")
+            XCTAssertEqual(reply?["id"] as? AnyHashable, id, "\(request)")
+        }
+        let unreadable = try respond(server, ["jsonrpc": "1.0", "id": true, "method": "ping"])
+        XCTAssertTrue(unreadable?["id"] is NSNull)
+    }
+
+    /// A slow app call does not hold up ping, and a call the client cancels is never answered.
+    func testPingAndCancellationAreHandledWhileACallIsInFlight() throws {
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let server = MochiMCPProtocol { _ in
+            started.signal()
+            release.wait()
+            return try JSONSerialization.data(withJSONObject: ["ok": true, "revision": "current"])
+        }
+        let replies = Replies()
+        func receive(_ request: [String: Any]) throws {
+            server.receive(try JSONSerialization.data(withJSONObject: request)) { replies.append($0) }
+        }
+        func received() -> [[String: Any]] { replies.all }
+        try receive([
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": [
+                "protocolVersion": "2025-11-25", "capabilities": [:], "clientInfo": ["name": "test", "version": "1"],
+            ],
+        ])
+        try receive(["jsonrpc": "2.0", "method": "notifications/initialized"])
+        let call: [String: Any] = ["name": "get_session", "arguments": [:]]
+        try receive(["jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": call])
+        XCTAssertEqual(started.wait(timeout: .now() + 5), .success)
+        try receive(["jsonrpc": "2.0", "id": 3, "method": "ping"])
+        XCTAssertEqual(received().last?["id"] as? Int, 3, "Ping waited for the call in flight")
+        // Cancelling the running call drops its answer; a call queued behind it and cancelled never reaches the app.
+        try receive(["jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": call])
+        try receive(["jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": call])
+        for id in [2, 4] {
+            try receive([
+                "jsonrpc": "2.0", "method": "notifications/cancelled", "params": ["requestId": id, "reason": "test"],
+            ])
+        }
+        release.signal()
+        XCTAssertEqual(started.wait(timeout: .now() + 5), .success)
+        release.signal()
+        server.drain()
+        XCTAssertEqual(received().compactMap { $0["id"] as? Int }, [1, 3, 5])
+        XCTAssertEqual(started.wait(timeout: .now()), .timedOut, "A cancelled queued call reached the app")
+    }
+
     private func respond(_ server: MochiMCPProtocol, _ request: [String: Any]) throws -> [String: Any]? {
         try server.respond(JSONSerialization.data(withJSONObject: request)).map {
             try JSONSerialization.jsonObject(with: $0) as! [String: Any]
@@ -283,14 +377,14 @@ extension MCPTests {
         (reply?["error"] as? [String: Any])?["code"] as? Int
     }
 
-    private func initialized() throws -> MochiMCPProtocol {
+    private func initialized(revision: String = "2025-06-18") throws -> MochiMCPProtocol {
         let server = MochiMCPProtocol { _ in try JSONSerialization.data(withJSONObject: ["ok": true]) }
         _ = try respond(
             server,
             [
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": [
-                    "protocolVersion": "2025-06-18", "capabilities": [:],
+                    "protocolVersion": revision, "capabilities": [:],
                     "clientInfo": ["name": "test", "version": "1"],
                 ],
             ])
@@ -300,5 +394,16 @@ extension MCPTests {
     private func ping(_ server: MochiMCPProtocol, id: String) throws -> [String: Any]? {
         let line = #"{"jsonrpc":"2.0","id":"# + id + #","method":"ping"}"#
         return try JSONSerialization.jsonObject(with: XCTUnwrap(server.respond(Data(line.utf8)))) as? [String: Any]
+    }
+}
+
+/// Replies a server sends from its call queue, collected for the test.
+private final class Replies: @unchecked Sendable {
+    private let lock = NSLock()
+    private var replies: [[String: Any]] = []
+    var all: [[String: Any]] { lock.withLock { replies } }
+    func append(_ data: Data) {
+        let reply = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        lock.withLock { replies.append(reply) }
     }
 }

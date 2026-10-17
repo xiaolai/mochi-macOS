@@ -1217,30 +1217,30 @@
         }
       }
     },
-    "A connected assistant can read active conversations, configure a conversation, save expressions, open practice, and control playback. Recording always starts with you. The connection stays on this Mac and is available only to your macOS user." : {
+    "A connected assistant can read your active conversations, saved expressions, templates and characters. It can create, open, rename, archive and set up conversations; save expressions, prepare one in Help Me Say This and open practice; create, edit and delete templates, which go to Recently Deleted in Manage Templates for you to recover; and control playback. Its changes are refused while you record, Mochi replies, or an editing, template or practice panel is open. Recording always starts with you. The connection stays on this Mac and is available only to your macOS user." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "接続したアシスタントは、アクティブな会話の読み取り、会話の設定、表現の保存、練習画面の表示、再生の操作を行えます。録音は必ずあなた自身が開始します。接続はこのMac内に限られ、あなたのmacOSユーザだけが利用できます。"
+            "value" : "接続したアシスタントは、アクティブな会話、保存した表現、テンプレート、キャラクターを読み取れます。会話の作成・表示・名前の変更・アーカイブ・設定、表現の保存、「言い方を教えて」での表現の準備、練習画面の表示、テンプレートの作成・編集・削除（削除したテンプレートは「テンプレートを管理」の「最近削除した項目」に移り、あなたが復元できます）、再生の操作を行えます。録音中、Mochi の返答中、または編集・テンプレート・練習のパネルを開いている間は、変更は拒否されます。録音は必ずあなた自身が開始します。接続はこのMac内に限られ、あなたのmacOSユーザだけが利用できます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "연결된 어시스턴트는 활성 대화를 읽고, 대화를 구성하고, 표현을 저장하고, 연습을 열고, 재생을 제어할 수 있습니다. 녹음은 항상 사용자가 시작합니다. 연결은 이 Mac에만 유지되며 사용자의 macOS 계정에서만 사용할 수 있습니다."
+            "value" : "연결된 어시스턴트는 활성 대화, 저장한 표현, 템플릿과 캐릭터를 읽을 수 있습니다. 대화를 만들고, 열고, 이름을 바꾸고, 보관하고, 설정할 수 있으며, 표현을 저장하고, ‘말하기 도우미’에서 표현을 준비하고, 연습을 열 수 있습니다. 템플릿을 만들고, 편집하고, 삭제할 수 있으며 삭제한 템플릿은 ‘템플릿 관리’의 ‘최근 삭제된 항목’으로 이동해 사용자가 복구할 수 있습니다. 재생도 제어할 수 있습니다. 녹음 중이거나 Mochi가 답하는 중이거나 편집, 템플릿, 연습 패널이 열려 있으면 변경이 거부됩니다. 녹음은 항상 사용자가 시작합니다. 연결은 이 Mac에만 유지되며 사용자의 macOS 계정에서만 사용할 수 있습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已连接的助手可以读取进行中的对话、配置对话、保存表达、打开练习以及控制播放。录音始终由你开始。连接仅限于这台 Mac，且只对你的 macOS 用户可用。"
+            "value" : "已连接的助手可以读取进行中的对话、已保存的表达、模板和角色。它可以创建、打开、重命名、归档和设置对话；保存表达、在“帮我说出来”中准备表达以及打开练习；创建、编辑和删除模板，删除的模板会移到“管理模板”中的“最近删除”，由你恢复；以及控制播放。在你录音、Mochi 回复或编辑、模板、练习面板打开时，它的更改会被拒绝。录音始终由你开始。连接仅限于这台 Mac，且只对你的 macOS 用户可用。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "連接的助理可以讀取進行中的對話、設定對話、儲存表達、打開練習，以及控制播放。錄音一律由你開始。連線僅保留在這台 Mac 上，且只供你的 macOS 使用者使用。"
+            "value" : "連接的助理可以讀取進行中的對話、已儲存的表達、範本和角色。它可以建立、打開、重新命名、封存和設定對話；儲存表達、在「幫我說出來」中準備表達，以及打開練習；建立、編輯和刪除範本，刪除的範本會移到「管理範本」中的「最近刪除」，由你復原；以及控制播放。在你錄音、Mochi 回覆，或編輯、範本、練習面板打開時，它的變更會被拒絕。錄音一律由你開始。連線僅保留在這台 Mac 上，且只供你的 macOS 使用者使用。"
           }
         }
       }
@@ -1269,6 +1269,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要對話標題。"
+          }
+        }
+      }
+    },
+    "A conversation title must be one line of 1 to 160 characters and at most 2 KB, without control characters or text-direction overrides." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会話のタイトルは 1〜160 文字、2 KB 以内の 1 行にし、制御文字や文字方向の上書きを含めないでください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대화 제목은 1~160자, 2KB 이하의 한 줄이어야 하며 제어 문자나 텍스트 방향 재정의를 포함할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对话标题必须是一行，长度为 1 到 160 个字符且不超过 2 KB，不能包含控制字符或文字方向覆盖符。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "對話標題必須是一行，長度為 1 到 160 個字元且不超過 2 KB，不能包含控制字元或文字方向覆寫符。"
           }
         }
       }
@@ -1969,6 +1997,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要一個進行中的對話。"
+          }
+        }
+      }
+    },
+    "An expression and its meaning must each fit within 1,000 characters and 8 KB." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表現とその意味は、それぞれ 1,000 文字・8 KB 以内にしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표현과 그 의미는 각각 1,000자, 8KB 이내여야 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表达及其含义各自不能超过 1,000 个字符和 8 KB。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表達及其含義各自不能超過 1,000 個字元和 8 KB。"
           }
         }
       }
@@ -5273,6 +5329,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法保護自動化檔案夾。請檢查其權限，然後重新啟用控制。"
+          }
+        }
+      }
+    },
+    "Could not recover template." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テンプレートを復元できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿을 복구할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法恢复模板。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法復原範本。"
           }
         }
       }
@@ -19224,6 +19308,34 @@
         }
       }
     },
+    "The library contains a message from an unknown sender." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブラリに送信者が不明なメッセージが含まれています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "라이브러리에 보낸 사람을 알 수 없는 메시지가 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资料库包含发送者未知的消息。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "資料庫中含有傳送者不明的訊息。"
+          }
+        }
+      }
+    },
     "The library contains a practice language that is not a language code." : {
       "localizations" : {
         "ja" : {
@@ -21292,6 +21404,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "今天 %@"
+          }
+        }
+      }
+    },
+    "Tools can create at most %lld conversations an hour. Try again later." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ツールが作成できる会話は 1 時間に %lld 件までです。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구는 한 시간에 대화를 최대 %lld개까지 만들 수 있습니다. 나중에 다시 시도하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具每小时最多只能创建 %lld 个对话。请稍后再试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具每小時最多只能建立 %lld 個對話。請稍後再試。"
+          }
+        }
+      }
+    },
+    "Tools can save at most %lld expressions an hour. Try again later." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ツールが保存できる表現は 1 時間に %lld 件までです。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구는 한 시간에 표현을 최대 %lld개까지 저장할 수 있습니다. 나중에 다시 시도하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具每小时最多只能保存 %lld 个表达。请稍后再试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具每小時最多只能儲存 %lld 個表達。請稍後再試。"
           }
         }
       }

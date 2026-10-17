@@ -104,7 +104,7 @@ A template saves a conversation setup for reuse: a title and description, a char
 
 - **New Conversation from Template…** starts a conversation from a template, after you adjust its settings if you like. Starting a conversation does not start recording or playback; until you say something, the conversation shows what the template is for.
 - **Save as Template…** in a conversation's **…** menu saves that conversation's settings.
-- **Manage Templates…** creates, edits and deletes your templates, and duplicates a built-in to customize it. Built-ins are read-only.
+- **Manage Templates…** creates, edits and deletes your templates, and duplicates a built-in to customize it. Built-ins are read-only. A template an assistant deletes waits under **Recently Deleted** there, where you can recover it or delete it permanently.
 
 Each new conversation receives a copy of the template settings, so editing or deleting the source template leaves existing conversations intact.
 
@@ -179,7 +179,7 @@ A connected assistant can read the open conversation, list, open, rename and arc
 | `get_conversation_template` | Read instructions, settings, and the template revision |
 | `create_conversation_template` | Create a user template |
 | `update_conversation_template` | Patch selected settings using `expected_template_revision` |
-| `delete_conversation_template` | Delete a user template using `expected_template_revision` |
+| `delete_conversation_template` | Move a user template to Recently Deleted using `expected_template_revision`; you can recover it in **Manage Templates** |
 
 For example, an assistant can create a template with these arguments:
 
@@ -203,9 +203,9 @@ For example, an assistant can create a template with these arguments:
 
 Template updates preserve omitted fields. Creation requires a title and at least one effective setting: instructions, a character, a greeting, phrases, a language, coaching, a voice or speech speed. Built-in templates must be duplicated to customize them.
 
-To instantiate a template, read `get_session` and call `create_conversation` with `template_id` and the session's `revision` as `expected_revision`. Optionally supply `expected_template_revision` to reject a changed source. Template CRUD uses its own revisions and works independently of the open conversation.
+To instantiate a template, read `get_session` and call `create_conversation` with `template_id` and the session's `revision` as `expected_revision`. Optionally supply `expected_template_revision` to reject a changed source. Template CRUD uses its own revisions and works independently of the open conversation; like every change, it is refused while you record, while Mochi replies, or while an editing, template or practice panel is open.
 
-External control is off by default. The local connection is restricted to your macOS user; recording always starts with you. A connected assistant can read active conversations and control supported actions, so enable access for assistants you intend to use.
+External control is off by default. The local connection is restricted to your macOS user; recording always starts with you. A connected assistant can read active conversations and control supported actions, listed in [docs/automation.md](docs/automation.md), so enable access for assistants you intend to use. A template an assistant deletes goes to Recently Deleted in **Manage Templates**, where you can recover it.
 
 ## Data and backups
 
@@ -215,7 +215,7 @@ Use **Export Library Backup…** to keep a portable copy of your library, and **
 
 Each save keeps the library as it was just before as `library.previous.json` in the data folder. If the library ever cannot be opened, **Settings → Data & Privacy** offers **Restore Earlier Copy**, which reinstates that copy and keeps the unreadable file beside it.
 
-The library format is **version 5**, which adds review state for saved expressions, how each voice message was transcribed, and the transcriber's confidence in each unedited transcript. Before upgrading an older library, Mochi preserves its original bytes in a private backup in the data folder: `library-before-review-v5*.json` for a version 4 library, `library-before-character-library-v4*.json` for a version 3 library, and `library-before-character-templates-v3*.json` for a library from before Mochi 0.4.0. Mochi 0.8.0 and earlier cannot open a version 5 library or import a version 5 backup, and Mochi 0.7.1 and earlier cannot open version 4. To go back to one of them, quit Mochi and put a backup in place of `library.json` in the data folder: `library-before-review-v5.json` if your library was upgraded from version 4, `library-before-character-library-v4.json` if it was upgraded from version 3, or `library-before-character-templates-v3.json` if it was upgraded straight from an older version. Anything changed since the upgrade exists only in the upgraded library. Mochi 0.6.4 and earlier open every conversation as English and drop a conversation's language when they save it.
+The library format is **version 6**, which adds Recently Deleted for templates an assistant deletes; version 5 added review state for saved expressions, how each voice message was transcribed, and the transcriber's confidence in each unedited transcript. Before upgrading an older library, Mochi preserves its original bytes in a private backup in the data folder: `library-before-template-recovery-v6*.json` for a version 5 library, `library-before-review-v5*.json` for a version 4 library, `library-before-character-library-v4*.json` for a version 3 library, and `library-before-character-templates-v3*.json` for a library from before Mochi 0.4.0. Mochi 0.9.10 and earlier cannot open a version 6 library or import a version 6 backup, Mochi 0.8.0 and earlier cannot open version 5, and Mochi 0.7.1 and earlier cannot open version 4. To go back to one of them, quit Mochi and put a backup in place of `library.json` in the data folder: `library-before-template-recovery-v6.json` if your library was upgraded from version 5, `library-before-review-v5.json` if it was upgraded from version 4, `library-before-character-library-v4.json` if it was upgraded from version 3, or `library-before-character-templates-v3.json` if it was upgraded straight from an older version. Anything changed since the upgrade exists only in the upgraded library. Mochi 0.6.4 and earlier open every conversation as English and drop a conversation's language when they save it.
 
 Practice examples you saved with ElevenLabs before Mochi moved to Codex voices keep playing. A previously saved ElevenLabs key stays in your Keychain until you delete the `ELEVENLABS_API_KEY` item in Keychain Access.
 

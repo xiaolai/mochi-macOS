@@ -25,7 +25,14 @@ enum TemplateSection: CaseIterable {
 /// Every change is committed whole, so a failed write leaves the catalog as it was.
 @MainActor struct TemplateCatalog {
     let library: LibraryController
-    var all: [ConversationTemplate] { ConversationTemplate.builtins + library.library.conversationTemplates }
+    /// The templates in the catalog; those in Recently Deleted are left out.
+    var all: [ConversationTemplate] {
+        ConversationTemplate.builtins + library.library.conversationTemplates.filter { !$0.isDeleted }
+    }
+    /// User templates an assistant deleted, most recently deleted first, until recovered or deleted permanently.
+    var recentlyDeleted: [ConversationTemplate] {
+        library.library.conversationTemplates.filter(\.isDeleted).sorted { $0.deletedAt! > $1.deletedAt! }
+    }
     /// The non-empty sections, in order, holding the templates whose stored or translated title or description
     /// contains `query`.
     func sections(matching query: String) -> [(section: TemplateSection, templates: [ConversationTemplate])] {
@@ -77,14 +84,44 @@ enum TemplateSection: CaseIterable {
         }
         return updated
     }
+    /// Removes a template for good, from the catalog or from Recently Deleted. Only the user does this, in Mochi.
     func delete(id: UUID, revision: String) throws {
-        let current = try template(id: id)
-        guard !current.isBuiltin else { throw AppFailure("Built-in templates cannot be deleted.") }
+        let current = try stored(id: id)
         guard current.revision == revision else {
             throw AppFailure("This template changed. Read it again before deleting.")
         }
         var candidate = library.library
         candidate.conversationTemplates.removeAll { $0.id == id }
+        try library.commit(candidate)
+    }
+    /// Moves a user template to Recently Deleted, where the user can recover it: how an assistant deletes one.
+    func moveToRecentlyDeleted(id: UUID, revision: String, now: Date = Date()) throws {
+        let current = try template(id: id)
+        guard !current.isBuiltin else { throw AppFailure("Built-in templates cannot be deleted.") }
+        guard current.revision == revision else {
+            throw AppFailure("This template changed. Read it again before deleting.")
+        }
+        try change(id) { $0.deletedAt = now }
+    }
+    /// Returns a template from Recently Deleted to the catalog, unchanged.
+    func recover(id: UUID) throws {
+        guard try stored(id: id).isDeleted else { return }
+        try change(id) { $0.deletedAt = nil }
+    }
+    /// A user template as stored, in the catalog or in Recently Deleted.
+    private func stored(id: UUID) throws -> ConversationTemplate {
+        if ConversationTemplate.reservedIDs.contains(id) { throw AppFailure("Built-in templates cannot be deleted.") }
+        guard let value = library.library.conversationTemplates.first(where: { $0.id == id }) else {
+            throw AppFailure("Template not found. Keep your draft and save it as a new template.")
+        }
+        return value
+    }
+    private func change(_ id: UUID, _ edit: (inout ConversationTemplate) -> Void) throws {
+        var candidate = library.library
+        guard let index = candidate.conversationTemplates.firstIndex(where: { $0.id == id }) else {
+            throw AppFailure("Template not found. Keep your draft and save it as a new template.")
+        }
+        edit(&candidate.conversationTemplates[index])
         try library.commit(candidate)
     }
 }

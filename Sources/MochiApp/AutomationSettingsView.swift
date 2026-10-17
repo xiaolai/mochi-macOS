@@ -10,7 +10,7 @@ struct AutomationSettingsView: View {
                 Toggle("Allow external assistants to control Mochi", isOn: $app.externalControlEnabled)
                 LabeledContent("Status", value: app.automation.status)
                 Text(
-                    "A connected assistant can read active conversations, configure a conversation, save expressions, open practice, and control playback. Recording always starts with you. The connection stays on this Mac and is available only to your macOS user."
+                    "A connected assistant can read your active conversations, saved expressions, templates and characters. It can create, open, rename, archive and set up conversations; save expressions, prepare one in Help Me Say This and open practice; create, edit and delete templates, which go to Recently Deleted in Manage Templates for you to recover; and control playback. Its changes are refused while you record, Mochi replies, or an editing, template or practice panel is open. Recording always starts with you. The connection stays on this Mac and is available only to your macOS user."
                 )
                 .font(.callout).foregroundStyle(.secondary)
             }

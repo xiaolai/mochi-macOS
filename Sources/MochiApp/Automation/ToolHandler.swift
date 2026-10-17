@@ -136,9 +136,10 @@ import MochiKernel
                 throw AppFailure("That conversation is not currently open. Read get_session again.")
             }
         }
-        if !tool.readOnly && tool.scope != .catalog {
+        // Template changes name a template revision instead of the app revision, but wait for the same activity.
+        if !tool.readOnly {
             if origin == .external {
-                guard arguments["expected_revision"] as? String == revision else {
+                guard tool.scope == .catalog || arguments["expected_revision"] as? String == revision else {
                     throw AppFailure("Mochi's state changed. Read get_session and retry with the new revision.")
                 }
                 guard !app.automationModal else {
@@ -147,7 +148,7 @@ import MochiKernel
                 guard !app.busy || app.turn.activity == .playing else {
                     throw AppFailure("Mochi is busy. Wait until the current activity finishes.")
                 }
-            } else {
+            } else if tool.scope != .catalog {
                 guard !app.automationModal, app.turn.mode == .conversation,
                     !app.busy || app.turn.activity == .generating || app.turn.activity == .playing
                 else { throw AppFailure("This action is unavailable during the current activity.") }
@@ -330,10 +331,14 @@ import MochiKernel
                     || $0.meaning.localizedCaseInsensitiveContains(query)
             }.sorted { $0.date > $1.date }
             let offset = min(page.offset ?? 0, found.count)
+            // Expressions outlive their conversations, as in My Expressions, but an archived, deleted or removed
+            // conversation is not named: tools cannot see it.
+            let active = Set(app.library.conversations.filter { !$0.archived && !$0.isDeleted }.map(\.id))
             let expressions = try fitted(Array(found[offset...].prefix(limit)), budget: 110000) { item, bytes in
-                Self.summary(of: item, bytes: bytes).merging(["conversation_id": item.conversationID.uuidString]) {
-                    _, new in new
-                }
+                Self.summary(of: item, bytes: bytes).merging([
+                    "conversation_id": active.contains(item.conversationID)
+                        ? item.conversationID.uuidString as Any : NSNull()
+                ]) { _, new in new }
             }
             return success(
                 ["expressions": expressions, "untrusted_fields": Self.expressionText].merging(
@@ -371,10 +376,17 @@ import MochiKernel
                 chat = reused
                 candidate.conversations[index] = reused
             } else {
+                guard app.automation.conversationCreations.allows(at: app.automation.now()) else {
+                    throw AppFailure(
+                        "Tools can create at most \(app.automation.conversationCreations.limit) conversations an hour. Try again later."
+                    )
+                }
                 candidate.conversations.insert(chat, at: 0)
             }
             candidate.selectedConversationID = chat.id
+            let inserted = candidate.conversations.count > app.library.conversations.count
             try persist(candidate)
+            if inserted { app.automation.conversationCreations.record(at: app.automation.now()) }
             app.select(chat.id)
             app.history.scope = .active
             app.offerWorkspace?()
@@ -426,10 +438,16 @@ import MochiKernel
                 }) {
                     return success(["expression_id": existing.id.uuidString])
                 }
+                guard app.automation.expressionCreations.allows(at: app.automation.now()) else {
+                    throw AppFailure(
+                        "Tools can save at most \(app.automation.expressionCreations.limit) expressions an hour. Try again later."
+                    )
+                }
                 let item = PracticeExpression(
                     conversationID: chatID, meaning: meaning, english: english, language: language)
                 candidate.storeExpression(item)
                 try persist(candidate)
+                app.automation.expressionCreations.record(at: app.automation.now())
                 return success(["expression_id": item.id.uuidString])
             }
             func hasDraft(_ chat: Conversation) -> Bool {
@@ -586,7 +604,8 @@ import MochiKernel
                     ).representation()
                 ])
             }
-            try app.templates.delete(id: id, revision: revision)
+            // An assistant never deletes a template for good: the user can recover it from Recently Deleted.
+            try app.templates.moveToRecentlyDeleted(id: id, revision: revision)
             return templateResult(["deleted_template_id": id.uuidString], untrusted: [])
         default: throw AppFailure("This is not a template action.")
         }
@@ -638,7 +657,11 @@ import MochiKernel
         var index = offset
         while index < values.count && items.count < limit {
             let item = values[index].representation(includeInstructions: false)
-            if try JSONSerialization.data(withJSONObject: page(items + [item], next: index + 1)).count >= 110000 {
+            // The first item is listed whatever its size, so every page advances and paging always ends. Every field
+            // it lists is bounded, and the library refuses revisions Mochi never writes, so it fits the result cap.
+            if !items.isEmpty,
+                try JSONSerialization.data(withJSONObject: page(items + [item], next: index + 1)).count >= 110000
+            {
                 break
             }
             items.append(item)
