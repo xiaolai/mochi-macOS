@@ -20,7 +20,7 @@ final class HelpSuggestionLiveTests: XCTestCase {
         guard ProcessInfo.processInfo.environment["MOCHI_LIVE_AUDITION"] == "1" else {
             throw XCTSkip("Live check uses the network and your subscription; set MOCHI_LIVE_AUDITION=1 to run it.")
         }
-        let status = await CodexCatalog.status()
+        let status = try await CodexCatalog.status()
         XCTAssertNil(status.signInProblem)
         let model = try XCTUnwrap(CodexModel.resolve(selected: nil, in: status.models), "Codex lists no models")
         print("codex text model: \(model.slug), effort \(model.lightestEffort ?? "default")")

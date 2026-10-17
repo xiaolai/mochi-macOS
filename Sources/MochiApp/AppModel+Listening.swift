@@ -18,7 +18,7 @@ enum ListeningTurnEnd: Equatable {
     case sendNow
     /// The turn reached the recording limit.
     case limit
-    /// A practice attempt, judged on the Mac.
+    /// Judged on the Mac: a practice attempt, or a conversation turn whose connection failed while it was heard.
     case mac
 }
 
@@ -34,6 +34,11 @@ enum ListeningTurnEnd: Equatable {
     /// True once the API reported hearing speech in this turn.
     var apiHeardSpeech = false
     var line: (any ListeningLine)?
+    /// When the open connection finished opening. Nothing travels on it between turns, so its age is how long it
+    /// has been idle.
+    var lineOpenedAt: Date?
+    /// The connection failed while this turn was heard: the Mac judges where it ends, and it is sent the ordinary way.
+    var macJudgesTurn = false
     var opening: Task<Void, Never>?
     var signalTask: Task<Void, Never>?
     var silenceTask: Task<Void, Never>?
@@ -71,6 +76,12 @@ extension AppModel {
     static let practiceEndSilence: TimeInterval = 1.2
     /// A sound shorter than this, judged on the Mac, is noise rather than an attempt.
     static let practiceMinimumSpeech: TimeInterval = 0.4
+    /// A connection idle longer than this is replaced before a turn streams on it. Nothing is sent or received on it
+    /// between turns, so one the network dropped quietly would otherwise be found only once the learner spoke.
+    static let listeningIdleRefresh: TimeInterval = 60
+    /// A conversation turn whose connection failed ends after this much quiet, judged on the Mac. Longer than an
+    /// attempt's pause: without the API's judgement of the words, a learner stopping to think must not be cut off.
+    static let listeningFallbackEndSilence: TimeInterval = 2
 
     /// The talking mode the microphone follows now: hands-free, unless a failed session fell back to press to send.
     var handsFree: Bool { settings.talkingMode == .handsFree && !handsFreeFallback }
@@ -278,7 +289,10 @@ extension AppModel {
         }
         // A conversation turn is judged by the API: its connection opens before speech, so no handshake delays
         // the turn, and nothing is streamed until speech starts.
-        let wantsLine = listening.microphoneOpen && listeningRuntime.context.map { $0 != .practice } == true
+        // A turn left to the Mac after its connection failed opens none: it is sent whole once it ends.
+        let wantsLine =
+            listening.microphoneOpen && listeningRuntime.context.map { $0 != .practice } == true
+            && !runtime.macJudgesTurn
         if !wantsLine && (runtime.line != nil || runtime.opening != nil) { closeListeningLine() }
         if wantsLine && runtime.line == nil && runtime.opening == nil { openListeningLine() }
         scheduleSilenceTimer()
@@ -374,6 +388,8 @@ extension AppModel {
             runtime.practiceTarget = help.english
             runtime.apiHeardSpeech = false
             runtime.liveBytes = 0
+            runtime.macJudgesTurn = false
+            refreshIdleLine()
             sendToLine(runtime.turnAudio)
             handleListening(.speechStarted)
         case .hearingSpeech:
@@ -383,8 +399,10 @@ extension AppModel {
             let seconds = Double(runtime.turnAudio.count) / 48000
             if seconds >= Self.recordingLimit {
                 endListeningTurn(.limit)
-            } else if runtime.context == .practice {
-                guard runtime.detector.trailingSilence >= Self.practiceEndSilence else { return }
+            } else if runtime.context == .practice || runtime.macJudgesTurn {
+                let endSilence =
+                    runtime.context == .practice ? Self.practiceEndSilence : Self.listeningFallbackEndSilence
+                guard runtime.detector.trailingSilence >= endSilence else { return }
                 let spoken = seconds - runtime.detector.trailingSilence - runtime.turnLead
                 if spoken < Self.practiceMinimumSpeech {
                     discardListeningTurn()
@@ -410,6 +428,8 @@ extension AppModel {
     }
 
     private func sendToLine(_ pcm: Data) {
+        // A turn whose connection failed is judged on the Mac and sent whole once it ends; nothing streams.
+        guard !listeningRuntime.macJudgesTurn else { return }
         if let line = listeningRuntime.line {
             line.append(pcm)
             listeningRuntime.liveBytes += pcm.count
@@ -432,6 +452,7 @@ extension AppModel {
             return
         }
         listeningRuntime.turnAudio = Data()
+        listeningRuntime.macJudgesTurn = false
         closeListeningLine()
         syncListening()
         deliverListeningTurn(audio, to: context)
@@ -447,6 +468,7 @@ extension AppModel {
 
     private func dropListeningTurn() {
         listeningRuntime.turnAudio = Data()
+        listeningRuntime.macJudgesTurn = false
         listeningRuntime.detector.reset()
         // The API may hold the dropped audio; the next turn starts on a fresh connection.
         closeListeningLine()
@@ -505,6 +527,7 @@ extension AppModel {
                 }
                 listeningRuntime.opening = nil
                 listeningRuntime.line = line
+                listeningRuntime.lineOpenedAt = listeningNow()
                 // Conditions may have changed while the connection opened, before any observer ran: nothing heard
                 // before a sheet opened or the conversation changed is sent once it is too late to be wanted.
                 guard listeningBlockers.isEmpty, listeningContext == listeningRuntime.context else {
@@ -545,7 +568,9 @@ extension AppModel {
         }
     }
 
-    /// A connection failed. One that dropped while nothing was being said is reopened quietly, once.
+    /// A connection failed. One that dropped while nothing was being said is reopened quietly, once. One that failed
+    /// while a turn was heard leaves the turn to the Mac: the audio it recorded is sent the ordinary way once the Mac
+    /// hears the turn end, and listening goes on with a new connection after the reply.
     private func lineFailed(_ error: Error) {
         MochiLog.failure(MochiLog.network, "Hands-free listening", error)
         closeListeningLine()
@@ -554,10 +579,27 @@ extension AppModel {
             syncListening()
             return
         }
+        if listening.phase == .hearingSpeech, listeningRuntime.context.map({ $0 != .practice }) == true {
+            listeningRuntime.macJudgesTurn = true
+            syncListening()
+            return
+        }
         guard listening.microphoneOpen else { return }
         listeningRuntime.failure = AppFailure.message(
             for: error, fallback: "The listening connection ended. Check your connection; press to send still works.")
         handleListening(.networkFailure)
+    }
+
+    /// Replaces a connection that sat idle too long, before the turn streams on it. The turn's audio waits as the
+    /// backlog and goes to the new connection once it opens, so nothing heard is lost; a new connection that cannot
+    /// open leaves the turn to the Mac.
+    private func refreshIdleLine() {
+        let runtime = listeningRuntime
+        guard runtime.line != nil, let opened = runtime.lineOpenedAt,
+            listeningNow().timeIntervalSince(opened) > Self.listeningIdleRefresh
+        else { return }
+        MochiLog.network.notice("Replaced an idle listening connection before the turn")
+        closeListeningLine()
     }
 
     private func closeListeningLine() {
@@ -569,6 +611,7 @@ extension AppModel {
         runtime.signalTask = nil
         runtime.line?.close()
         runtime.line = nil
+        runtime.lineOpenedAt = nil
         runtime.unsent = Data()
         runtime.apiHeardSpeech = false
         runtime.liveBytes = 0

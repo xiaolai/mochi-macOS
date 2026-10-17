@@ -373,13 +373,15 @@ final class HandsFreeTests: XCTestCase {
         let listening = FakeListening()
         let app = handsFreeApp(listening)
         let line = await startedLine(app, listening)
-        speak(listening)
-        line.fail(AppFailure("The listening connection ended. Check your connection; press to send still works."))
+        // The first drop is reopened quietly; the second, still with nobody speaking, falls back.
+        line.fail(AppFailure("Dropped."))
+        await waitUntil { listening.lines.count == 2 && app.listeningRuntime.line === listening.lines.last }
+        try XCTUnwrap(listening.lines.last).fail(
+            AppFailure("The listening connection ended. Check your connection; press to send still works."))
         await waitUntil { app.listening.phase == .failed }
         XCTAssertFalse(listening.capturing)
         XCTAssertTrue(app.handsFreeFallback)
         XCTAssertTrue(app.error?.contains("Listening stopped") == true, app.error ?? "no error")
-        XCTAssertTrue(app.conversation?.messages.isEmpty == true, "The interrupted turn is not sent")
         // The microphone button now records one message at a time.
         var asked = false
         app.media.permission = {
@@ -395,6 +397,63 @@ final class HandsFreeTests: XCTestCase {
         await waitUntil { app.listening.phase == .listening }
         XCTAssertFalse(app.handsFreeFallback)
         app.stop()
+    }
+
+    /// A connection that fails while the learner speaks never costs the turn: the Mac, which recorded all of it,
+    /// judges where it ends and sends it the ordinary way, and listening goes on.
+    @MainActor func testATurnWhoseConnectionFailsIsSentOnceTheMacHearsItEnd() async throws {
+        let listening = FakeListening()
+        let app = handsFreeApp(listening)
+        var requests: [ConversationRequest] = []
+        app.speech.conversationReply = { _, request, _ in requests.append(request) }
+        let line = await startedLine(app, listening)
+        speak(listening)
+        line.fail(AppFailure("Dropped."))
+        await waitUntil { app.listeningRuntime.macJudgesTurn }
+        XCTAssertEqual(app.listening.phase, .hearingSpeech)
+        listening.feed(audio(1, decibels: -25))
+        listening.feed(audio(1.8))
+        XCTAssertEqual(app.listening.phase, .hearingSpeech, "A pause shorter than the Mac's end of turn goes on")
+        XCTAssertEqual(listening.lines.count, 1, "A turn left to the Mac opens no connection")
+        listening.feed(audio(0.5))
+        await waitUntil { requests.count == 1 }
+        let seconds = Double(try XCTUnwrap(requests.first?.pcm).count) / 48000
+        // 0.3 s before the speech, 2 s of speech either side of the failure, and the quiet that ended it.
+        XCTAssertGreaterThanOrEqual(seconds, 0.3 + 2 + AppModel.listeningFallbackEndSilence - 0.11)
+        XCTAssertLessThanOrEqual(seconds, 0.3 + 2 + 2.3 + 0.11)
+        XCTAssertEqual(app.conversation?.messages.count, 1)
+        XCTAssertFalse(app.handsFreeFallback)
+        XCTAssertNil(app.error)
+        app.stop()
+    }
+
+    /// Nothing travels on a connection between turns, so one idle too long is replaced before the turn streams on
+    /// it, and the turn heard meanwhile goes to the new one whole.
+    @MainActor func testAnIdleConnectionIsReplacedBeforeATurnStreamsOnIt() async throws {
+        for (idle, replaced) in [(AppModel.listeningIdleRefresh - 1, false), (AppModel.listeningIdleRefresh + 1, true)]
+        {
+            let listening = FakeListening()
+            let app = handsFreeApp(listening)
+            var now = Date(timeIntervalSinceReferenceDate: 5000)
+            app.listeningNow = { now }
+            let first = await startedLine(app, listening)
+            now = now.addingTimeInterval(idle)
+            speak(listening)
+            XCTAssertEqual(app.listening.phase, .hearingSpeech)
+            XCTAssertEqual(first.closed, replaced, "Idle \(idle) s")
+            if replaced {
+                XCTAssertTrue(first.sent.isEmpty, "Nothing streams on the idle connection")
+                await waitUntil { listening.lines.count == 2 && app.listeningRuntime.line === listening.lines.last }
+                XCTAssertEqual(
+                    listening.lines.last?.sent, app.listeningRuntime.turnAudio,
+                    "The turn, from its pre-roll, goes to the new connection")
+            } else {
+                XCTAssertEqual(first.sent, app.listeningRuntime.turnAudio)
+                XCTAssertEqual(listening.lines.count, 1)
+            }
+            XCTAssertNil(app.error)
+            app.stop()
+        }
     }
 
     @MainActor func testAConnectionThatDropsWhileNobodySpeaksIsReopenedQuietly() async throws {

@@ -1,3 +1,5 @@
+import MochiKernel
+import RealtimeConnection
 import XCTest
 
 @testable import MochiProviders
@@ -73,5 +75,38 @@ extension RealtimeEventsTests {
                 "type": "response.done",
                 "response": ["status": "incomplete", "status_details": ["reason": "content_filter"]],
             ]))
+    }
+
+    /// An unreadable event of a type Mochi never reads is skipped; one Mochi depends on, or one without a readable
+    /// type, still fails the session. The errors are the shared package's own, from its own decoder.
+    func testOnlyUnreadableEventsMochiDoesNotConsumeAreSkipped() async throws {
+        func decoded(_ json: String) -> Result<RealtimeMessage, Error> {
+            Result { try RealtimeMessage(raw: Data(json.utf8)) }
+        }
+        let next = decoded(#"{"type":"response.output_text.delta","delta":"Hi"}"#)
+        for malformed in [
+            #"{"type":"rate_limits.updated"}"#, #"{"type":"rate_limits.updated","rate_limits":[{"name":"requests"}]}"#,
+            #"{"type":"response.created"}"#,
+            #"{"type":"conversation.item.input_audio_transcription.delta","delta":7}"#,
+        ] {
+            guard case .failure = decoded(malformed) else { return XCTFail("The package read \(malformed)") }
+            var queue = [decoded(malformed), next]
+            let event = try await RealtimeChannel.event { try queue.removeFirst().get() }
+            XCTAssertEqual(event["delta"] as? String, "Hi", malformed)
+        }
+        for malformed in [
+            #"{"type":"response.done"}"#, #"{"type":"session.created"}"#, #"{"type":"error","error":7}"#,
+            #"{"type":"response.output_audio.delta","response_id":"r","delta":"not base64!"}"#,
+            #"{"type":"input_audio_buffer.committed","item_id":7}"#,
+            #"{"type":"conversation.item.input_audio_transcription.completed","item_id":7}"#, #"{"no":"type"}"#,
+            "not json",
+        ] {
+            guard case .failure = decoded(malformed) else { return XCTFail("The package read \(malformed)") }
+            var queue = [decoded(malformed), next]
+            do {
+                _ = try await RealtimeChannel.event { try queue.removeFirst().get() }
+                XCTFail("\(malformed) was skipped")
+            } catch { XCTAssertEqual((error as? AppFailure)?.message, "Invalid Realtime event.", malformed) }
+        }
     }
 }

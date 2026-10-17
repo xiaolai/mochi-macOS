@@ -25,7 +25,8 @@ struct SpeechServices {
     /// Transcribes a saved recording: (file, session model, transcription model).
     var transcribe: (URL, String, String) async throws -> TranscriptResult
     /// Whether Codex is signed in and which models it lists; asks Codex on this Mac and sends nothing of the user's.
-    var codexStatus: () async -> CodexStatus = { CodexStatus() }
+    /// Throws only when the check was cancelled.
+    var codexStatus: () async throws -> CodexStatus = { CodexStatus() }
     /// Help Me Say This through Codex's text endpoint, which enforces the reply shape; nil where it is not wired.
     var codexHelpReply: ((ConversationRequest, CodexModel, String?) async throws -> String)?
 
@@ -45,7 +46,7 @@ struct SpeechServices {
                 try await RealtimeService(model: model).transcribe(
                     AudioFile.pcm(url), transcriptionModel: transcriptionModel)
             },
-            codexStatus: { await CodexCatalog.status() },
+            codexStatus: { try await CodexCatalog.status() },
             codexHelpReply: { request, model, effort in
                 try await CodexTextService(model: model, effort: effort).help(request)
             })

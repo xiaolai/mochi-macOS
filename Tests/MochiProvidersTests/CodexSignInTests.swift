@@ -1,10 +1,23 @@
-import CodexAuth
 import MochiKernel
 import MochiTestSupport
 import RealtimeConnection
 import XCTest
 
+@testable import CodexAuth
 @testable import MochiProviders
+
+/// A sign-in whose fetch or renewal the caller cancelled, as the shared package reports it: the state it stopped in,
+/// with the class cancelled.
+struct CancelledSignIn: CredentialSource {
+    var state = CodexAuthState.expired
+    var error: CodexAuthError {
+        var error = CodexAuthError(state, message: "the refresh was cancelled")
+        error.errorClass = .cancelled
+        return error
+    }
+    func token() async throws -> Token { throw error }
+    func refresh(after stale: Token) async throws -> Token { throw error }
+}
 
 final class CodexSignInTests: XCTestCase {
     /// Every state the shared sign-in reports has words the user can act on, and the three Mochi lacked before (a
@@ -45,6 +58,24 @@ final class CodexSignInTests: XCTestCase {
         try write(#"{"tokens":{"access_token":"\#(fresh)"}}"#, to: home)
         let account = try await CodexSignIn.account(fileSignIn(home))
         XCTAssertEqual(account, CodexAccount(token: fresh, accountID: "account-7"))
+    }
+
+    /// A fetch or renewal the caller cancelled is that cancellation, never a sign-in that expired or failed.
+    func testACancelledFetchOrRenewalIsACancellation() async {
+        for state in [CodexAuthState.expired, .codexError] {
+            XCTAssertTrue(CodexSignIn.failure(CancelledSignIn(state: state).error) is CancellationError, "\(state)")
+            do {
+                _ = try await CodexSignIn.account(CancelledSignIn(state: state))
+                XCTFail("A cancelled sign-in was accepted")
+            } catch {
+                XCTAssertTrue(error is CancellationError, "\(state): \(error)")
+            }
+        }
+        XCTAssertTrue(CodexSignIn.failure(CancellationError()) is CancellationError)
+        // The same state, not cancelled, is still the sign-in's own failure.
+        XCTAssertEqual(
+            (CodexSignIn.failure(CodexAuthError(.expired)) as? AppFailure)?.message,
+            CodexSignIn.failure(.expired).message)
     }
 
     /// A Codex folder outside the home folder, or a sign-in file that is a link, is never read.

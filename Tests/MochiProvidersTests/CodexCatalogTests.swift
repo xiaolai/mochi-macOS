@@ -22,7 +22,7 @@ final class CodexCatalogTests: XCTestCase {
     private func status(_ home: URL) async throws -> CodexStatus {
         let signIn = try Credentials(
             CodexAuthConfiguration(margin: 600, timeout: 5, source: .file, home: home.path, environment: [:]))
-        return await CodexCatalog.status(signIn: signIn, environment: [:], home: home)
+        return try await CodexCatalog.status(signIn: signIn, environment: [:], home: home)
     }
 
     private let cache = """
@@ -71,6 +71,15 @@ final class CodexCatalogTests: XCTestCase {
             XCTAssertNil(status.signInProblem)
             XCTAssertEqual(status.models, [])
         }
+    }
+
+    /// A check cancelled while Codex renewed the sign-in found out nothing, so it reports no sign-in problem.
+    func testACancelledCheckIsACancellationNotASignInProblem() async throws {
+        do {
+            let status = try await CodexCatalog.status(
+                signIn: CancelledSignIn(), environment: [:], home: home(cache: cache))
+            XCTFail("A cancelled check reported \(status)")
+        } catch { XCTAssertTrue(error is CancellationError, "\(error)") }
     }
 
     func testNoSignInReportsTheProblemAndNoModels() async throws {

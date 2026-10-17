@@ -32,8 +32,11 @@ public enum CodexSignIn {
         } catch { throw failure(error) }
     }
 
-    /// The words for a sign-in that cannot be used; any other error is returned as it is.
+    /// The words for a sign-in that cannot be used; any other error is returned as it is. A fetch or renewal the
+    /// caller cancelled keeps the state it stopped in but has the class cancelled: it is the caller's cancellation,
+    /// never a sign-in that failed.
     public static func failure(_ error: Error) -> Error {
+        if ErrorClass.of(error) == .cancelled { return CancellationError() }
         guard let error = error as? CodexAuthError else { return error }
         return failure(error.state, underlying: error)
     }

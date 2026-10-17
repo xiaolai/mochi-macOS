@@ -47,15 +47,19 @@ public enum CodexCatalog {
     static let maximumCacheSize = 4_000_000
 
     /// Asks Codex on this Mac for its ChatGPT sign-in and reads Codex's model list. Nothing of the user's is sent;
-    /// Codex may renew a sign-in that is about to expire.
-    public static func status() async -> CodexStatus {
-        await status(
+    /// Codex may renew a sign-in that is about to expire. Throws only `CancellationError`: a cancelled check found out
+    /// nothing about the sign-in.
+    public static func status() async throws -> CodexStatus {
+        try await status(
             signIn: CodexSignIn.shared, environment: ProcessInfo.processInfo.environment,
             home: FileManager.default.homeDirectoryForCurrentUser)
     }
-    static func status(signIn: any CredentialSource, environment: [String: String], home: URL) async -> CodexStatus {
+    static func status(signIn: any CredentialSource, environment: [String: String], home: URL) async throws
+        -> CodexStatus
+    {
         do { _ = try await signIn.token() } catch {
             let failure = CodexSignIn.failure(error)
+            if failure is CancellationError { throw failure }
             return CodexStatus(signInProblem: (failure as? AppFailure)?.message ?? failure.localizedDescription)
         }
         guard let folder = codexFolder(environment: environment, home: home) else { return CodexStatus() }

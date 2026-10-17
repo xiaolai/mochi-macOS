@@ -108,14 +108,16 @@ public struct RealtimeService {
         onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil
     ) async throws -> RealtimeAccumulator {
         try await reply(
-            input, credential: { try await secret() }, connect: RealtimeChannel.live, onResponse: onResponse,
+            input, credential: { try await secret() }, connect: { try await RealtimeChannel.live($0) },
+            onResponse: onResponse,
             onTranscription: onTranscription, onTool: onTool)
     }
     /// Full session lifecycle seam: handshake, history, audio upload, deadlines and cancellation.
     func reply(
         _ input: ConversationRequest,
-        credential: () async throws -> ClientSecret,
-        connect: (RealtimeEndpoint) async throws -> RealtimeChannel,
+        credential: @escaping @Sendable () async throws -> ClientSecret,
+        connect: @escaping @Sendable (RealtimeEndpoint) async throws -> RealtimeChannel,
+        connectTimeout: UInt64 = RealtimeService.connectTimeout,
         replyTimeout: UInt64 = 90_000_000_000,
         onResponse: (@MainActor (RealtimeAccumulator) throws -> Void)? = nil,
         onTranscription: (@MainActor (RealtimeAccumulator) -> Void)? = nil,
@@ -124,9 +126,7 @@ public struct RealtimeService {
         try validate(input)
         let channel: RealtimeChannel
         do {
-            let secret = try await credential()
-            try Task.checkCancellation()
-            channel = try await connect(endpoint(secret))
+            channel = try await open(credential: credential, connect: connect, timeout: connectTimeout)
         } catch {
             if Task.isCancelled || error is CancellationError { throw CancellationError() }
             throw Self.replyFailure(error)
@@ -316,10 +316,20 @@ public struct RealtimeService {
         if let onResponse { try await onResponse(accumulator) }
         return accumulator
     }
+    /// Past this much tool output in a reply, no further call runs: each is answered with a short error instead.
+    static let toolSoftBudget = 12000
+    /// The most tool output a reply may carry; a real result is cut down to fit it.
+    static let toolContextBudget = 20000
+    /// Calls a reply may make once the soft budget is spent. A model that keeps calling after being told is looping.
+    static let toolRefusalLimit = 8
     /// Tool output already sent this reply, and its total size against the context budget.
     private struct ToolBudget {
         var bytes = 0
         var outputs: [String: String] = [:]
+        /// Calls answered without running because the soft budget was spent. Their short errors are bounded by number,
+        /// not counted in `bytes`: otherwise a few of them after output near the limit would end a reply that obeyed.
+        var refused: Set<String> = []
+        var refusals = 0
     }
     /// Answers one round of tool calls. Repeated provider events must never repeat app side effects.
     private static func runToolCalls(
@@ -341,14 +351,22 @@ public struct RealtimeService {
                 // A call the provider did not finish is answered without running it.
                 let status = call["status"] as? String
                 let finished = status.map { $0 == "completed" } ?? !responseTruncated
+                if budget.bytes >= toolSoftBudget { budget.refused.insert(id) }
                 output = try await toolOutput(
                     call, name: name, id: id, finished: finished, usedBytes: budget.bytes, onTool: onTool)
                 budget.outputs[id] = output
             }
-            guard budget.bytes + output.utf8.count <= 20000 else {
-                throw AppFailure("Mochi's tool context limit was reached. Please retry.")
+            if budget.refused.contains(id) {
+                budget.refusals += 1
+                guard budget.refusals <= toolRefusalLimit else {
+                    throw AppFailure("Mochi's tool request limit was reached. Please retry.")
+                }
+            } else {
+                guard budget.bytes + output.utf8.count <= toolContextBudget else {
+                    throw AppFailure("Mochi's tool context limit was reached. Please retry.")
+                }
+                budget.bytes += output.utf8.count
             }
-            budget.bytes += output.utf8.count
             try await send([
                 "type": "conversation.item.create",
                 "item": ["type": "function_call_output", "call_id": id, "output": output],
@@ -369,7 +387,7 @@ public struct RealtimeService {
                 let arguments = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any]
             else { throw AppFailure("Invalid tool arguments.") }
             _ = try MochiTools.validate(name: name, arguments: arguments, origin: .voice)
-            guard usedBytes < 12000 else {
+            guard usedBytes < toolSoftBudget else {
                 throw AppFailure(
                     "The tool context budget is reached. Answer using the information already returned.")
             }
@@ -379,7 +397,7 @@ public struct RealtimeService {
         }
         try Task.checkCancellation()
         let encoded = try MochiTools.encode(result)
-        if encoded.utf8.count > 8000 || usedBytes + encoded.utf8.count > 20000 {
+        if encoded.utf8.count > 8000 || usedBytes + encoded.utf8.count > toolContextBudget {
             return try MochiTools.encode(
                 MochiTools.error("Tool result exceeded the conversation context budget. Request fewer items."))
         }

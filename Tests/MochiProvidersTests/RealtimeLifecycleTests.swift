@@ -45,7 +45,91 @@ private final class SocketFixture: @unchecked Sendable {
         RealtimeChannel(send: { _ in }, receive: { try await self.receive() }, close: { self.close() })
     }
 }
+/// Waits on a semaphore off the cooperative pool, so cancellation cannot stop it: a sign-in or handshake stuck in
+/// the network. Each test lets both of its waiters through after three seconds, so a request that still waited for
+/// one fails the time assertion instead of hanging.
+private func stuck(until release: DispatchSemaphore) async {
+    await withCheckedContinuation { done in
+        DispatchQueue.global().async {
+            release.wait()
+            done.resume()
+        }
+    }
+}
 final class RealtimeLifecycleTests: XCTestCase {
+    /// A reply and a transcription, each with its sign-in and connection under a 100 ms deadline.
+    private func requests(
+        credential: @escaping @Sendable () async throws -> ClientSecret,
+        connect: @escaping @Sendable (RealtimeEndpoint) async throws -> RealtimeChannel
+    ) -> [(String, () async throws -> Void)] {
+        [
+            (
+                "reply",
+                {
+                    _ = try await RealtimeService().reply(
+                        ConversationRequest(history: [], text: "Hello"), credential: credential, connect: connect,
+                        connectTimeout: 100_000_000)
+                }
+            ),
+            (
+                "transcription",
+                {
+                    _ = try await RealtimeService().transcribe(
+                        Data(repeating: 0, count: 4800), credential: credential, connect: connect,
+                        connectTimeout: 100_000_000)
+                }
+            ),
+        ]
+    }
+    func testASignInThatNeverFinishesIsBoundedByTheConnectDeadline() async throws {
+        let release = DispatchSemaphore(value: 0)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+            release.signal()
+            release.signal()
+        }
+        let connected = SocketFixture()
+        for (name, request) in requests(
+            credential: {
+                await stuck(until: release)
+                return testSecret("ek_late")
+            }, connect: { _ in connected.channel })
+        {
+            let started = Date()
+            do {
+                try await request()
+                XCTFail("\(name) waited for the sign-in")
+            } catch { XCTAssertTrue(error.localizedDescription.contains("timed out"), "\(name): \(error)") }
+            XCTAssertLessThan(Date().timeIntervalSince(started), 1, "\(name) does not wait for the sign-in")
+        }
+        release.signal()
+        release.signal()
+    }
+    func testAHandshakeThatNeverFinishesIsBoundedAndItsLateConnectionClosed() async throws {
+        let release = DispatchSemaphore(value: 0)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+            release.signal()
+            release.signal()
+        }
+        let late = SocketFixture()
+        for (name, request) in requests(
+            credential: { testSecret() },
+            connect: { _ in
+                await stuck(until: release)
+                return late.channel
+            })
+        {
+            let started = Date()
+            do {
+                try await request()
+                XCTFail("\(name) waited for the handshake")
+            } catch { XCTAssertTrue(error.localizedDescription.contains("timed out"), "\(name): \(error)") }
+            XCTAssertLessThan(Date().timeIntervalSince(started), 1, "\(name) does not wait for the handshake")
+        }
+        release.signal()
+        release.signal()
+        for _ in 0..<100 where late.closeCount < 2 { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(late.closeCount, 2, "Each handshake that completed late was closed")
+    }
     func testWholeRecoveryBuildsSelectedModelRequestAndClosesTransport() async throws {
         let socket = SocketFixture([
             ["type": "session.created"], ["type": "session.updated"],

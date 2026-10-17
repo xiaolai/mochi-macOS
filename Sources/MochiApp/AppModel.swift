@@ -301,7 +301,8 @@ struct MessageDeletionUndo {
     func refreshCodex() {
         let status = speech.codexStatus
         Task { [weak self] in
-            let result = await status()
+            // A cancelled check learned nothing, so what Mochi knew before stands.
+            guard let result = try? await status() else { return }
             self?.codex = result
         }
     }
