@@ -63,13 +63,18 @@ final class CodexSignInTests: XCTestCase {
         await assertRefused(try fileSignIn(home), as: .codexError)
     }
 
-    /// The account Codex's text endpoint asks for is the token's own claim, so it is known whichever source the
-    /// token came from.
-    func testTheAccountIsTheTokensClaim() {
-        XCTAssertEqual(CodexSignIn.accountID(of: jwt(expiring: Date(), account: "acct-1")), "acct-1")
-        XCTAssertNil(CodexSignIn.accountID(of: jwt(expiring: Date())))
-        XCTAssertNil(CodexSignIn.accountID(of: "opaque-token"))
-        XCTAssertNil(CodexSignIn.accountID(of: "a.!!!.c"))
+    /// The account Codex's text endpoint asks for is the token's own claim, as sayso reads it; a token without
+    /// the claim names no account.
+    func testTheAccountIsTheTokensClaim() async throws {
+        let home = try home()
+        let named = jwt(expiring: Date(timeIntervalSinceNow: 3600), account: "acct-1")
+        try write(#"{"tokens":{"access_token":"\#(named)"}}"#, to: home)
+        let account = try await CodexSignIn.account(fileSignIn(home))
+        XCTAssertEqual(account.accountID, "acct-1")
+        let unnamed = jwt(expiring: Date(timeIntervalSinceNow: 3600))
+        try write(#"{"tokens":{"access_token":"\#(unnamed)"}}"#, to: home)
+        let anonymous = try await CodexSignIn.account(fileSignIn(home))
+        XCTAssertNil(anonymous.accountID)
     }
 
     /// Mochi's own sign-in asks Codex first, keeps a sandboxed CODEX_HOME inside the home folder, renews ten minutes

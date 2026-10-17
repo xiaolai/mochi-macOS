@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/xiaolai/sayso.git",
       "state" : {
-        "revision" : "74dd8293ed5adad8f73b2e6bf1b9b9ee0749930b",
-        "version" : "0.2.2"
+        "revision" : "4698e35e9ed0b004b526a6df3dd26fb365b72b8c",
+        "version" : "0.3.0"
       }
     }
   ],

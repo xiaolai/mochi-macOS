@@ -23,28 +23,13 @@ public enum CodexSignIn {
             })
     }
 
-    /// The bearer for Codex's own endpoints, with the ChatGPT account it belongs to.
+    /// The bearer for Codex's own endpoints, with the ChatGPT account it belongs to: the token's own
+    /// `https://api.openai.com/auth` claim as sayso reads it, so it is known whichever source the token came from.
     public static func account(_ credentials: any CredentialSource = shared) async throws -> CodexAccount {
         do {
             let token = try await credentials.token()
-            return CodexAccount(token: token.bearer, accountID: accountID(of: token.bearer))
+            return CodexAccount(token: token.bearer, accountID: token.accountID)
         } catch { throw failure(error) }
-    }
-
-    /// The ChatGPT account a Codex access token names, in its `https://api.openai.com/auth` claim: the same id Codex
-    /// stores beside it in `auth.json` (measured 2026-10-16), so it serves the app-server source too. Nil for an
-    /// opaque token.
-    static func accountID(of token: String) -> String? {
-        let parts = token.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 3 else { return nil }
-        var payload = parts[1].replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-        payload += String(repeating: "=", count: (4 - payload.count % 4) % 4)
-        guard let data = Data(base64Encoded: payload),
-            let claims = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let auth = claims["https://api.openai.com/auth"] as? [String: Any],
-            let id = auth["chatgpt_account_id"] as? String, !id.isEmpty
-        else { return nil }
-        return id
     }
 
     /// The words for a sign-in that cannot be used; any other error is returned as it is.
