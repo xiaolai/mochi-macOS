@@ -45,20 +45,40 @@ struct RealtimeChannel: @unchecked Sendable {
                 let bytes = try JSONSerialization.data(withJSONObject: event)
                 try await surfacing { try await session.send(bytes) }
             },
-            receive: {
-                let message: RealtimeMessage
-                do { message = try await surfacing { try await session.next() } } catch let error as RealtimeError
-                    where error.errorClass == .protocol && error.code.isEmpty
-                {
-                    // A malformed event; an oversized one carries its close code and ends the session.
-                    throw AppFailure("Invalid Realtime event.", underlying: error)
-                }
-                guard let event = try JSONSerialization.jsonObject(with: message.raw) as? [String: Any] else {
-                    throw AppFailure("Invalid Realtime event.")
-                }
-                return event
-            },
+            receive: { try await event { try await surfacing { try await session.next() } } },
             close: { Task { await session.close() } })
+    }
+    /// Events the shared package reads, and so can find malformed, that Mochi never consumes. One of these that
+    /// arrives unreadable is skipped, as the package itself treats it: failing the reply over it would end a session
+    /// that has everything it needs.
+    static let unconsumedTypes: Set<String> = [
+        RealtimeEvent.responseCreatedType, RealtimeEvent.rateLimitsUpdatedType, RealtimeEvent.transcriptionDeltaType,
+    ]
+    /// The next event Mochi reads from `next`, skipping unreadable events of a type Mochi never consumes.
+    static func event(_ next: () async throws -> RealtimeMessage) async throws -> [String: Any] {
+        while true {
+            let message: RealtimeMessage
+            do { message = try await next() } catch let error as RealtimeError
+                where error.errorClass == .protocol && error.code.isEmpty
+            {
+                // A malformed event; an oversized one carries its close code and ends the session.
+                if let type = unconsumedType(of: error) {
+                    MochiLog.network.notice("Skipped an unreadable \(type, privacy: .public) event")
+                    continue
+                }
+                throw AppFailure("Invalid Realtime event.", underlying: error)
+            }
+            guard let event = try JSONSerialization.jsonObject(with: message.raw) as? [String: Any] else {
+                throw AppFailure("Invalid Realtime event.")
+            }
+            return event
+        }
+    }
+    /// The type of a malformed event Mochi does not consume, or nil. The shared package names the type of an event it
+    /// could not read only in its message, `realtime event <type>: <why>`; a malformed event without a readable type
+    /// is never skipped.
+    static func unconsumedType(of error: RealtimeError) -> String? {
+        unconsumedTypes.first { error.message.hasPrefix("realtime event \($0): ") }
     }
 }
 extension RealtimeChannel {
