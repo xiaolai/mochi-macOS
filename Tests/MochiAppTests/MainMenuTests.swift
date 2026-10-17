@@ -5,13 +5,62 @@ import XCTest
 
 /// When the main menu's commands can act. The menu takes every enablement from `MainMenuState`.
 final class MainMenuTests: XCTestCase {
-    /// A writable conversation, out of practice.
+    /// A writable conversation, out of practice, with the workspace in front.
     @MainActor private func conversationApp() -> AppModel {
         let app = makeApp(demo: true)
         app.resume()
         app.newChat()
+        app.workspaceKey = true
         addTeardownBlock { @MainActor in app.stop() }
         return app
+    }
+
+    @MainActor func testStopIsOffWhenNothingCanBeStopped() {
+        let app = conversationApp()
+        let menu = MainMenuState(app: app)
+        XCTAssertFalse(app.canStop)
+        XCTAssertFalse(menu.stop, "Escape must reach the focused field when there is nothing to stop")
+    }
+
+    @MainActor func testStopCoversEverythingStopEnds() {
+        for activity in [Activity.generating, .playing, .recording, .requestingPermission] {
+            let app = conversationApp()
+            _ = app.turn.begin(activity)
+            XCTAssertTrue(MainMenuState(app: app).stop, "\(activity)")
+        }
+        let listening = conversationApp()
+        _ = listening.listening.handle(.start(now: Date(), blockers: []))
+        XCTAssertTrue(listening.listening.isOn)
+        XCTAssertTrue(MainMenuState(app: listening).stop, "Listening")
+        let permission = conversationApp()
+        permission.listeningRequest = UUID()
+        XCTAssertTrue(MainMenuState(app: permission).stop, "Listening waiting for microphone permission")
+        let transcribing = conversationApp()
+        _ = transcribing.transcripts.begin(UUID())
+        XCTAssertTrue(MainMenuState(app: transcribing).stop, "A transcription in flight")
+        let find = conversationApp()
+        find.find.open()
+        XCTAssertFalse(find.canStop)
+        XCTAssertTrue(MainMenuState(app: find).stop, "Escape closes Find")
+    }
+
+    @MainActor func testStopActsOnlyWhileTheWorkspaceHasTheKeyboard() {
+        let app = conversationApp()
+        _ = app.turn.begin(.generating)
+        app.find.open()
+        // Settings, a sheet or the desktop Mochi's message bar has the keyboard.
+        app.workspaceKey = false
+        let menu = MainMenuState(app: app)
+        XCTAssertFalse(menu.stop)
+        menu.performStop()
+        XCTAssertTrue(app.find.isOpen)
+        XCTAssertEqual(app.turn.activity, .generating, "Escape in another window stops nothing")
+        app.workspaceKey = true
+        menu.performStop()
+        XCTAssertFalse(app.find.isOpen, "Find closes first")
+        XCTAssertEqual(app.turn.activity, .generating)
+        menu.performStop()
+        XCTAssertEqual(app.turn.activity, .idle)
     }
 
     @MainActor func testRenameAndPermanentDeletionWaitForAnyOtherSheet() throws {

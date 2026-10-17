@@ -78,9 +78,8 @@ import SwiftUI
                     Button("Help Me Say This", action: model.startHelp).keyboardShortcut(
                         "h", modifiers: [.command, .shift]
                     ).disabled(!menu.helpMeSayThis)
-                    Button("Stop") {
-                        if model.find.isOpen { model.find.close() } else { model.stop() }
-                    }.keyboardShortcut(.escape, modifiers: [])
+                    Button("Stop", action: menu.performStop).keyboardShortcut(.escape, modifiers: []).disabled(
+                        !menu.stop)
                 }
             }
         Settings {
@@ -101,13 +100,35 @@ import SwiftUI
     #endif
     /// Observers that pause hands-free listening while the screen is locked or the workspace is out of sight.
     private var listeningObservers: [(NotificationCenter, NSObjectProtocol)] = []
+    /// Observers that tell the model whether the workspace window has the keyboard.
+    private var keyObservers: [NSObjectProtocol] = []
     func attachWindow(_ window: NSWindow, model: AppModel) {
         tray.attach(window, model: model)
         observeListeningConditions(window, model: model)
+        observeKeyWindow(window, model: model)
         #if MOCHI_DEVELOPMENT
             instanceE2E.attach(window, tray: tray)
         #endif
         SingleInstanceController.shared.revealWorkspace = { [weak self] in self?.tray.showWindow() }
+    }
+    /// Stop takes Escape from the main menu only while the workspace has the keyboard; see `MainMenuState.stop`.
+    private func observeKeyWindow(_ window: NSWindow, model: AppModel) {
+        for observer in keyObservers { NotificationCenter.default.removeObserver(observer) }
+        model.workspaceKey = window.isKeyWindow
+        keyObservers = [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) {
+                [weak window, weak model] note in
+                MainActor.assumeIsolated {
+                    guard let window, let model, let changed = note.object as? NSWindow else { return }
+                    // Another window becoming key, a sheet included, takes the keyboard from the workspace.
+                    if changed === window {
+                        model.workspaceKey = name == NSWindow.didBecomeKeyNotification
+                    } else if name == NSWindow.didBecomeKeyNotification {
+                        model.workspaceKey = false
+                    }
+                }
+            }
+        }
     }
     private func observeListeningConditions(_ window: NSWindow, model: AppModel) {
         for (center, observer) in listeningObservers { center.removeObserver(observer) }

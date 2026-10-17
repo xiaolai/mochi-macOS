@@ -18,4 +18,14 @@
     var startAgain: Bool { app.canStartAgain && !app.automationModal }
     var listening: Bool { app.listening.isOn || app.canStartListening }
     var helpMeSayThis: Bool { app.canHelp && !app.automationModal }
+    /// Stop is bound to Escape, and main-menu shortcuts are matched before the key window sees the key. It is enabled
+    /// only while the workspace has the keyboard and there is something to end, so everywhere else Escape reaches the
+    /// focused field or sheet: the message bar closes, Settings and sheets cancel.
+    var stop: Bool { app.workspaceKey && (app.find.isOpen || app.canStop) }
+
+    /// Closes Find when it is open, otherwise stops everything Stop ends.
+    func performStop() {
+        guard stop else { return }
+        if app.find.isOpen { app.find.close() } else { app.stop() }
+    }
 }

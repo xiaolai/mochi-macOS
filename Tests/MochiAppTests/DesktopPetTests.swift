@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import MochiCore
 import MochiProviders
 import MochiTestSupport
@@ -336,7 +337,20 @@ final class DesktopPetTests: XCTestCase {
         XCTAssertTrue(bar.panel.canBecomeKey, "The open field takes typing")
         XCTAssertEqual(bar.panel.frame.width, PetBar.fieldWidth)
         bar.state.text = "Half a thought"
-        bar.close()
+        // Escape reaches the bar's window before the field editor, which would take it for completion.
+        let escape = try XCTUnwrap(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: bar.panel.windowNumber, context: nil, characters: "\u{1b}",
+                charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: UInt16(kVK_Escape)))
+        XCTAssertTrue(PetBar.isEscape(escape))
+        let shiftEscape = try XCTUnwrap(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 0,
+                windowNumber: bar.panel.windowNumber, context: nil, characters: "\u{1b}",
+                charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: UInt16(kVK_Escape)))
+        XCTAssertFalse(PetBar.isEscape(shiftEscape))
+        bar.panel.sendEvent(escape)
         XCTAssertFalse(bar.state.expanded)
         XCTAssertFalse(bar.panel.canBecomeKey)
         XCTAssertEqual(bar.state.text, "Half a thought", "Putting the field away keeps what was typed")

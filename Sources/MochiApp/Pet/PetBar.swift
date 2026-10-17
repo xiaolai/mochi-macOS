@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
 
 /// What the message bar shows: the pill, or the field it opens into, and the text typed there.
@@ -39,6 +40,7 @@ import SwiftUI
         self.panel = panel
         super.init()
         panel.accepts = { [weak self] in self?.state.expanded == true }
+        panel.escape = { [weak self] in self?.close() }
         let content = BarHostingView(
             rootView: PetBarView(
                 app: model, bar: state, open: { [weak self] in self?.open() },
@@ -163,8 +165,26 @@ import SwiftUI
 /// Takes the keyboard only while its field is open, so a click on the pill leaves the app you are in active.
 private final class BarPanel: NSPanel {
     var accepts: () -> Bool = { false }
+    /// Puts the field away.
+    var escape: () -> Void = {}
     override var canBecomeKey: Bool { accepts() }
     override var canBecomeMain: Bool { false }
+    /// Escape puts the field away. It is taken here, before the field editor, which treats Escape as a request to
+    /// complete the word; while an input method is composing, Escape belongs to the composition.
+    override func sendEvent(_ event: NSEvent) {
+        if PetBar.isEscape(event), (firstResponder as? NSTextView)?.hasMarkedText() != true {
+            escape()
+            return
+        }
+        super.sendEvent(event)
+    }
+}
+
+extension PetBar {
+    /// Escape pressed alone.
+    static func isEscape(_ event: NSEvent) -> Bool {
+        event.type == .keyDown && event.keyCode == UInt16(kVK_Escape) && Shortcut.Modifiers(event.modifierFlags).isEmpty
+    }
 }
 
 /// Lets the first click on a button act, although the bar's window is not key.
@@ -228,7 +248,6 @@ struct PetBarView: View {
             TextField("Message \(app.displayCharacterName)", text: $bar.text)
                 .textFieldStyle(.plain).font(.system(size: 13))
                 .onSubmit(send)
-                .onExitCommand(perform: close)
                 .accessibilityIdentifier("desktop-pet-message")
             Button(action: send) {
                 Image(systemName: "arrow.up").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
