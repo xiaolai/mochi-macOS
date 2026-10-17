@@ -139,7 +139,7 @@ public final class LibraryStore {
         var aside: URL?
         if FileManager.default.fileExists(atPath: file.path) {
             let url = root.appendingPathComponent(
-                "library-unreadable-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString).json")
+                "\(Self.unreadablePrefix)\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString).json")
             guard Darwin.link(file.path, url.path) == 0 else {
                 throw AppFailure(
                     "The unreadable library could not be set aside, so nothing was restored.",
@@ -155,6 +155,25 @@ public final class LibraryStore {
         }
         return library
     }
+    /// Names the unreadable libraries Restore Earlier Copy sets aside.
+    static let unreadablePrefix = "library-unreadable-"
+    /// Recordings named by the unreadable libraries set aside. Those are kept for recovery, so their recordings are
+    /// too; such a file may not decode, so it is searched for the names Mochi generates rather than read as a library.
+    func unreadableReferencedAudio() throws -> Set<String> {
+        var names = Set<String>()
+        for url in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) {
+            let name = url.lastPathComponent
+            guard name.hasPrefix(Self.unreadablePrefix), name.hasSuffix(".json"), identity(url) != nil,
+                let data = try? Data(contentsOf: url)
+            else { continue }
+            // Every name a library holds is a JSON string, so it lies between two quotation marks.
+            for piece in String(decoding: data, as: UTF8.self).split(separator: "\"")
+            where Self.generatedAudio(String(piece)) != nil {
+                names.insert(String(piece))
+            }
+        }
+        return names
+    }
     /// Folders of hard links that keep an export's recordings; one left by a force quit is removed at cleanup.
     public static let exportStagingPrefix = ".export-"
     /// How long an unreferenced generated example or preview stays cached after its last use.
@@ -163,7 +182,7 @@ public final class LibraryStore {
     /// generated examples, previews and replaced imports once unused for `cacheLifetime`. Other files are never touched.
     public func cleanupOrphanedAudio(_ library: Library, now: Date = Date()) throws {
         try library.validate()
-        let referenced = library.referencedAudio.union(previousReferencedAudio())
+        let referenced = library.referencedAudio.union(previousReferencedAudio()).union(try unreadableReferencedAudio())
         let keys: Set<URLResourceKey> = [
             .isRegularFileKey, .isSymbolicLinkKey, .isDirectoryKey, .contentModificationDateKey,
         ]

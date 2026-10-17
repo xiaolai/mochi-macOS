@@ -182,6 +182,25 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(kept).path))
     }
 
+    func testCleanupKeepsRecordingsAnUnreadableLibraryNames() throws {
+        let root = try folder()
+        let recording = "recording-\(UUID()).wav"
+        let reply = "reply-\(UUID()).wav"
+        let imported = LibraryStore.importedAudioName(extension: "mp3")
+        let orphan = "recording-\(UUID()).wav"
+        for name in [recording, reply, imported, orphan] { try Data([1]).write(to: root.appendingPathComponent(name)) }
+        // Set aside by Restore Earlier Copy and kept for recovery; damaged, so it is searched rather than decoded.
+        let unreadable =
+            #"{"conversations":[{"messages":[{"audio":"\#(recording)"},{"audio" : "\#(reply)"},"#
+            + #"{"audio":"\#(imported)"}"#
+        try Data(unreadable.utf8).write(to: root.appendingPathComponent("library-unreadable-1-\(UUID()).json"))
+        try LibraryStore(root: root).cleanupOrphanedAudio(Library(), now: Date(timeIntervalSinceNow: 30 * 86400))
+        for name in [recording, reply, imported] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path), name)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(orphan).path))
+    }
+
     func testCleanupRemovesExportStagingLeftByAForceQuit() throws {
         let root = try folder()
         let staging = root.appendingPathComponent("\(LibraryStore.exportStagingPrefix)\(UUID())")
