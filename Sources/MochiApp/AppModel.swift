@@ -212,6 +212,10 @@ struct MessageDeletionUndo {
     @ObservationIgnored var recordingClock: Task<Void, Never>?
     /// When the meter last heard sound in the current take, in seconds since it started.
     @ObservationIgnored var lastAudibleRecordingTime: Double = 0
+    /// Whether the meter has heard sound at all in the current take.
+    @ObservationIgnored var recordingHeardSound = false
+    /// A take that started by itself after a reply and has heard nothing for this many seconds ends, and is discarded.
+    static let unattendedSilenceLimit: Double = 8
     /// The recorder stops itself after this many seconds.
     static let recordingLimit: Double = 60
     /// How long the input must stay quiet before the take warns about it.

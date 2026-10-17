@@ -155,6 +155,7 @@ extension AppModel {
                 unattendedRecording = unattended ? token : nil
                 recordingSeconds = 0
                 lastAudibleRecordingTime = 0
+                recordingHeardSound = false
                 recordingWarning = nil
                 startRecordingFeedback(token: turn.epoch, started: started)
             } catch { fail(error, token: token, context: "Start recording") }
@@ -164,7 +165,10 @@ extension AppModel {
         recordingSeconds = Int(max(0, min(Self.recordingLimit, elapsed.isFinite ? elapsed : 0)))
         recordingLevel = level.isFinite ? min(0, max(-80, level)) : -80
         let time = elapsed.isFinite ? elapsed : 0
-        if recordingLevel >= -48 { lastAudibleRecordingTime = time }
+        if recordingLevel >= -48 {
+            lastAudibleRecordingTime = time
+            recordingHeardSound = true
+        }
         // Only sustained silence warns; ordinary pauses in speech would make the warning blink on every word.
         recordingWarning =
             time - lastAudibleRecordingTime >= Self.quietWarningDelay
@@ -179,7 +183,10 @@ extension AppModel {
                 guard !Task.isCancelled, turn.epoch == token else { return }
                 let elapsed = recordingNow().timeIntervalSince(started)
                 updateRecordingFeedback(elapsed: elapsed, level: media.meter())
-                if elapsed >= Self.recordingLimit || !media.recordingActive() {
+                // A take that started by itself and has heard nobody need not run to the limit to be discarded.
+                if elapsed >= Self.recordingLimit || !media.recordingActive()
+                    || (unattendedTake && !recordingHeardSound && elapsed >= Self.unattendedSilenceLimit)
+                {
                     finishRecording()
                     return
                 }
@@ -213,6 +220,8 @@ extension AppModel {
                 "Recording stopped because the microphone disconnected or stopped responding. Check your microphone, then record again."
         )
     }
+    /// Whether the take now recording started by itself after a reply.
+    private var unattendedTake: Bool { unattendedRecording != nil && recordingRequest == unattendedRecording }
     func finishRecording() {
         // A recording that started by itself is never sent from behind a sheet, a lock or a hidden window, even when
         // it finishes before any observer has seen the change.
@@ -222,6 +231,15 @@ extension AppModel {
             unattendedRecording = nil
             MochiLog.audio.notice("Discarded the recording that started after a reply: Mochi was covered or hidden")
             cancelRecording()
+            return
+        }
+        // Nor is one that heard nothing: with nobody there it would be sent, answered, and start the next one, and
+        // so on until the screen locks. It is discarded, which ends that loop.
+        if unattendedTake, turn.activity == .recording, !recordingHeardSound {
+            unattendedRecording = nil
+            MochiLog.audio.notice("Discarded the recording that started after a reply: it heard nothing")
+            cancelRecording()
+            notice = String(localized: "Nothing was heard after the reply, so the microphone is off.")
             return
         }
         // A recorder that already stopped (time limit, disconnect, failure) is judged by its reported outcome,

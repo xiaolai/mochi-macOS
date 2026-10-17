@@ -12504,6 +12504,34 @@
         }
       }
     },
+    "Nothing was heard after the reply, so the microphone is off." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返信のあとに何も聞こえなかったため、マイクをオフにしました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "답장 후 아무 소리도 들리지 않아 마이크를 껐습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回复后没有听到任何声音，因此已关闭麦克风。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回覆後沒有聽到任何聲音，因此已關閉麥克風。"
+          }
+        }
+      }
+    },
     "Number out of range: %@." : {
       "localizations" : {
         "ja" : {
