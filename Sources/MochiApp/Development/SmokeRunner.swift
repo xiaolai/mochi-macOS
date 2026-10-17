@@ -1102,9 +1102,6 @@
                     model.find.query = "time"
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     await capture("conversation-search-compact.png")
-                    let escapeCommand = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items).first {
-                        $0.title == String(localized: "Stop") && $0.keyEquivalent == "\u{1b}"
-                    }
                     // Stop takes Escape only while the workspace has the keyboard, as it does when a person types in it.
                     mainWindow?.makeKeyAndOrderFront(nil)
                     NSApp.activate()
@@ -1112,11 +1109,19 @@
                         captureFailures.append("The workspace window did not take the keyboard")
                     }
                     let searchEpoch = model.turn.begin(.generating)
-                    if let command = escapeCommand, let menu = command.menu {
-                        menu.performActionForItem(at: menu.index(of: command))
-                    }
-                    if escapeCommand == nil || model.find.isOpen || model.turn.epoch != searchEpoch {
-                        captureFailures.append("Escape must close search without cancelling a pending reply")
+                    // Escape goes through the main menu's key equivalents, as a key press does; SwiftUI rebuilds its
+                    // menu items as their state changes, so no item looked up earlier is pressed directly.
+                    let escape = NSEvent.keyEvent(
+                        with: .keyDown, location: .zero, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: mainWindow?.windowNumber ?? 0,
+                        context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false,
+                        keyCode: 53)
+                    let handled = escape.map { NSApp.mainMenu?.performKeyEquivalent(with: $0) ?? false } ?? false
+                    if !handled || model.find.isOpen || model.turn.epoch != searchEpoch {
+                        captureFailures.append(
+                            "Escape must close search without cancelling a pending reply (handled \(handled), "
+                                + "workspace key \(model.workspaceKey), Stop enabled \(MainMenuState(app: model).stop), "
+                                + "search open \(model.find.isOpen), reply kept \(model.turn.epoch == searchEpoch))")
                     }
                     _ = model.turn.finish(searchEpoch)
                     model.find.close()
