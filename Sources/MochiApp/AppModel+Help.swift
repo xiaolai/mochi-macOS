@@ -190,8 +190,11 @@ extension AppModel {
             persistHelpDraft()
         }
     }
+    /// Typing is written after a pause, as setting `help.english` arranges; only an edit that drops the saved
+    /// expression is written at once, so the draft on disk never names an expression it no longer practises.
     func editEnglish(_ text: String) {
         help.english = text
+        let dropsExpression = help.expression != nil && help.expression?.english != text
         if help.expression?.english != text {
             help.expression = nil
             help.referencePitch = []
@@ -200,7 +203,7 @@ extension AppModel {
         if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && help.stage == .thought {
             help.stage = .english
         }
-        persistHelpDraft()
+        if dropsExpression { persistHelpDraft() }
     }
     func ensureExpression() {
         guard let id = selectedID else { return }
