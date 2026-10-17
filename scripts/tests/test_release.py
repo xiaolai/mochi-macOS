@@ -161,11 +161,11 @@ class ReleaseTests(unittest.TestCase):
             return subprocess.CompletedProcess(args,0,build_path if args==["strings","helper"] else "normal","")
         with self.assertRaisesRegex(ValueError,"helper"): release.check_distribution("app","helper",run=run)
 
-    def test_distribution_gate_rejects_retired_providers(self):
-        for retired in ("api.elevenlabs.io", "ELEVENLABS_API_KEY", "ElevenLabsSpeech", "ElevenLabsCredential"):
-            with self.assertRaises(ValueError): release.validate_distribution_symbols(retired,"normal","normal")
-            with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",retired)
-            with self.assertRaises(ValueError): release.validate_distribution_symbols("normal",retired,"normal")
+    def test_distribution_gate_allows_the_optional_elevenlabs_timbre(self):
+        # ElevenLabs is back as an optional, default-off practice timbre (PracticeTimbre). The rule that refused its
+        # names was removed with the provider's return, so they may appear in the shipped app.
+        for name in ("api.elevenlabs.io", "ELEVENLABS_API_KEY", "ElevenLabsCredential"):
+            release.validate_distribution_symbols(name,"normal","normal")
 
     def test_the_api_key_gate_is_on_mochis_own_sources(self):
         # The shared sign-in package ships the name to strip it from Codex's environment and to refuse an API-key

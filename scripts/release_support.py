@@ -69,9 +69,6 @@ def validate_distribution_symbols(app_strings, helper_symbols, app_symbols=""):
     for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray", "smokeHandsFree", "smokeBargeIn"):
         if symbol in app_symbols:
             raise ValueError("Development probe symbols cannot ship in the distribution app")
-    for retired in ("api.elevenlabs.io", "ELEVENLABS_API_KEY", "ElevenLabs"):
-        if retired in app_strings or retired in app_symbols or retired in helper_symbols:
-            raise ValueError("The retired ElevenLabs provider cannot ship")
     for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken"):
         if symbol in helper_symbols:
             raise ValueError("Provider and credential code cannot ship in the MCP helper")

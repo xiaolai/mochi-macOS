@@ -56,6 +56,12 @@ import MochiProviders
         didSet { store(conversationVoiceOptions, key: "conversationVoiceOptions") }
     }
     var practiceVoiceOptions: OpenAIVoiceOptions { didSet { store(practiceVoiceOptions, key: "practiceVoiceOptions") } }
+    /// Whether practice examples are converted into the learner's own voice through ElevenLabs. Off unless turned on.
+    var practiceTimbreEnabled: Bool { didSet { defaults.set(practiceTimbreEnabled, forKey: "practiceTimbreEnabled") } }
+    /// The ElevenLabs voice ID of the learner's own clone, as typed. The API key is in the Keychain, not here.
+    var practiceTimbreVoiceID: String {
+        didSet { defaults.set(practiceTimbreVoiceID, forKey: "practiceTimbreVoiceID") }
+    }
     var externalControlEnabled: Bool {
         didSet { defaults.set(externalControlEnabled, forKey: "externalControlEnabled") }
     }
@@ -131,7 +137,15 @@ import MochiProviders
         didSet { defaults.set(listeningSilenceLimit.rawValue, forKey: "listeningSilenceMinutes") }
     }
     var practiceVoiceLabel: String {
-        "\(RealtimeVoice(rawValue: builtInPracticeVoice)?.name ?? RealtimeService.defaultVoice.capitalized) · Codex voice"
+        // The learner's own voice replaces the built-in one, so the example is labelled by the speaker it sounds like.
+        if practiceTimbreEnabled { return "Your voice" }
+        return "\(RealtimeVoice(rawValue: builtInPracticeVoice)?.name ?? RealtimeService.defaultVoice.capitalized) · Codex voice"
+    }
+    /// The conversion to apply to a new practice example, or nil when the feature is off. A voice ID that does not
+    /// validate throws here, before any paid request, so a bad setting never costs a sentence.
+    func practiceTimbre() throws -> PracticeTimbre? {
+        guard practiceTimbreEnabled else { return nil }
+        return try PracticeTimbre(voiceID: practiceTimbreVoiceID)
     }
     /// The last few greeting patterns, so a new conversation does not open with the same words.
     var recentGreetings: [String] {
@@ -181,6 +195,8 @@ import MochiProviders
         builtInPracticeVoice = voice("builtInPracticeVoice")
         conversationVoiceOptions = options("conversationVoiceOptions")
         practiceVoiceOptions = options("practiceVoiceOptions")
+        practiceTimbreEnabled = defaults.bool(forKey: "practiceTimbreEnabled")
+        practiceTimbreVoiceID = defaults.string(forKey: "practiceTimbreVoiceID") ?? ""
         externalControlEnabled = allowExternalControl && defaults.bool(forKey: "externalControlEnabled")
         talkingMode = Self.stored(defaults, "talkingMode", TalkingMode.init(rawValue:)) ?? .pressToSend
         listenAfterReply = defaults.bool(forKey: "listenAfterReply")

@@ -24,6 +24,11 @@ struct SpeechServices {
     var referenceAudio: (String, ConversationLanguage, RealtimeService, URL, Bool) async throws -> URL
     /// Transcribes a saved recording: (file, session model, transcription model).
     var transcribe: (URL, String, String) async throws -> TranscriptResult
+    /// Converts a practice example's spoken audio into the learner's voice: (source, timbre, folder). Called only when
+    /// the learner has turned practice timbre on.
+    var convertTimbre: (URL, PracticeTimbre, URL) async throws -> URL = { _, _, _ in
+        throw AppFailure(verbatim: "Practice timbre is not available here.")
+    }
     /// Whether Codex is signed in and which models it lists; asks Codex on this Mac and sends nothing of the user's.
     /// Throws only when the check was cancelled.
     var codexStatus: () async throws -> CodexStatus = { CodexStatus() }
@@ -45,6 +50,9 @@ struct SpeechServices {
             transcribe: { url, model, transcriptionModel in
                 try await RealtimeService(model: model).transcribe(
                     AudioFile.pcm(url), transcriptionModel: transcriptionModel)
+            },
+            convertTimbre: { source, timbre, root in
+                try await PracticeTimbreConverter().convert(source: source, timbre: timbre, root: root)
             },
             codexStatus: { try await CodexCatalog.status() },
             codexHelpReply: { request, model, effort in

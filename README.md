@@ -219,6 +219,8 @@ The library format is **version 6**, which adds Recently Deleted for templates a
 
 Practice examples you saved with ElevenLabs before Mochi moved to Codex voices keep playing. A previously saved ElevenLabs key stays in your Keychain until you delete the `ELEVENLABS_API_KEY` item in Keychain Access.
 
+**Speak examples in my voice** is optional and off by default. In **Settings → Voices → Practice Examples**, turn it on, then enter your ElevenLabs voice ID and API key. A new example is still spoken by OpenAI first; ElevenLabs then converts that audio into your voice and Mochi keeps the converted file beside the library. Only the example's audio is sent to ElevenLabs, never your recordings. Examples saved before you turn it on keep their earlier voice until you create them again. The key is stored in the Keychain.
+
 ## Build from source
 
 With Xcode's command-line tools available:

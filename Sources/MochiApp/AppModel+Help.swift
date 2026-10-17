@@ -233,10 +233,19 @@ extension AppModel {
         let label = settings.practiceVoiceLabel
         let root = store.root
         let referenceAudio = speech.referenceAudio
+        let convertTimbre = speech.convertTimbre
         let service = settings.practiceService()
         runExclusive("Create example", progress: "Creating your example…") { [weak self] job in
             guard let self else { return }
-            let url = try await referenceAudio(text, language, service, root, force)
+            // Checked before the first paid request, so a bad voice ID costs no sentence.
+            let timbre = try settings.practiceTimbre()
+            let spoken = try await referenceAudio(text, language, service, root, force)
+            let url: URL
+            if let timbre {
+                url = try await convertTimbre(spoken, timbre, root)
+            } else {
+                url = spoken
+            }
             let pitch = try await AudioFile.pitchInBackground(url)
             guard job.isCurrent() else { return }
             help.expression?.reference = url.lastPathComponent

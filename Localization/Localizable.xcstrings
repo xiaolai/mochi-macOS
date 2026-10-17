@@ -24291,6 +24291,482 @@
           }
         }
       }
+    },
+    "Speak examples in my voice (ElevenLabs)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用我的声音朗读示例（ElevenLabs）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用我的聲音朗讀範例（ElevenLabs）"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例文を私の声で読み上げる（ElevenLabs）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예문을 내 목소리로 읽기 (ElevenLabs)"
+          }
+        }
+      }
+    },
+    "Voice ID" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "声音 ID"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聲音 ID"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声 ID"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음성 ID"
+          }
+        }
+      }
+    },
+    "Key saved; enter a new one to replace it" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥已保存；输入新密钥可替换"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金鑰已儲存；輸入新金鑰即可取代"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーは保存済みです。新しいキーを入力すると置き換えます"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키가 저장되었습니다. 새 키를 입력하면 바뀝니다"
+          }
+        }
+      }
+    },
+    "ElevenLabs API key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs API 密钥"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs API 金鑰"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs API キー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs API 키"
+          }
+        }
+      }
+    },
+    "Save Key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存密钥"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存金鑰"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーを保存"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키 저장"
+          }
+        }
+      }
+    },
+    "Remove Key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除密钥"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除金鑰"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーを削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키 삭제"
+          }
+        }
+      }
+    },
+    "Each example is converted by ElevenLabs. Only the example’s audio is sent." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个示例都由 ElevenLabs 转换，只发送示例的音频。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每個範例都由 ElevenLabs 轉換，只傳送範例的音訊。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "各例文は ElevenLabs で変換されます。送信されるのは例文の音声だけです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "각 예문은 ElevenLabs에서 변환됩니다. 예문의 오디오만 전송됩니다."
+          }
+        }
+      }
+    },
+    "Enter your ElevenLabs voice ID in Settings → Voices." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在“设置”→“声音”中输入你的 ElevenLabs 声音 ID。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在「設定」→「聲音」中輸入你的 ElevenLabs 聲音 ID。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「設定」→「音声」で ElevenLabs の音声 ID を入力してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 → 음성에서 ElevenLabs 음성 ID를 입력하십시오."
+          }
+        }
+      }
+    },
+    "The example's audio is missing or too large to convert. Generate the example again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "示例的音频缺失或过大，无法转换。请重新生成示例。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "範例的音訊遺失或過大，無法轉換。請重新產生範例。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例文の音声が見つからないか大きすぎて変換できません。例文をもう一度作成してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예문의 오디오가 없거나 너무 커서 변환할 수 없습니다. 예문을 다시 만드십시오."
+          }
+        }
+      }
+    },
+    "The example is too long to convert. Shorten its text, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "示例太长，无法转换。请缩短文字后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "範例太長，無法轉換。請縮短文字後再試。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例文が長すぎて変換できません。文を短くしてからもう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예문이 너무 길어 변환할 수 없습니다. 문장을 줄인 뒤 다시 시도하십시오."
+          }
+        }
+      }
+    },
+    "ElevenLabs returned no audio. Your example has not changed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs 没有返回音频。你的示例没有改变。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs 沒有傳回音訊。你的範例沒有改變。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs が音声を返しませんでした。例文は変更されていません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs가 오디오를 반환하지 않았습니다. 예문은 바뀌지 않았습니다."
+          }
+        }
+      }
+    },
+    "ElevenLabs returned unreadable audio. Your saved example has not changed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs 返回的音频无法读取。已保存的示例没有改变。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs 傳回的音訊無法讀取。已儲存的範例沒有改變。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs が返した音声を読み込めませんでした。保存済みの例文は変更されていません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs가 반환한 오디오를 읽을 수 없습니다. 저장된 예문은 바뀌지 않았습니다."
+          }
+        }
+      }
+    },
+    "Could not read the ElevenLabs key from Keychain. Save it again in Settings → Voices." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法从钥匙串读取 ElevenLabs 密钥。请在“设置”→“声音”中重新保存。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法從鑰匙圈讀取 ElevenLabs 金鑰。請在「設定」→「聲音」中重新儲存。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーチェーンから ElevenLabs のキーを読み取れませんでした。「設定」→「音声」で保存し直してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키체인에서 ElevenLabs 키를 읽을 수 없습니다. 설정 → 음성에서 다시 저장하십시오."
+          }
+        }
+      }
+    },
+    "Save your ElevenLabs API key in Settings → Voices." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在“设置”→“声音”中保存你的 ElevenLabs API 密钥。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在「設定」→「聲音」中儲存你的 ElevenLabs API 金鑰。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「設定」→「音声」で ElevenLabs API キーを保存してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 → 음성에서 ElevenLabs API 키를 저장하십시오."
+          }
+        }
+      }
+    },
+    "Enter a valid ElevenLabs API key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入有效的 ElevenLabs API 密钥。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請輸入有效的 ElevenLabs API 金鑰。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有効な ElevenLabs API キーを入力してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "올바른 ElevenLabs API 키를 입력하십시오."
+          }
+        }
+      }
+    },
+    "Could not save the ElevenLabs key in Keychain." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法将 ElevenLabs 密钥保存到钥匙串。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法將 ElevenLabs 金鑰儲存到鑰匙圈。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs のキーをキーチェーンに保存できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs 키를 키체인에 저장할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Could not remove the ElevenLabs key from Keychain." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法从钥匙串移除 ElevenLabs 密钥。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法從鑰匙圈移除 ElevenLabs 金鑰。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーチェーンから ElevenLabs のキーを削除できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키체인에서 ElevenLabs 키를 삭제할 수 없습니다."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
