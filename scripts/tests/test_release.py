@@ -135,7 +135,21 @@ class ReleaseTests(unittest.TestCase):
             calls.append(args); self.assertTrue(kwargs["check"])
             return subprocess.CompletedProcess(args,0,"normal","")
         release.check_distribution("app","helper",run=run)
-        self.assertEqual(calls,[["strings","app"],["nm","app"],["nm","helper"]])
+        self.assertEqual(calls,[["strings","app"],["nm","app"],["nm","helper"],["strings","helper"]])
+
+    def test_distribution_gate_rejects_a_resource_lookup_through_the_build_folder(self):
+        # An older SwiftPM accessor looked beside the executable and then in an absolute .build path: the bundle in
+        # Contents/Resources is never found, so the app works on the Mac that built it and crashes for everyone else.
+        release.validate_build_paths({"Mochi": "Mochi_MochiApp.bundle\nunable to find bundle named Mochi_MochiApp\n"})
+        accessor = "could not load resource bundle: from \n or \n"
+        build_path = "/tmp/checkout/mochi/.build/arm64-apple-macosx/release/Mochi_MochiApp.bundle\n"
+        for text in (accessor, build_path):
+            with self.assertRaisesRegex(ValueError,"Mochi"): release.validate_build_paths({"Mochi": text})
+            with self.assertRaisesRegex(ValueError,"mochi-mcp"):
+                release.validate_build_paths({"Mochi": "normal", "mochi-mcp": text})
+        def run(args, **kwargs):
+            return subprocess.CompletedProcess(args,0,build_path if args==["strings","helper"] else "normal","")
+        with self.assertRaisesRegex(ValueError,"helper"): release.check_distribution("app","helper",run=run)
 
     def test_distribution_gate_rejects_retired_providers(self):
         for retired in ("api.elevenlabs.io", "ELEVENLABS_API_KEY", "ElevenLabsSpeech", "ElevenLabsCredential"):
@@ -156,3 +170,67 @@ class ReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as empty:
             with self.assertRaises(ValueError): release.validate_sources(empty)
         release.validate_sources()
+
+
+class ReleaseSourceTests(unittest.TestCase):
+    def git(self, status="", head="a"*40, tag=None):
+        calls=[]
+        def run(args, **kwargs):
+            calls.append(args)
+            if args[1]=="status": return subprocess.CompletedProcess(args,0,status,"")
+            if args[-1]=="HEAD^{commit}": return subprocess.CompletedProcess(args,0,head+"\n","")
+            if tag is None: return subprocess.CompletedProcess(args,1,"","")
+            return subprocess.CompletedProcess(args,0,tag+"\n","")
+        return run, calls
+
+    def test_a_clean_head_is_released(self):
+        run, calls = self.git()
+        self.assertEqual(release.release_commit("0.9.10",run=run),"a"*40)
+        self.assertIn(["git","status","--porcelain","--untracked-files=all"],calls)
+        self.assertTrue(any("refs/tags/v0.9.10^{commit}" in c for c in calls))
+
+    def test_changed_or_untracked_files_refuse(self):
+        for status in (" M Sources/MochiApp/App.swift\n","?? Sources/MochiApp/Stray.swift\n"):
+            run, _ = self.git(status=status)
+            with self.assertRaisesRegex(ValueError,"clean"): release.release_commit("0.9.10",run=run)
+
+    def test_the_version_tag_must_name_head(self):
+        run, _ = self.git(tag="a"*40)
+        self.assertEqual(release.release_commit("0.9.10",run=run),"a"*40)
+        run, _ = self.git(tag="b"*40)
+        with self.assertRaisesRegex(ValueError,"v0.9.10"): release.release_commit("0.9.10",run=run)
+
+    def test_a_dmg_is_resumed_only_from_the_commit_it_was_built_from(self):
+        with tempfile.TemporaryDirectory() as d:
+            dmg=Path(d)/"Mochi-0.9.10.dmg"; dmg.write_bytes(b"dmg")
+            with self.assertRaisesRegex(ValueError,"no recorded commit"): release.check_dmg_commit(dmg,"a"*40)
+            release.record_dmg_commit(dmg,"a"*40)
+            self.assertEqual(Path(str(dmg)+".commit").read_text(),"a"*40+"\n")
+            release.check_dmg_commit(dmg,"a"*40)
+            with self.assertRaisesRegex(ValueError,"built from a{12}"): release.check_dmg_commit(dmg,"b"*40)
+            with self.assertRaises(ValueError): release.record_dmg_commit(dmg,"not a commit")
+
+    def test_the_release_script_checks_the_source_before_building_and_resuming(self):
+        script=(Path(__file__).parents[1]/"release.sh").read_text()
+        source=script.index("release_support.py source")
+        self.assertLess(source,script.index("swift test"))
+        self.assertLess(source,script.index("dmg-commit check"))
+        self.assertLess(script.index("dmg-commit check"),script.index('notarize "$dmg"'))
+        self.assertLess(script.index('hdiutil create'),script.index("dmg-commit record"))
+
+    def test_ad_hoc_distribution_builds_are_for_checks_and_cannot_ship(self):
+        scripts=Path(__file__).parents[1]
+        release_script=(scripts/"release.sh").read_text()
+        refusal=release_script.index('"${MOCHI_ADHOC_DISTRIBUTION:-0}" = 0 ] || {')
+        self.assertLess(refusal,release_script.index("build-app.sh"))
+        build=(scripts/"build-app.sh").read_text()
+        branch=build.index('[ "${MOCHI_DISTRIBUTION:-0}" = 1 ] && [ "${MOCHI_ADHOC_DISTRIBUTION:-0}" = 1 ]')
+        developer_id=build.index(': "${MOCHI_SIGN_ID:?Distribution requires MOCHI_SIGN_ID}"')
+        self.assertLess(branch,developer_id)
+        self.assertNotIn("--sign -",build[developer_id:build.index("else",developer_id)])
+        ci=(scripts.parent/".github/workflows/ci.yml").read_text()
+        job=ci[ci.index("  distribution:"):]
+        steps=[job.index(s) for s in ("MOCHI_ADHOC_DISTRIBUTION: 1","./scripts/build-app.sh",
+                                       "release_support.py metadata build/ci/Mochi.app/Contents/Info.plist",
+                                       "release_support.py distribution build/ci/Mochi.app/Contents/MacOS/Mochi")]
+        self.assertEqual(steps,sorted(steps))

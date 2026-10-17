@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Native E2E checks with a ledger: a check that passed is not run again until something it depends on changes.
 
-A check's fingerprint covers its definition, every committed file it depends on and the test Mac's environment. Its
-files are the source folders of the Swift targets it exercises, found from the package graph, plus the files named in
-its definition: a change to a test, a doc or another check's script leaves it covered. The environment is the host,
-its macOS and Swift build, and for live checks the Codex version. Only passes are recorded; a failure always runs
-again. `--force` reruns a covered check and needs a reason, which the ledger keeps.
+A check's fingerprint covers its definition, the harness that runs and judges it, every committed file it depends on
+and the test Mac's environment. The harness is the source of what decides a result outside the check's own fields: the
+learner a hands-free check plays, the setup, how a check is launched and how its verdict is read. Its files are the
+source folders of the Swift targets it exercises, found from the package graph, plus the files named in its
+definition: a change to a test, a doc or another check's script leaves it covered. The environment is the test Mac (by
+a random identifier it keeps), its macOS and Swift build, and for live checks the Codex version. Only passes are
+recorded; a failure always runs again. `--force` reruns a covered check and needs a reason, which the ledger keeps.
 
     scripts/e2e.py plan              what would run on HEAD, and why
     scripts/e2e.py run               runs what is not covered, on the test Mac, and records the passes
@@ -13,17 +15,19 @@ again. `--force` reruns a covered check and needs a reason, which the ledger kee
 
 The ledger is scripts/e2e-ledger.json; commit it with the change it verified.
 """
-import argparse, datetime, hashlib, json, os, subprocess, sys, tempfile
+import argparse, datetime, hashlib, inspect, json, os, re, subprocess, sys, tarfile, tempfile, uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LEDGER = ROOT / "scripts/e2e-ledger.json"
+# What each check left, copied back from the test Mac; build/ is ignored by git.
+EVIDENCE = ROOT / "build/e2e-evidence"
 # The test Mac is named outside this public repository: --host, or MOCHI_E2E_HOST (see AGENTS.md).
 DEFAULT_HOST = os.environ.get("MOCHI_E2E_HOST", "")
 KEPT_PER_CHECK = 10
-# The package graph and the build; every check depends on them.
-COMMON_INPUTS = ("Package.swift", "Package.resolved")
+# The package graph and the build, and the runner every check runs under; every check depends on them.
+COMMON_INPUTS = ("Package.swift", "Package.resolved", "scripts/e2e_contain.py")
 # What launching the app needs besides its targets: the bundle script and the catalogs it compiles in.
 APP_INPUTS = ("scripts/build-app.sh", "scripts/localization.py", "scripts/release_support.py", "Localization/")
 APP_ROOTS = ("MochiApp", "MochiMCP")
@@ -66,8 +70,10 @@ CHECKS = (
                                                     "scripts/tests/fixtures/"),
         command="python3 scripts/tests/single_instance_e2e.py --allow-native",
         evidence="build/evidence/single-instance-e2e/report.json"),
-    *(Check(f"audition-{suite}", ("MochiProvidersTests",), command=AUDITION.format(suite), evidence=suite,
-            live=True, timeout=1800)
+    # The provider tests read the shipped catalogs at run time (TemplateAuditionTests checks its greetings against
+    # them), so the catalogs are an input of every suite in that target.
+    *(Check(f"audition-{suite}", ("MochiProvidersTests",), ("Localization/",), command=AUDITION.format(suite),
+            evidence=suite, live=True, timeout=1800)
       for suite in ("CoachingAuditionTests", "StartAgainAuditionTests", "HelpSuggestionLiveTests",
                     "TemplateAuditionTests")),
 )
@@ -128,8 +134,17 @@ def environment(check, host_env):
     return {k: host_env.get(k, "") for k in keys}
 
 
-def fingerprint(check, digest, env):
-    body = json.dumps({"spec": check.spec(), "inputs": digest, "env": env}, sort_keys=True)
+def harness():
+    """The digest of what decides a result besides a check's own fields: the shell prelude, the setup and the learner
+    it synthesizes, how run_check launches a check and how verdict reads its evidence. They are read when a plan is
+    made, so a change to any of them runs every check again. (The runner, scripts/e2e_contain.py, is a committed input
+    of every check.)"""
+    parts = (PRELUDE, SETUP, LEARNER, inspect.getsource(run_check), inspect.getsource(verdict))
+    return hashlib.sha256("\0".join(parts).encode()).hexdigest()
+
+
+def fingerprint(check, digest, env, harness_digest):
+    body = json.dumps({"spec": check.spec(), "harness": harness_digest, "inputs": digest, "env": env}, sort_keys=True)
     return hashlib.sha256(body.encode()).hexdigest()
 
 
@@ -142,6 +157,7 @@ class Decision:
     fingerprint: str
     digest: str
     env: dict
+    harness: str = ""
     covering: dict = None  # the pass that covers it
     reasons: list = field(default_factory=list)
 
@@ -152,12 +168,12 @@ class Decision:
 
 def decide(checks, ledger, tree, package, host_env, changed=lambda commit, prefixes: None):
     """What each check needs. `changed(commit, prefixes)` lists the input paths changed since a commit, or None."""
-    decisions = []
+    decisions, harness_digest = [], harness()
     for check in checks:
         prefixes = inputs(check, package)
         digest = inputs_digest(tree, prefixes)
         env = environment(check, host_env)
-        d = Decision(check, fingerprint(check, digest, env), digest, env)
+        d = Decision(check, fingerprint(check, digest, env, harness_digest), digest, env, harness_digest)
         passes = [p for p in ledger.get("passes", []) if p["check"] == check.name]
         d.covering = next((p for p in reversed(passes) if p["fingerprint"] == d.fingerprint), None)
         if d.needed:
@@ -167,6 +183,8 @@ def decide(checks, ledger, tree, package, host_env, changed=lambda commit, prefi
             else:
                 if last.get("spec") != check.spec():
                     d.reasons.append("its definition changed")
+                if last.get("harness") != harness_digest:
+                    d.reasons.append("how checks are run or judged changed")
                 if last.get("inputs") != digest:
                     paths = changed(last["commit"], prefixes) or []
                     shown = ", ".join(paths[:4]) + (f" and {len(paths) - 4} more" if len(paths) > 4 else "")
@@ -182,6 +200,7 @@ def record(ledger, decision, commit, evidence, ran_at, forced=""):
     entry = {
         "check": decision.check.name, "fingerprint": decision.fingerprint, "commit": commit, "ran_at": ran_at,
         "inputs": decision.digest, "env": decision.env, "spec": decision.check.spec(), "evidence": evidence,
+        "harness": decision.harness,
     }
     if forced:
         entry["forced"] = forced
@@ -216,13 +235,19 @@ def verdict(check, text, exit_code):
     if check.name == "tools-probe":
         line = text.strip().splitlines()[0]
         return line.startswith("Live Realtime instructions and tools: PASS"), line[:120]
-    if check.name in ("hands-free", "barge-in"):
-        results = [c["passed"] for c in json.loads(text).get("checks", [])]
-        return bool(results) and all(results), f"{sum(results)} of {len(results)} checks passed"
-    if check.name == "single-instance":
-        report = json.loads(text)
-        checks = report.get("checks", [])
-        return report.get("result") == "PASS" and bool(checks), f"{report.get('result')}, {len(checks)} checks"
+    if check.name in ("hands-free", "barge-in", "single-instance"):
+        # A crash can leave the report truncated; one bad report fails its check and the run goes on to the next.
+        try:
+            report = json.loads(text)
+            if not isinstance(report, dict) or not isinstance(report.get("checks", []), list):
+                raise ValueError("not an object with a list of checks")
+            checks = report.get("checks", [])
+            if check.name == "single-instance":
+                return report.get("result") == "PASS" and bool(checks), f"{report.get('result')}, {len(checks)} checks"
+            results = [c["passed"] is True for c in checks]
+            return bool(results) and all(results), f"{sum(results)} of {len(results)} checks passed"
+        except (ValueError, KeyError, TypeError) as error:
+            return False, f"{check.evidence} is not a readable report: {type(error).__name__}: {error}"[:200]
     if check.name.startswith("audition-"):
         # A filter that matches nothing also exits 0; the suite itself has to have passed.
         passed = f"Test Suite '{check.evidence}' passed" in text
@@ -238,16 +263,19 @@ def git(*args):
 
 
 def committed_tree(commit="HEAD"):
+    """Each committed path with its blob. -z keeps a path with a space or non-ASCII letters as it is; without it git
+    quotes the path, which then matches no input."""
     tree = {}
-    for line in git("ls-tree", "-r", commit).splitlines():
-        meta, path = line.split("\t", 1)
-        tree[path] = meta.split()[2]
+    for entry in git("ls-tree", "-r", "-z", commit).split("\0"):
+        if entry:
+            meta, path = entry.split("\t", 1)
+            tree[path] = meta.split()[2]
     return tree
 
 
 def changed_paths(commit, prefixes):
     try:
-        paths = git("diff", "--name-only", commit, "HEAD").split()
+        paths = [p for p in git("diff", "--name-only", "-z", commit, "HEAD").split("\0") if p]
     except subprocess.CalledProcessError:
         return None  # the commit is not in this clone
     return [p for p in paths if covered_by(p, prefixes)]
@@ -271,19 +299,32 @@ def remote(host, script, timeout=120):
 PRELUDE = "export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH\nset -u\n"
 
 
+# The ledger is public, so it names the test Mac by a random identifier the Mac keeps, created on first use; a digest
+# of its name could be reversed by guessing names. The link makes creation atomic, so two first runs agree on one.
+# Removing the file gives the Mac a new identity, and every check runs again on it.
+MACHINE_ID = """mkdir -p ~/mochi-e2e
+if [ ! -s ~/mochi-e2e/.machine-id ]; then
+    uuidgen > ~/mochi-e2e/.machine-id.$$ && ln ~/mochi-e2e/.machine-id.$$ ~/mochi-e2e/.machine-id 2>/dev/null
+    rm -f ~/mochi-e2e/.machine-id.$$
+fi
+echo "host=$(cat ~/mochi-e2e/.machine-id)"
+"""
+UUID = r"[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"
+
+
 def host_environment(host):
-    code, out = remote(host, PRELUDE + """
-echo "host=$(scutil --get LocalHostName)"
+    # Swift is measured as the checks run it: `swift` on the PRELUDE's PATH, which puts Homebrew first.
+    code, out = remote(host, PRELUDE + MACHINE_ID + """
+echo "name=$(scutil --get LocalHostName)"
 echo "macos=$(sw_vers -productVersion) $(sw_vers -buildVersion)"
-echo "swift=$(xcrun swift --version 2>&1 | head -1)"
+echo "swift=$(command -v swift) $(swift --version 2>&1 | head -1)"
 echo "codex=$(codex --version 2>/dev/null)"
 """)
     if code != 0:
         raise SystemExit(f"Cannot read the test Mac {host}: {out.strip()}")
     env = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
-    # The ledger is public: it keeps a digest of the Mac's name, which still tells one Mac from another.
-    env["name"] = env.pop("host")
-    env["host"] = hashlib.sha256(env["name"].encode()).hexdigest()[:12]
+    if not re.fullmatch(UUID, env.get("host", "")):
+        raise SystemExit(f"The test Mac's identifier in ~/mochi-e2e/.machine-id is not a UUID: {env.get('host')!r}")
     return env
 
 
@@ -292,45 +333,168 @@ def busy(host):
     return out.strip()
 
 
+def free_gb(host):
+    code, free = remote(host, "df -g ~ | tail -1 | awk '{print $4}'")
+    return int(free.strip()) if code == 0 and free.strip().isdigit() else 0
+
+
+# A run touches its lock before every step, and every step is bounded, so a lock untouched for longer than the longest
+# step, with an hour to spare, belongs to a run that is no longer going (its Mac lost power, or its process was killed)
+# and is removed.
+STAGE_TIMEOUT, SETUP_TIMEOUT, COPY_TIMEOUT, REMOVAL_TIMEOUT = 1800, 1800, 600, 300
+STALE_LOCK = 3600 + max(STAGE_TIMEOUT, SETUP_TIMEOUT, REMOVAL_TIMEOUT,
+                        *(c.timeout + 120 + COPY_TIMEOUT for c in CHECKS))
+LOCK = "~/mochi-e2e/.lock"
+
+
+def lock_script(owner):
+    """Takes the test Mac's run lock: mkdir is atomic, so of two runs that start together exactly one gets it. The
+    busy check alone could not decide that, since both would see a free Mac."""
+    return PRELUDE + f"""mkdir -p ~/mochi-e2e
+lock={LOCK}
+if ! mkdir "$lock" 2>/dev/null; then
+    age=$(( $(date +%s) - $(stat -f %m "$lock" 2>/dev/null || date +%s) ))
+    holder=$(cat "$lock/owner" 2>/dev/null || echo unknown)
+    if [ "$age" -lt {STALE_LOCK} ]; then echo "held for $age s by $holder"; exit 3; fi
+    echo "removing a stale lock, $age s old, held by $holder"
+    rm -rf "$lock"
+    mkdir "$lock" 2>/dev/null || {{ echo "another run took the lock"; exit 3; }}
+fi
+printf '%s\\n' '{owner}' > "$lock/owner"
+"""
+
+
+def owned_script(token, then):
+    """Runs `then` on the lock only if this run still holds it; exits 4 if it does not."""
+    return PRELUDE + f"""lock={LOCK}
+if [ "$(cut -d' ' -f1 "$lock/owner" 2>/dev/null)" != {token} ]; then echo "the lock is no longer this run's"; exit 4; fi
+{then} "$lock"
+"""
+
+
+def unlock_script(token):
+    return owned_script(token, "rm -rf")
+
+
+def heartbeat_script(token):
+    return owned_script(token, "touch")
+
+
+def acquire_lock(host, owner):
+    code, out = remote(host, lock_script(owner))
+    if code not in (0, 3):
+        raise SystemExit(f"Could not take the test Mac's run lock (exit {code}): {out.strip()}")
+    if code == 3:
+        raise SystemExit(f"The test Mac is running another e2e run; try when it is done ({out.strip()}). A lock left "
+                         f"by a run that is no longer going is removed after {STALE_LOCK // 3600} h, or by hand: "
+                         f"rm -rf {LOCK}")
+    if out.strip():
+        print(out.strip())
+
+
+def hold_lock(host, token):
+    """Marks the lock as still in use before a step; fails if another run has taken it as stale."""
+    code, out = remote(host, heartbeat_script(token))
+    if code != 0:
+        raise SystemExit(f"The test Mac's run lock is no longer this run's (exit {code}): {out.strip()}")
+
+
+def release_lock(host, token):
+    code, out = remote(host, unlock_script(token))
+    if code != 0:
+        raise SystemExit(f"Could not release the test Mac's run lock (exit {code}): {out.strip()}")
+
+
 def stage(host, commit, folder):
     archive = subprocess.Popen(["git", "archive", "--format=tar", commit], cwd=ROOT, stdout=subprocess.PIPE)
-    extract = subprocess.run(["ssh", "-o", "BatchMode=yes", host, f"mkdir -p {folder} && tar -x -C {folder}"],
-                             stdin=archive.stdout)
-    archive.stdout.close()
+    try:
+        extract = subprocess.run(["ssh", "-o", "BatchMode=yes", host, f"mkdir -p {folder} && tar -x -C {folder}"],
+                                 stdin=archive.stdout, timeout=STAGE_TIMEOUT)
+    except BaseException:
+        archive.kill()
+        archive.wait()
+        raise
+    finally:
+        archive.stdout.close()
     if archive.wait() != 0 or extract.returncode != 0:
         raise SystemExit("Could not stage the commit on the test Mac")
+
+
+def remove_staged(host, folder):
+    code, out = remote(host, removal(folder), timeout=REMOVAL_TIMEOUT)
+    if code != 0:
+        raise SystemExit(f"Could not remove the staged copy ~/{folder} from the test Mac (exit {code}): {out.strip()}")
 
 
 def run_check(host, folder, check):
     """Runs one check in the staged copy; returns (passed, summary, what it left: its evidence or its output)."""
     evidence = f"{folder}/evidence/{check.name}"
+    # Its own process group, ended with everything that names the staged folder on exit, timeout or interrupt.
+    contain = f"python3 -I scripts/e2e_contain.py {check.timeout} {folder}/"
     if check.app_args:
         args = " ".join(f'"{a}"' for a in check.app_args).replace("{learner}", f"{folder}/evidence/learner.pcm")
         body = (f"rm -rf {evidence}; mkdir -p {evidence}; cd {folder}\n"
-                f"perl -e 'alarm shift; exec @ARGV' {check.timeout} open -n -W -F "
-                f"--env MOCHI_EVIDENCE_DIR={evidence} build/Mochi.app --args {args}\n"
-                f"code=$?; cat {evidence}/{check.evidence} 2>/dev/null; exit $code")
+                f"{contain} open -n -W -F "
+                f"--env MOCHI_EVIDENCE_DIR={evidence} build/Mochi.app --args {args} > {evidence}/launch.txt 2>&1\n"
+                f"code=$?; cat {evidence}/{check.evidence} 2>/dev/null\n")
     else:
         source = f"{folder}/{check.evidence}" if "/" in check.evidence else ""
         body = (f"mkdir -p {evidence}; cd {folder}\n"
-                f"perl -e 'alarm shift; exec @ARGV' {check.timeout} bash -c \"{check.command}\" "
+                f"{contain} bash -c \"{check.command}\" "
                 f"> {evidence}/output.txt 2>&1; code=$?\n"
-                + (f"cat {source} 2>/dev/null\n" if source else f"cat {evidence}/output.txt\n")
-                + "exit $code")
+                + (f"cat {source} 2>/dev/null\n" if source else f"cat {evidence}/output.txt\n"))
+    # What its tests wrote under build/evidence joins its evidence folder, so each check's copy holds only its own.
+    body += f"[ ! -d build/evidence ] || mv build/evidence {evidence}/build-evidence\nexit $code"
     code, out = remote(host, PRELUDE + body, timeout=check.timeout + 120)
     return (*verdict(check, out, code), out)
 
 
-def keep_failure(check, out):
-    """Saves what a failed check left before its staged copy is removed, and shows the lines that say why. Only the
-    lines that name a failure are printed: a live check's output also carries Codex's debug log."""
-    path = Path(tempfile.gettempdir()) / "mochi-e2e-failures" / f"{check.name}.txt"
-    path.parent.mkdir(exist_ok=True)
-    path.write_text(out)
+def removal(folder):
+    """The script that removes a staged copy from the test Mac. First it ends whatever still runs from it, which a
+    timeout, an interrupt or a broken check can leave behind: every process whose command line names the folder (the
+    staged app and its fixtures, including those Launch Services started) or whose working folder is inside it.
+    It exits non-zero if the copy is still there."""
+    return PRELUDE + f"""folder="$HOME/{folder}"
+cd ~
+end_staged() {{
+    pkill -"$1" -f "$folder/"
+    lsof -nP -a -u "$(id -u)" -d cwd -Fpn 2>/dev/null |
+        awk -v f="$folder" '/^p/ {{ pid = substr($0, 2) }}
+            /^n/ {{ n = substr($0, 2); if (n == f || index(n, f "/") == 1) print pid }}' |
+        while read -r pid; do kill -"$1" "$pid" 2>/dev/null; done
+}}
+end_staged TERM; sleep 2; end_staged KILL
+rm -rf "$folder"
+[ ! -e "$folder" ]
+"""
+
+
+def keep_evidence(host, folder, check, out, stamp):
+    """Copies what a check left to EVIDENCE/<check>/<stamp>/ before its staged copy is removed, whether it passed or
+    failed: what run_check returned, as returned.txt, and its evidence folder on the test Mac, which holds what its
+    tests wrote under build/evidence (coaching replies for blinded labelling, template transcripts, the single-instance
+    report) and the app's snapshots. Returns the local folder; a copy that fails raises RuntimeError."""
+    local = EVIDENCE / check.name / stamp
+    local.mkdir(parents=True, exist_ok=True)
+    (local / "returned.txt").write_text(out)
+    with tempfile.TemporaryFile() as archive:
+        r = subprocess.run(["ssh", "-o", "BatchMode=yes", host, f"cd {folder}/evidence/{check.name} && tar -cf - ."],
+                           stdout=archive, stderr=subprocess.PIPE, timeout=COPY_TIMEOUT)
+        if r.returncode != 0:
+            reason = r.stderr.decode(errors="replace").strip()
+            raise RuntimeError(f"could not copy the evidence of {check.name}: {reason}")
+        archive.seek(0)
+        with tarfile.open(fileobj=archive) as tar:
+            tar.extractall(local, filter="data")
+    return local
+
+
+def show_failure(out):
+    """Shows the lines that say why a check failed. Only those lines are printed: a live check's output also carries
+    Codex's debug log."""
     lines = [l for l in out.splitlines() if "error:" in l or "FAIL" in l or "failed" in l]
     for line in lines[:12]:
         print(f"      {line[:240]}")
-    print(f"    saved: {path}")
 
 
 SETUP = """
@@ -376,6 +540,59 @@ def show(decisions):
             print(f"  SKIP   {d.check.name:34} passed at {c['commit'][:7]} on {c['ran_at'][:10]}: {c['evidence']}")
 
 
+def run_session(host, commit, needed, forced, keep):
+    """Runs the needed checks on the test Mac under its run lock; returns (failed check names, evidence not copied).
+    The lock is taken before the busy check, so two runs cannot both find the Mac free. The staged copy is removed
+    however the session ends, a half-staged one included, unless `keep`; a removal that fails is an error."""
+    started = datetime.datetime.now()
+    token = uuid.uuid4().hex
+    acquire_lock(host, f"{token} {commit[:12]} pid {os.getpid()} since {started.astimezone():%Y-%m-%dT%H:%M:%S%z}")
+    try:
+        if other := busy(host):
+            raise SystemExit(f"The test Mac is busy; run when it is free:\n{other}")
+        if (free := free_gb(host)) < 8:
+            raise SystemExit(f"The test Mac has {free} GB free; a staged copy and its builds need about 8")
+        folder = f"mochi-e2e/{commit[:12]}-{started:%H%M%S}"
+        stamp = f"{started:%Y%m%d-%H%M%S}-{commit[:7]}"
+        ledger, failures, lost = load_ledger(), [], []
+        try:
+            hold_lock(host, token)
+            stage(host, commit, folder)
+            hold_lock(host, token)
+            app = int(any(d.check.app_args or d.check.name == "single-instance" for d in needed))
+            code, out = remote(host, PRELUDE + f"cd ~ && mkdir -p {folder}/evidence\n"
+                               + SETUP.format(folder=folder, app=app, learner=LEARNER), timeout=SETUP_TIMEOUT)
+            if code != 0:
+                raise SystemExit(f"Setup failed on the test Mac:\n{out}")
+            for d in needed:
+                hold_lock(host, token)
+                print(f"  running {d.check.name} …", flush=True)
+                passed, summary, out = run_check(host, f"$HOME/{folder}", d.check)
+                print(f"    {'PASS' if passed else 'FAIL'}: {summary}", flush=True)
+                if not passed:
+                    show_failure(out)
+                try:
+                    kept = keep_evidence(host, f"$HOME/{folder}", d.check, out, stamp)
+                    print(f"    evidence: {kept.relative_to(ROOT)}", flush=True)
+                except (RuntimeError, OSError, tarfile.TarError, subprocess.TimeoutExpired) as error:
+                    lost.append(f"{d.check.name}: {error}")
+                    print(f"    evidence NOT copied: {error}", flush=True)
+                if passed:
+                    ran_at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+                    record(ledger, d, commit, summary, ran_at, forced=forced.get(d.check.name, ""))
+                    save_ledger(ledger)  # after each pass, so an interrupted run keeps what it proved
+                else:
+                    failures.append(d.check.name)
+        finally:
+            if keep:
+                print(f"Kept the staged copy at ~/{folder} on the test Mac")
+            else:
+                remove_staged(host, folder)
+    finally:
+        release_lock(host, token)
+    return failures, lost
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=("plan", "run"))
@@ -405,39 +622,11 @@ def main():
         return
     if git("status", "--porcelain", "--untracked-files=no").strip():
         raise SystemExit("Commit first: the ledger records what HEAD contains, and only HEAD is staged")
-    if other := busy(a.host):
-        raise SystemExit(f"The test Mac is busy; run when it is free:\n{other}")
-    code, free = remote(a.host, "df -g ~ | tail -1 | awk '{print $4}'")
-    if code != 0 or int(free.strip() or 0) < 8:
-        raise SystemExit(f"The test Mac has {free.strip()} GB free; a staged copy and its builds need about 8")
-    folder = f"mochi-e2e/{commit[:12]}-{datetime.datetime.now():%H%M%S}"
-    ledger, failures = load_ledger(), []
-    stage(a.host, commit, folder)
-    try:
-        app = int(any(d.check.app_args or d.check.name == "single-instance" for d in needed))
-        code, out = remote(a.host, PRELUDE + f"cd ~ && mkdir -p {folder}/evidence\n"
-                           + SETUP.format(folder=folder, app=app, learner=LEARNER), timeout=1800)
-        if code != 0:
-            raise SystemExit(f"Setup failed on the test Mac:\n{out}")
-        for d in needed:
-            print(f"  running {d.check.name} …", flush=True)
-            passed, summary, out = run_check(a.host, f"$HOME/{folder}", d.check)
-            print(f"    {'PASS' if passed else 'FAIL'}: {summary}", flush=True)
-            if passed:
-                ran_at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
-                record(ledger, d, commit, summary, ran_at, forced=a.reason if d.check.name in forced else "")
-                save_ledger(ledger)  # after each pass, so an interrupted run keeps what it proved
-            else:
-                failures.append(d.check.name)
-                keep_failure(d.check, out)
-    finally:
-        if a.keep:
-            print(f"Kept {a.host}:~/{folder}")
-        else:
-            remote(a.host, f"rm -rf ~/{folder}")
+    failures, lost = run_session(a.host, commit, needed, {n: a.reason for n in forced}, a.keep)
     print(f"Ledger: {LEDGER.relative_to(ROOT)}; commit it with the change it verified.")
-    if failures:
-        raise SystemExit(f"Failed: {', '.join(failures)}")
+    problems = ([f"Failed: {', '.join(failures)}"] if failures else []) + [f"Evidence lost: {l}" for l in lost]
+    if problems:
+        raise SystemExit("\n".join(problems))
 
 
 if __name__ == "__main__":

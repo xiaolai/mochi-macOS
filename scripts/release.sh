@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 : "${MOCHI_SIGN_ID:?Set a Developer ID Application signing identity}"
 : "${MOCHI_NOTARY_PROFILE:?Set a notarytool Keychain profile}"
 [ "$MOCHI_SIGN_ID" != - ] || { echo 'Ad-hoc signing cannot ship' >&2; exit 1; }
+[ "${MOCHI_ADHOC_DISTRIBUTION:-0}" = 0 ] || { echo 'MOCHI_ADHOC_DISTRIBUTION is for CI checks and cannot ship' >&2; exit 1; }
 # MOCHI_RESUME_DMG=1 continues an unfinished run from its existing DMG, so a notarization retry reuses the submission.
 resume="${MOCHI_RESUME_DMG:-0}"
 OUT="$PWD/build/release"
@@ -29,6 +30,8 @@ version_file=$(mktemp)
 cp VERSION "$version_file"
 versions=$(python3 scripts/release_support.py version "$version_file")
 read -r version build <<< "$versions"
+# The build reads the working tree, so only a clean HEAD is released; a v<version> tag, if one exists, must name it.
+head=$(python3 scripts/release_support.py source "$version")
 dmg="$OUT/Mochi-$version.dmg"
 # SHA256SUMS is written last, so naming this DMG means an earlier run finished and may have been published.
 if [ -f "$OUT/SHA256SUMS" ] && grep -qx "[0-9a-f]\{64\}  $(basename "$dmg")" "$OUT/SHA256SUMS"; then
@@ -36,6 +39,7 @@ if [ -f "$OUT/SHA256SUMS" ] && grep -qx "[0-9a-f]\{64\}  $(basename "$dmg")" "$O
 fi
 if [ "$resume" = 1 ]; then
     [ -f "$dmg" ] || { echo "No unfinished DMG to resume at $dmg" >&2; exit 1; }
+    python3 scripts/release_support.py dmg-commit check "$dmg" "$head"
 elif [ -e "$dmg" ]; then
     echo 'An unfinished release DMG exists; set MOCHI_RESUME_DMG=1 to continue it, or move it aside to rebuild' >&2
     exit 1
@@ -83,7 +87,10 @@ if [ "$resume" != 1 ]; then
     staging=$(mktemp -d)
     ditto "$APP" "$staging/Mochi.app"
     ln -s /Applications "$staging/Applications"
+    # Nothing may have changed while the app was built; the DMG then records the commit it holds.
+    [ "$(python3 scripts/release_support.py source "$version")" = "$head" ] || { echo 'HEAD changed during the build' >&2; exit 1; }
     hdiutil create -quiet -volname "Mochi $version" -srcfolder "$staging" -format UDZO "$dmg"
+    python3 scripts/release_support.py dmg-commit record "$dmg" "$head"
     codesign --force --timestamp --sign "$MOCHI_SIGN_ID" "$dmg"
 elif ! codesign --verify "$dmg" 2>/dev/null; then
     # Re-signing a signed DMG would change its digest and abandon the saved notary submission.

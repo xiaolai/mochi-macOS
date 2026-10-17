@@ -89,12 +89,59 @@ def validate_sources(sources=SOURCES):
             raise ValueError(f"OpenAI API-key fallback cannot ship: {path}")
 
 
+def validate_build_paths(strings_by_binary):
+    """The resource bundle has to be found inside the app. SwiftPM's older resource accessor looked beside the
+    executable and then fell back to the absolute .build path it was compiled in: the bundle the app ships in
+    Contents/Resources is never found, so the app works on the Mac that built it and crashes everywhere else."""
+    for name, text in strings_by_binary.items():
+        for marker in ("/.build/", "could not load resource bundle"):
+            if marker in text:
+                raise ValueError(f"{name} looks up resources through the build folder ({marker!r}); it cannot ship")
+
+
 def check_distribution(app, helper, *, run=subprocess.run, sources=SOURCES):
     app_strings = run(["strings", app], check=True, capture_output=True, text=True).stdout
     app_symbols = run(["nm", app], check=True, capture_output=True, text=True).stdout
     helper_symbols = run(["nm", helper], check=True, capture_output=True, text=True).stdout
+    helper_strings = run(["strings", helper], check=True, capture_output=True, text=True).stdout
     validate_distribution_symbols(app_strings, helper_symbols, app_symbols)
+    validate_build_paths({app: app_strings, helper: helper_strings})
     validate_sources(sources)
+
+
+def release_commit(version, *, run=subprocess.run):
+    """The commit being released. The build reads the working tree, so it has to be exactly HEAD: no changed and no
+    untracked files, which the bundle could otherwise pick up. A v<version> tag, if one exists, has to name HEAD."""
+    def git(*args, check=True):
+        return run(["git", *args], capture_output=True, text=True, check=check)
+    status = git("status", "--porcelain", "--untracked-files=all").stdout
+    if status.strip():
+        raise ValueError("Release only from a clean checkout; commit or remove:\n" + status.rstrip())
+    head = git("rev-parse", "--verify", "HEAD^{commit}").stdout.strip()
+    tag = git("rev-parse", "-q", "--verify", f"refs/tags/v{version}^{{commit}}", check=False)
+    if tag.returncode == 0 and tag.stdout.strip() != head:
+        raise ValueError(f"Tag v{version} names {tag.stdout.strip()[:12]}, not HEAD {head[:12]}")
+    return head
+
+
+def dmg_commit_record(dmg):
+    return Path(str(dmg) + ".commit")
+
+
+def record_dmg_commit(dmg, commit):
+    """Records the commit a DMG was built from, beside it, so a resumed run can tell whether it still matches."""
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError(f"Not a commit: {commit!r}")
+    dmg_commit_record(dmg).write_text(commit + "\n")
+
+
+def check_dmg_commit(dmg, commit):
+    record = dmg_commit_record(dmg)
+    if not record.exists():
+        raise ValueError(f"{Path(dmg).name} has no recorded commit; move it aside and rebuild")
+    built = record.read_text().strip()
+    if built != commit:
+        raise ValueError(f"{Path(dmg).name} was built from {built[:12]}, not HEAD {commit[:12]}; move it aside and rebuild")
 
 
 def render_cask(template, digest, version):
@@ -177,6 +224,12 @@ if __name__ == "__main__":
         elif sys.argv[1] == "cask":
             version, _ = read_version(Path(sys.argv[5]).read_text())
             Path(sys.argv[4]).write_text(render_cask(Path(sys.argv[2]).read_text(),sys.argv[3],version))
+        elif sys.argv[1] == "source":
+            print(release_commit(sys.argv[2]))
+        elif sys.argv[1] == "dmg-commit" and sys.argv[2] == "record":
+            record_dmg_commit(sys.argv[3],sys.argv[4])
+        elif sys.argv[1] == "dmg-commit" and sys.argv[2] == "check":
+            check_dmg_commit(sys.argv[3],sys.argv[4])
         elif sys.argv[1] == "version":
             print(*read_version(Path(sys.argv[2]).read_text()))
         else:
