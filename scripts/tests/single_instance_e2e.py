@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Explicit native tests; invoke on the designated remote Mac, never via discovery."""
-import argparse, hashlib, json, os, plistlib, shutil, signal, subprocess, tempfile, time, uuid
+import argparse, hashlib, json, os, platform, plistlib, shutil, signal, subprocess, tempfile, time, uuid
 from pathlib import Path
 
 parser=argparse.ArgumentParser()
@@ -89,7 +89,7 @@ def duplicate(events,env,binary=exe):
     check('Duplicate exits before model/library/automation startup', (path/'duplicate-exit.json').exists() and not (path/'model-created.json').exists() and not (path/'automation-configured.json').exists())
     return child.pid
 
-report={'run_id':run_id,'started':time.time(),'binary_sha256':hashlib.sha256(exe.read_bytes()).hexdigest() if exe.exists() else None,'source_archive_sha256':hashlib.sha256((project/'source.tgz').read_bytes()).hexdigest() if (project/'source.tgz').exists() else None,'host':'mbp16','checks':checks}
+report={'run_id':run_id,'started':time.time(),'binary_sha256':hashlib.sha256(exe.read_bytes()).hexdigest() if exe.exists() else None,'source_archive_sha256':hashlib.sha256((project/'source.tgz').read_bytes()).hexdigest() if (project/'source.tgz').exists() else None,'host':platform.node(),'checks':checks}
 try:
     info=plistlib.loads((app/'Contents/Info.plist').read_bytes())
     check('Metadata permits independent macOS users',not info.get('LSMultipleInstancesProhibited'))
