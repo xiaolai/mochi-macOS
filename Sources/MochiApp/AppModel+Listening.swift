@@ -432,6 +432,8 @@ extension AppModel {
             return
         }
         listeningRuntime.turnAudio = Data()
+        // The quiet reopen allowed since the last turn is available again from here.
+        listeningRuntime.quietReopens = 0
         closeListeningLine()
         syncListening()
         deliverListeningTurn(audio, to: context)

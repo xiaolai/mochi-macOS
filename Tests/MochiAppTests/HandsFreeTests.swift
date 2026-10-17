@@ -411,6 +411,40 @@ final class HandsFreeTests: XCTestCase {
         app.stop()
     }
 
+    /// The one quiet reopen is per turn: a drop many turns after an earlier one is reopened quietly too.
+    @MainActor func testADropAfterADeliveredTurnIsReopenedQuietlyAgain() async throws {
+        let listening = FakeListening()
+        let app = handsFreeApp(listening)
+        let player = TestPlayer()
+        app.audio.makePlayer = { _ in player }
+        var requests = 0
+        app.speech.conversationReply = { _, _, callbacks in
+            requests += 1
+            var reply = RealtimeAccumulator()
+            reply.text = "Go on."
+            reply.audio = Data(repeating: 1, count: 4800)
+            reply.done = true
+            try callbacks.response(reply)
+        }
+        let first = await startedLine(app, listening)
+        first.fail(AppFailure("Dropped."))
+        let reopened = await startedLineAfter(app, listening, lines: 2)
+        XCTAssertNil(app.error)
+        speak(listening)
+        reopened.emit(.speechStarted(audioMilliseconds: 300))
+        await waitUntil { app.listeningRuntime.apiHeardSpeech }
+        reopened.emit(.speechStopped(audioMilliseconds: 1300))
+        await waitUntil { requests == 1 && app.turn.activity == .playing }
+        app.audio.finishPlayback(player, successfully: true)
+        let later = await startedLineAfter(app, listening, lines: 3)
+        later.fail(AppFailure("Dropped much later."))
+        _ = await startedLineAfter(app, listening, lines: 4)
+        XCTAssertEqual(app.listening.phase, .listening)
+        XCTAssertFalse(app.handsFreeFallback)
+        XCTAssertNil(app.error)
+        app.stop()
+    }
+
     @MainActor func testAConnectionThatCannotOpenFallsBack() async throws {
         let listening = FakeListening()
         listening.refuseSession = AppFailure("OpenAI usage limit reached (rate_limit_exceeded).")
