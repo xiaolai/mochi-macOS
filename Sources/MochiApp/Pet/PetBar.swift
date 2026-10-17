@@ -221,6 +221,8 @@ struct PetBarView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // The main menu's rule: a new conversation would discard a practice attempt or an open edit.
+            .disabled(!MainMenuState(app: app).newConversation)
             .help(Text("New Conversation"))
             .accessibilityLabel(Text("New Conversation"))
             TextField("Message \(app.displayCharacterName)", text: $bar.text)
