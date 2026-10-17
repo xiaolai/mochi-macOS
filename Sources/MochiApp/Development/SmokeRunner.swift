@@ -1120,10 +1120,21 @@
                     // SwiftUI runs a menu command's action after the key equivalent returns, so wait for its effect.
                     _ = await waitFor(1) { !model.find.isOpen }
                     if !handled || model.find.isOpen || model.turn.epoch != searchEpoch {
+                        func escapeItems(_ menu: NSMenu?) -> [String] {
+                            (menu?.items ?? []).flatMap { item in
+                                (item.keyEquivalent == "\u{1b}"
+                                    ? [
+                                        "\(item.title) enabled \(item.isEnabled) action \(item.action.map(NSStringFromSelector) ?? "none")"
+                                    ]
+                                    : []) + escapeItems(item.submenu)
+                            }
+                        }
                         captureFailures.append(
                             "Escape must close search without cancelling a pending reply (handled \(handled), "
                                 + "workspace key \(model.workspaceKey), Stop enabled \(MainMenuState(app: model).stop), "
-                                + "search open \(model.find.isOpen), reply kept \(model.turn.epoch == searchEpoch))")
+                                + "search open \(model.find.isOpen), reply kept \(model.turn.epoch == searchEpoch), "
+                                + "key window is workspace \(NSApp.keyWindow === mainWindow), "
+                                + "Escape items \(escapeItems(NSApp.mainMenu)))")
                     }
                     _ = model.turn.finish(searchEpoch)
                     model.find.close()
