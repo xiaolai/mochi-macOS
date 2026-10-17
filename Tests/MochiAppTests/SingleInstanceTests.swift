@@ -106,6 +106,46 @@ final class SingleInstanceTests: XCTestCase {
         XCTAssertFalse(
             LegacyInstance.eligible(build: "26", guarded: true, finished: true, alive: false, distribution: true))
     }
+    func testADevelopmentSessionIsNeverAnOwnerToHandOffTo() {
+        // A preview holds no lock and opens a throwaway library; a distribution launch must not reopen it and exit.
+        XCTAssertFalse(
+            LegacyInstance.eligible(
+                build: "26", guarded: true, finished: true, alive: true, distribution: true, development: true))
+        XCTAssertFalse(
+            LegacyInstance.eligible(
+                build: nil, guarded: true, finished: true, alive: true, distribution: true, development: true))
+        XCTAssertFalse(
+            LegacyInstance.eligible(build: "25", guarded: false, finished: true, alive: true, development: true))
+    }
+    func testProcessArgumentsAreReadFromTheKernel() throws {
+        XCTAssertEqual(SingleInstanceController.arguments(of: getpid()), CommandLine.arguments)
+        let preview = Process()
+        preview.executableURL = URL(fileURLWithPath: "/bin/sh")
+        // The second command keeps the shell running, so its own arguments are the ones read.
+        preview.arguments = ["-c", "sleep 30; :", "Mochi", "--preview"]
+        try preview.run()
+        defer {
+            preview.terminate()
+            preview.waitUntilExit()
+        }
+        XCTAssertEqual(
+            SingleInstanceController.arguments(of: preview.processIdentifier),
+            ["/bin/sh", "-c", "sleep 30; :", "Mochi", "--preview"])
+        XCTAssertTrue(SingleInstanceController.launchedForDevelopment(preview.processIdentifier))
+        XCTAssertNil(SingleInstanceController.arguments(of: 0), "The kernel's own task is not readable")
+    }
+    func testAProcessLaunchedWithoutFlagsIsNotADevelopmentSession() throws {
+        let plain = Process()
+        plain.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        plain.arguments = ["30"]
+        try plain.run()
+        defer {
+            plain.terminate()
+            plain.waitUntilExit()
+        }
+        XCTAssertEqual(SingleInstanceController.arguments(of: plain.processIdentifier), ["/bin/sleep", "30"])
+        XCTAssertFalse(SingleInstanceController.launchedForDevelopment(plain.processIdentifier))
+    }
     func testDevelopmentFlagsAreRecognisedByTheirPrefixAlone() {
         XCTAssertEqual(DevelopmentLaunch.developmentFlags(in: ["/Applications/Mochi.app/Contents/MacOS/Mochi"]), [])
         // What macOS, Xcode and AppKit themselves pass: single-dash user defaults and process serial numbers.
