@@ -95,6 +95,7 @@ extension AppModel {
         else { return }
         var message = library.conversations[ci].messages[mi]
         if message.transcriptionState == .pending { message.transcriptionState = .interrupted }
+        let replyingToIt = pendingReplyMessageID == id
         var candidate = library
         candidate.conversations[ci].messages.remove(at: mi)
         refreshAutomaticTitle(&candidate.conversations[ci])
@@ -102,10 +103,18 @@ extension AppModel {
         let previous = messageDeletionUndo
         messageDeletionUndo = MessageDeletionUndo(
             conversationID: library.conversations[ci].id, message: message, index: mi)
-        // Commit first. A disk failure must not stop playback or cancel an active reply.
-        // The deleted message's own transcription ends with it; a late result must not reach an undone copy.
+        // Commit first. A disk failure must not stop playback or cancel an active reply. Then only what involves the
+        // deleted message ends: the reply being prepared for it, its playback, and its own transcription, whose late
+        // result must not reach an undone copy. Listening, other replies and other transcriptions go on.
+        if replyingToIt {
+            _ = cancelTurn()
+        } else if let audio = message.audio, playbackFile == audio {
+            stopPlayback()
+        }
         transcripts.cancel(id)
-        stop()
+        // A second write replaces the previous copy of the library, which still holds the deleted message, so the
+        // message leaves the disk and its recording can be removed once Undo is no longer offered.
+        save()
         removeUnreferencedRecording(previous?.message.audio)
         showMessageDeletedNotice()
     }

@@ -438,7 +438,7 @@ struct MessageDeletionUndo {
         return kept
     }
     /// Ends whatever owns the turn and returns the unfinished recording, if any, for the caller to discard.
-    private func cancelTurn() -> URL? {
+    func cancelTurn() -> URL? {
         unheardReply = nil
         deferredToolAction = nil
         greetingActive = false

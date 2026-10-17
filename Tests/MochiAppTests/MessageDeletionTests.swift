@@ -1,6 +1,7 @@
 import MochiCore
 import MochiProviders
 import MochiTestSupport
+import PCM16
 import XCTest
 
 @testable import MochiApp
@@ -92,18 +93,33 @@ final class MessageDeletionTests: XCTestCase {
         app.stop()
     }
 
-    @MainActor func testDeleteInvalidatesReplyAndUndoInterruptsPendingTranscript() throws {
+    /// Deleting the voice message a reply is being prepared for cancels that reply and its transcription.
+    @MainActor func testDeleteInvalidatesReplyAndUndoInterruptsPendingTranscript() async throws {
         let app = makeApp(demo: true)
         app.resume()
         app.newChat()
         let id = try XCTUnwrap(app.selectedID)
-        var message = Message(role: "user", text: "", audio: "pending.wav")
-        message.transcriptionState = .pending
-        app.append(message, to: id)
-        let token = app.turn.begin(.generating)
+        let gate = TestGate()
+        let started = expectation(description: "Reply started")
+        app.speech.conversationReply = { _, _, _ in
+            started.fulfill()
+            await gate.wait()
+            try Task.checkCancellation()
+            XCTFail("The reply to a deleted message must not go on")
+        }
+        app.requestReply(
+            history: [], text: "", pcm: Data(repeating: 0, count: 4800), audioFile: "pending.wav", conversationID: id)
+        let message = try XCTUnwrap(app.conversation?.messages.first)
+        XCTAssertEqual(message.transcriptionState, .pending)
+        let job = try XCTUnwrap(app.transcripts.task(for: message.id))
+        await fulfillment(of: [started], timeout: 2)
+        let token = app.turn.epoch
         app.deleteMessage(message.id)
         XCTAssertNotEqual(app.turn.epoch, token)
         XCTAssertFalse(app.busy)
+        XCTAssertTrue(app.transcribingMessageIDs.isEmpty)
+        await gate.release()
+        await job.value
         app.undoMessageDeletion()
         XCTAssertEqual(app.conversation?.messages.first?.transcriptionState, .interrupted)
         app.turn.begin(.recording)
@@ -201,5 +217,78 @@ final class MessageDeletionTests: XCTestCase {
         XCTAssertTrue(app.conversation?.messages.isEmpty == true)
         app.notice = nil
         app.stop()
+    }
+
+    /// Deleting a message stops only what involves it: a reply to another message and another message's retried
+    /// transcription go on.
+    @MainActor func testDeletingAnUnrelatedMessageLeavesTheReplyAndOtherTranscriptionsRunning() async throws {
+        let app = makeApp(demo: true)
+        app.resume()
+        app.newChat()
+        let id = try XCTUnwrap(app.selectedID)
+        let unrelated = Message(role: "user", text: "An earlier message")
+        var other = Message(role: "user", text: "", audio: "other.wav")
+        other.transcriptionState = .failed
+        app.append(unrelated, to: id)
+        app.append(other, to: id)
+        let transcribing = TestGate()
+        let transcriptionStarted = expectation(description: "Transcription started")
+        app.speech.transcribe = { _, _, _ in
+            transcriptionStarted.fulfill()
+            await transcribing.wait()
+            return TranscriptResult(text: "Recovered")
+        }
+        app.retryTranscription(other.id)
+        let transcription = try XCTUnwrap(app.transcripts.task(for: other.id))
+        await fulfillment(of: [transcriptionStarted], timeout: 2)
+        let replying = TestGate()
+        let replyStarted = expectation(description: "Reply started")
+        app.speech.conversationReply = { _, _, callbacks in
+            replyStarted.fulfill()
+            await replying.wait()
+            var reply = RealtimeAccumulator()
+            reply.text = "Still here."
+            reply.done = true
+            try callbacks.response(reply)
+        }
+        app.draft = "A new message"
+        app.send()
+        await fulfillment(of: [replyStarted], timeout: 2)
+        XCTAssertEqual(app.turn.activity, .generating)
+        app.deleteMessage(unrelated.id)
+        XCTAssertEqual(app.turn.activity, .generating, "The reply to another message goes on")
+        XCTAssertTrue(app.transcribingMessageIDs.contains(other.id), "Another message's transcription goes on")
+        await replying.release()
+        await waitUntil { !app.busy }
+        XCTAssertEqual(app.conversation?.messages.last?.text, "Still here.")
+        await transcribing.release()
+        await transcription.value
+        XCTAssertEqual(app.conversation?.messages.first { $0.id == other.id }?.text, "Recovered")
+        app.notice = nil
+    }
+
+    /// Deleting the reply that is playing stops it; deleting another message leaves it playing.
+    @MainActor func testDeletingTheMessageThatPlaysStopsOnlyThatPlayback() throws {
+        let root = temporary()
+        let app = makeApp(root: root)
+        let id = try XCTUnwrap(app.selectedID)
+        try PCM.wav(Data(repeating: 0, count: 4800), rate: PCM.sampleRate).write(
+            to: root.appendingPathComponent("reply.wav"))
+        let earlier = Message(role: "user", text: "Earlier")
+        let reply = Message(role: "assistant", text: "Playing", audio: "reply.wav")
+        app.append(earlier, to: id)
+        app.append(reply, to: id)
+        let player = TestPlayer()
+        app.audio.makePlayer = { _ in player }
+        app.play("reply.wav", mochi: true)
+        XCTAssertEqual(app.turn.activity, .playing)
+        app.deleteMessage(earlier.id)
+        XCTAssertEqual(app.turn.activity, .playing, "Another message's deletion leaves the reply playing")
+        XCTAssertTrue(player.playing)
+        app.deleteMessage(reply.id)
+        XCTAssertEqual(app.turn.activity, .idle)
+        XCTAssertNil(app.playbackFile)
+        XCTAssertFalse(player.playing)
+        app.notice = nil
     }
 }

@@ -975,6 +975,22 @@ final class HandsFreeTests: XCTestCase {
         app.stop()
     }
 
+    /// Deleting a message is not a reason to stop listening.
+    @MainActor func testDeletingAMessageKeepsListening() async throws {
+        let listening = FakeListening()
+        let app = handsFreeApp(listening)
+        let id = try XCTUnwrap(app.selectedID)
+        let message = Message(role: "user", text: "Delete me")
+        app.append(message, to: id)
+        _ = await startedLine(app, listening)
+        app.deleteMessage(message.id)
+        XCTAssertTrue(app.listening.isOn)
+        XCTAssertTrue(app.settings.talkingMode == .handsFree && app.handsFree)
+        XCTAssertTrue(listening.capturing)
+        app.notice = nil
+        app.stop()
+    }
+
     /// Correcting a transcript is a sheet like any other: what the learner says while editing is never a turn.
     @MainActor func testEditingATranscriptPausesListening() async throws {
         let listening = FakeListening()
