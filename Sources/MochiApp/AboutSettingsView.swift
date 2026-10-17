@@ -28,7 +28,7 @@ struct AboutSettingsView: View {
             }
             Section("Acknowledgements") {
                 Text("Mochi © 2026 HANDO K.K. Used under the Mochi Character Licence.").foregroundStyle(.secondary)
-                if let url = Bundle.module.url(forResource: "Mochi-LICENSE", withExtension: "md") {
+                if let url = AppResources.url("Mochi-LICENSE", "md") {
                     Button("Character Licence…") {
                         do {
                             characterLicence = try String(contentsOf: url, encoding: .utf8)

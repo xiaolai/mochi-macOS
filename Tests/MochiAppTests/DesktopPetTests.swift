@@ -72,7 +72,7 @@ final class DesktopPetTests: XCTestCase {
     }
 
     func testBundledSpriteHasEveryPoseAndABodyToClick() {
-        let sprite = PetSprite.shared
+        let sprite = PetSprite.shipped
         XCTAssertTrue(sprite.isLoaded)
         for pose in PetPose.allCases {
             XCTAssertEqual(sprite.frames(pose).count, pose.durations.count, "\(pose)")
@@ -133,7 +133,7 @@ final class DesktopPetTests: XCTestCase {
     @MainActor func testPanelMirrorsTheTurnAndStaysOutOfTheWay() throws {
         _ = NSApplication.shared
         let app = makeApp(demo: true)
-        let pet = DesktopPet()
+        let pet = DesktopPet(sprite: .shipped)
         pet.attach(app)
         defer { app.petVisible = false }
         XCTAssertNil(pet.panel, "Hidden until asked for")
@@ -171,7 +171,7 @@ final class DesktopPetTests: XCTestCase {
     @MainActor func testSheBreathesOnlyWhileIdleAndNeverWithReducedMotion() throws {
         _ = NSApplication.shared
         let app = makeApp(demo: true)
-        let pet = DesktopPet()
+        let pet = DesktopPet(sprite: .shipped)
         var reduced = false
         pet.reducesMotion = { reduced }
         pet.attach(app)
@@ -204,7 +204,7 @@ final class DesktopPetTests: XCTestCase {
         let preferences = makePreferences()
         let app = makeApp(demo: true, preferences: preferences)
         XCTAssertFalse(app.settings.petFollowsPointer, "Off by default")
-        let pet = DesktopPet()
+        let pet = DesktopPet(sprite: .shipped)
         pet.attach(app)
         defer { app.petVisible = false }
         app.petVisible = true
@@ -233,7 +233,7 @@ final class DesktopPetTests: XCTestCase {
         _ = NSApplication.shared
         let preferences = makePreferences()
         let app = makeApp(demo: true, preferences: preferences)
-        let pet = DesktopPet()
+        let pet = DesktopPet(sprite: .shipped)
         pet.attach(app)
         defer { app.petVisible = false }
         app.petVisible = true
@@ -252,7 +252,7 @@ final class DesktopPetTests: XCTestCase {
         let app = makeApp(demo: true)
         var revealed = 0
         app.revealWorkspace = { revealed += 1 }
-        let pet = DesktopPet()
+        let pet = DesktopPet(sprite: .shipped)
         pet.attach(app)
         app.petVisible = true
         defer { app.petVisible = false }
@@ -318,7 +318,7 @@ final class DesktopPetTests: XCTestCase {
         let preferences = makePreferences()
         let app = makeApp(demo: true, preferences: preferences)
         XCTAssertTrue(app.petBarVisible, "On by default")
-        let pet = DesktopPet()
+        let pet = DesktopPet(sprite: .shipped)
         pet.attach(app)
         defer { app.petVisible = false }
         app.petVisible = true
@@ -613,4 +613,12 @@ final class QuickTalkTests: XCTestCase {
         XCTAssertFalse(app.petVisible)
         XCTAssertEqual(updates, 2)
     }
+}
+
+extension PetSprite {
+    /// The sprite the app ships, read from the folder build-app.sh copies into the app's Resources: a test runs
+    /// outside the app, so `shared` finds nothing there.
+    static let shipped = PetSprite(
+        resource: URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Sources/MochiApp/Resources/mochi.webp"))
 }

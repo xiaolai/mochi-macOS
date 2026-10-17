@@ -85,8 +85,12 @@ def validate_sources(sources=SOURCES):
     if not files:
         raise ValueError(f"No Swift sources under {sources}")
     for path in files:
-        if "OPENAI_API_KEY" in path.read_text(encoding="utf-8"):
+        text = path.read_text(encoding="utf-8")
+        if "OPENAI_API_KEY" in text:
             raise ValueError(f"OpenAI API-key fallback cannot ship: {path}")
+        # SwiftPM's generated resource lookup can fall back to the absolute build folder; see AppResources.
+        if "Bundle.module" in text:
+            raise ValueError(f"Resources are read through AppResources, not a SwiftPM resource bundle: {path}")
 
 
 def validate_build_paths(strings_by_binary):

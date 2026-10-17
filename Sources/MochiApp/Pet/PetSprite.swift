@@ -2,7 +2,7 @@ import AppKit
 
 /// Mochi's sprite sheet, cut into cells once and shared by every view that draws her. Immutable after loading.
 final class PetSprite: @unchecked Sendable {
-    static let shared = PetSprite(resource: Bundle.module.url(forResource: "mochi", withExtension: "webp"))
+    static let shared = PetSprite(resource: AppResources.url("mochi", "webp"))
     static let cellSize = CGSize(width: 192, height: 208)
 
     /// The atlas the Codex v2 pet format defines: 8 columns by 11 rows of cells.

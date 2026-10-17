@@ -25,7 +25,8 @@ let package = Package(
                 "MochiKernel", "MochiAutomation", "MochiCore", "MochiProviders",
                 .product(name: "PCM16", package: "sayso"),
             ],
-            resources: [.process("Resources")],
+            // Copied into the app by scripts/build-app.sh, not built into a resource bundle: see AppResources.
+            exclude: ["Resources"],
             swiftSettings: [.define("MOCHI_DEVELOPMENT", .when(configuration: .debug))]),
         .target(
             name: "MochiTestSupport", dependencies: [.product(name: "RealtimeConnection", package: "sayso")],

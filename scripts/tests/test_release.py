@@ -181,6 +181,15 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError): release.validate_sources(empty)
         release.validate_sources()
 
+    def test_resources_are_never_read_through_a_swiftpm_bundle(self):
+        # Its generated lookup can fall back to the absolute build folder, which exists only where the app was built.
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder)/"Sprite.swift"
+            source.write_text('let url = Bundle.module.url(forResource: "mochi", withExtension: "webp")\n')
+            with self.assertRaises(ValueError): release.validate_sources(folder)
+            source.write_text('let url = AppResources.url("mochi", "webp")\n')
+            release.validate_sources(folder)
+
 
 class ReleaseSourceTests(unittest.TestCase):
     def git(self, status="", head="a"*40, tag=None):

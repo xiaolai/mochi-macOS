@@ -30,8 +30,10 @@ for size in 16 32 128 256 512; do
     sips -z "$retina" "$retina" Sources/MochiApp/Resources/AppIcon.png --out "$ICON_WORK/AppIcon.iconset/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICON_WORK/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
-for bundle in "$BIN"/*.bundle; do
-    if [ -d "$bundle" ]; then cp -R "$bundle" "$APP/Contents/Resources/"; fi
+# Every file the app reads through AppResources; a missing one would only show as a missing sprite or licence.
+cp Sources/MochiApp/Resources/* "$APP/Contents/Resources/"
+for resource in mochi.webp Mochi-LICENSE.md; do
+    [ -s "$APP/Contents/Resources/$resource" ] || { echo "Missing resource $resource" >&2; exit 1; }
 done
 # macOS takes the app's languages, its menus' language and InfoPlist.strings from the main bundle, and the
 # interface looks its strings up there too. The catalogs are compiled here rather than by the package build,
