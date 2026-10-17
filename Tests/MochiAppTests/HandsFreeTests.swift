@@ -975,6 +975,32 @@ final class HandsFreeTests: XCTestCase {
         app.stop()
     }
 
+    /// Correcting a transcript is a sheet like any other: what the learner says while editing is never a turn.
+    @MainActor func testEditingATranscriptPausesListening() async throws {
+        let listening = FakeListening()
+        let app = handsFreeApp(listening)
+        let id = try XCTUnwrap(app.selectedID)
+        var voice = Message(role: "user", text: "Misheard", audio: "saved.wav")
+        voice.transcriptionState = .completed
+        app.append(voice, to: id)
+        let line = await startedLine(app, listening)
+        let deliver = try XCTUnwrap(listening.deliver)
+        app.transcriptEditID = voice.id
+        XCTAssertEqual(app.listeningBlockers, [.sheetOpen])
+        deliver(audio(0.5))
+        deliver(audio(1, decibels: -20))
+        XCTAssertTrue(line.sent.isEmpty, "Speech while the transcript sheet is open is never sent")
+        await waitUntil { app.listening.pauses == [.sheetOpen] }
+        XCTAssertFalse(listening.capturing)
+        app.transcriptEditID = nil
+        await waitUntil { app.listening.phase == .listening && listening.capturing }
+        // Leaving the conversation closes the sheet with it, so it never holds listening paused.
+        app.transcriptEditID = voice.id
+        app.newChat()
+        XCTAssertNil(app.transcriptEditID)
+        app.stop()
+    }
+
     @MainActor func testAudioHeardBeforeABlockerIsNotSentWhenTheConnectionOpensLate() async throws {
         let listening = FakeListening()
         let gate = TestGate()

@@ -90,7 +90,9 @@ extension AppModel {
         if screenLocked { blockers.insert(.screenLocked) }
         if workspaceHidden { blockers.insert(.windowHidden) }
         if showExpressions { blockers.insert(.expressionsOpen) }
-        if customization.isPresented || history.isEditing || panelOpen || (practice && help.stage != .practice) {
+        if customization.isPresented || history.isEditing || transcriptEditID != nil || panelOpen
+            || (practice && help.stage != .practice)
+        {
             blockers.insert(.sheetOpen)
         }
         return blockers

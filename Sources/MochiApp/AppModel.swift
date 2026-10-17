@@ -60,7 +60,15 @@ struct MessageDeletionUndo {
     /// The local control server and the caches that make tool calls safe to retry.
     let automation = AutomationController()
     @ObservationIgnored var allowDemoAutomation = false
-    var selectedID: UUID? { didSet { if oldValue != selectedID { find.close() } } }
+    var selectedID: UUID? {
+        didSet {
+            guard oldValue != selectedID else { return }
+            find.close()
+            transcriptEditID = nil
+        }
+    }
+    /// The voice message whose transcript the Edit Transcript sheet is correcting; listening pauses while it is open.
+    var transcriptEditID: UUID?
     /// Find in the open conversation.
     let find = ConversationFind()
     var canFindInConversation: Bool {
