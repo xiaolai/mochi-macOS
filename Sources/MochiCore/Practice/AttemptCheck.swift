@@ -139,13 +139,14 @@ public struct AttemptCheck: Equatable, Sendable {
     /// tells "John's book" from "it's here" and "she's gone"; it occasionally reads a contraction after a noun as
     /// possessive ("the meeting's been moved"), which then asks for "'s" rather than accepting "has".
     static func possessives(_ words: [String]) -> Set<Int> {
-        let text = words.joined(separator: " ").replacingOccurrences(of: "\u{2019}", with: "'")
-        var starts: [String.Index] = []
-        var position = text.startIndex
+        // Each word's start is recorded in UTF-8 bytes as the text is joined. Counting characters afterwards would run
+        // past the end: a word starting with a combining mark or joiner merges with the space before it.
+        var text = ""
+        var starts: [Int] = []
         for word in words {
-            starts.append(position)
-            position = text.index(position, offsetBy: word.count)
-            if position < text.endIndex { position = text.index(after: position) }
+            if !starts.isEmpty { text += " " }
+            starts.append(text.utf8.count)
+            text += word.replacingOccurrences(of: "\u{2019}", with: "'")
         }
         let tagger = NLTagger(tagSchemes: [.lexicalClass])
         tagger.string = text
@@ -154,7 +155,8 @@ public struct AttemptCheck: Equatable, Sendable {
             in: text.startIndex..<text.endIndex, unit: .word, scheme: .lexicalClass,
             options: [.omitWhitespace, .omitPunctuation]
         ) { tag, range in
-            if tag == .particle, text[range] == "'s", let word = starts.lastIndex(where: { $0 <= range.lowerBound }) {
+            let offset = text.utf8.distance(from: text.startIndex, to: range.lowerBound)
+            if tag == .particle, text[range] == "'s", let word = starts.lastIndex(where: { $0 <= offset }) {
                 found.insert(word)
             }
             return true

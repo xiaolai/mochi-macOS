@@ -157,6 +157,16 @@ final class AttemptCheckTests: XCTestCase {
         XCTAssertTrue(AttemptCheck.sameWords("She's gone", "She has gone"))
     }
 
+    func testAWordStartingWithAJoiningMarkNeverCrashesThePossessiveCheck() {
+        // A word starting with a combining mark or joiner merges with the space before it into one character.
+        for target in ["Hello\n\u{200D}world", "a\n\u{301}b"] {
+            let result = AttemptCheck(target: target, recognized: words([("hello", 0.9), ("a", 0.9)]))
+            XCTAssertEqual(result.words.count, 2, target)
+        }
+        XCTAssertEqual(AttemptCheck.possessives(["a", "\u{301}b", "John's", "book"]), [2])
+        XCTAssertEqual(AttemptCheck.possessives(["\u{200D}x", "John\u{2019}s", "book"]), [1])
+    }
+
     func testAmbiguousEndingsMatchEitherReading() {
         let had = AttemptCheck(
             target: "I'd already left",
