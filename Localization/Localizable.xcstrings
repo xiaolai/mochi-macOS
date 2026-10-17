@@ -19560,6 +19560,34 @@
         }
       }
     },
+    "The saved shortcut could not be read, so this action has none. Record a new one." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存されたショートカットを読み込めなかったため、この操作にはショートカットがありません。新しく記録してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 단축키를 읽을 수 없어 이 동작에는 단축키가 없습니다. 새 단축키를 기록하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取已存储的快捷键，因此此操作没有快捷键。请录制新的快捷键。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法讀取已儲存的快速鍵，因此此動作沒有快速鍵。請錄製新的快速鍵。"
+          }
+        }
+      }
+    },
     "The scheduled action could not complete." : {
       "localizations" : {
         "ja" : {

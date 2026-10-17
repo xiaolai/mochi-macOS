@@ -244,15 +244,43 @@ final class ShortcutTests: XCTestCase {
         XCTAssertEqual(second.petOrigin, CGPoint(x: 12, y: 34))
         second.petOrigin = nil
         XCTAssertNil(defaults.object(forKey: "desktopPetOrigin"))
-        defaults.set(Data("not json".utf8), forKey: ShortcutAction.talk.preferenceKey)
-        defaults.set(
-            try? JSONEncoder().encode(Shortcut(keyCode: UInt16(kVK_ANSI_M), modifiers: [])),
-            forKey: ShortcutAction.togglePet.preferenceKey)
         defaults.set([1.0], forKey: "desktopPetOrigin")
         let repaired = PreferencesStore(defaults, importLegacy: false, allowExternalControl: false)
-        XCTAssertEqual(
-            repaired.shortcuts, ShortcutAction.defaults, "Unreadable or modifier-less shortcuts fall back to defaults")
         XCTAssertNil(repaired.petOrigin)
+    }
+
+    /// A stored shortcut that cannot be read or is no longer allowed leaves its action unbound rather than taking the
+    /// default keys, which another app may rely on, and stays stored until the learner records or removes one.
+    @MainActor func testAnUnreadableShortcutLeavesItsActionUnboundAndIsKept() throws {
+        let defaults = makePreferences()
+        let unreadable = Data("not json".utf8)
+        let modifierless = try JSONEncoder().encode(Shortcut(keyCode: UInt16(kVK_ANSI_M), modifiers: []))
+        defaults.set(unreadable, forKey: ShortcutAction.talk.preferenceKey)
+        defaults.set(modifierless, forKey: ShortcutAction.togglePet.preferenceKey)
+        let settings = PreferencesStore(defaults, importLegacy: false, allowExternalControl: false)
+        XCTAssertNil(settings.shortcuts[.talk], "An unreadable shortcut never falls back to the default")
+        XCTAssertNil(settings.shortcuts[.togglePet], "Nor does one without a modifier")
+        XCTAssertEqual(settings.shortcuts[.listen], ShortcutAction.listen.defaultShortcut)
+        XCTAssertEqual(settings.unreadableShortcuts, [.talk, .togglePet])
+        // Changing another action writes only that action's key.
+        settings.setShortcut(optionCommandM, for: .listen)
+        XCTAssertEqual(defaults.data(forKey: ShortcutAction.talk.preferenceKey), unreadable)
+        XCTAssertEqual(defaults.data(forKey: ShortcutAction.togglePet.preferenceKey), modifierless)
+        XCTAssertNil(
+            defaults.object(forKey: ShortcutAction.sendNow.preferenceKey), "An unchanged default stays unstored")
+        XCTAssertEqual(
+            PreferencesStore(defaults, importLegacy: false, allowExternalControl: false).unreadableShortcuts,
+            [.talk, .togglePet], "The problem is reported again after a relaunch")
+        // Removing the shortcut, though it is already unbound, replaces the unreadable value.
+        settings.setShortcut(nil, for: .talk)
+        XCTAssertEqual(defaults.data(forKey: ShortcutAction.talk.preferenceKey), Data())
+        settings.setShortcut(controlOptionSpace, for: .togglePet)
+        XCTAssertEqual(settings.unreadableShortcuts, [])
+        let reloaded = PreferencesStore(defaults, importLegacy: false, allowExternalControl: false)
+        XCTAssertEqual(reloaded.unreadableShortcuts, [])
+        XCTAssertEqual(
+            reloaded.shortcuts,
+            [.togglePet: controlOptionSpace, .listen: optionCommandM, .sendNow: ShortcutAction.sendNow.defaultShortcut])
     }
 
     func testDefaultShortcutsAreUsableAndDistinct() {

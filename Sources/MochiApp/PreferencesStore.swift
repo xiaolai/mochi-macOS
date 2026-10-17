@@ -83,18 +83,31 @@ import MochiProviders
     }
     /// Shortcuts that work in every app. An action without one is absent.
     /// Stored only when it differs from the default: a removed shortcut is stored as empty data, so it stays removed,
-    /// and an action left at its default follows the default.
+    /// and an action left at its default follows the default. Only the actions a change touches are written.
     var shortcuts: [ShortcutAction: Shortcut] {
         didSet {
-            for action in ShortcutAction.allCases {
-                switch shortcuts[action] {
-                case action.defaultShortcut: defaults.removeObject(forKey: action.preferenceKey)
-                case nil: defaults.set(Data(), forKey: action.preferenceKey)
-                case let shortcut?:
-                    do { defaults.set(try JSONEncoder().encode(shortcut), forKey: action.preferenceKey) } catch {
-                        MochiLog.failure(MochiLog.app, "Save preference \(action.preferenceKey)", error)
-                    }
-                }
+            for action in ShortcutAction.allCases where shortcuts[action] != oldValue[action] { storeShortcut(action) }
+        }
+    }
+    /// Actions whose stored shortcut could not be read or is no longer allowed. Each stays unbound rather than taking
+    /// its default keys, which another app may rely on, and its stored value is kept until the learner records or
+    /// removes a shortcut for it.
+    private(set) var unreadableShortcuts: Set<ShortcutAction>
+    /// Records or removes one action's shortcut. Removing the shortcut of an action whose stored one was unreadable
+    /// changes nothing in `shortcuts`, so its stored value is replaced here.
+    func setShortcut(_ shortcut: Shortcut?, for action: ShortcutAction) {
+        let unchanged = shortcuts[action] == shortcut
+        shortcuts[action] = shortcut
+        if unchanged && unreadableShortcuts.contains(action) { storeShortcut(action) }
+    }
+    private func storeShortcut(_ action: ShortcutAction) {
+        unreadableShortcuts.remove(action)
+        switch shortcuts[action] {
+        case action.defaultShortcut: defaults.removeObject(forKey: action.preferenceKey)
+        case nil: defaults.set(Data(), forKey: action.preferenceKey)
+        case let shortcut?:
+            do { defaults.set(try JSONEncoder().encode(shortcut), forKey: action.preferenceKey) } catch {
+                MochiLog.failure(MochiLog.app, "Save preference \(action.preferenceKey)", error)
             }
         }
     }
@@ -188,6 +201,7 @@ import MochiProviders
             petOrigin = nil
         }
         var shortcuts = ShortcutAction.defaults
+        var unreadable: Set<ShortcutAction> = []
         for action in ShortcutAction.allCases {
             guard let data = defaults.data(forKey: action.preferenceKey) else { continue }
             if data.isEmpty {
@@ -199,12 +213,15 @@ import MochiProviders
                 if let problem = shortcut.problem { throw AppFailure(verbatim: problem) }
                 shortcuts[action] = shortcut
             } catch {
+                shortcuts[action] = nil
+                unreadable.insert(action)
                 MochiLog.failure(
-                    MochiLog.app, "Stored preference \(action.preferenceKey) was rejected; using the default", error,
-                    level: .default)
+                    MochiLog.app, "Stored preference \(action.preferenceKey) was rejected; leaving the action unbound",
+                    error, level: .default)
             }
         }
         self.shortcuts = shortcuts
+        unreadableShortcuts = unreadable
     }
     /// Mochi's conversation voice, optionally with one conversation's own speed and voice. A voice this version does
     /// not support is replaced by the Settings voice, so an imported choice never fails a reply.

@@ -13,6 +13,12 @@ struct ShortcutRecorder: View {
 
     private var current: Shortcut? { app.settings.shortcuts[action] }
     private var recording: Bool { app.shortcuts.recordingAction == action }
+    /// Why the action has no shortcut when the stored one could not be used.
+    private var unreadable: String? {
+        app.settings.unreadableShortcuts.contains(action)
+            ? String(localized: "The saved shortcut could not be read, so this action has none. Record a new one.")
+            : nil
+    }
 
     var body: some View {
         LabeledContent(action.title) {
@@ -43,7 +49,7 @@ struct ShortcutRecorder: View {
                         .help("Remove Shortcut").accessibilityLabel("Remove Shortcut")
                     }
                 }
-                if let problem = message ?? app.shortcuts.problems[action] {
+                if let problem = message ?? app.shortcuts.problems[action] ?? unreadable {
                     Text(problem).font(.caption).foregroundStyle(.red).multilineTextAlignment(.trailing)
                 }
             }
