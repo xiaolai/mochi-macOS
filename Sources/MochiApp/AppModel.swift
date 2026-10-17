@@ -46,6 +46,8 @@ struct MessageDeletionUndo {
     @ObservationIgnored var recordingStartedAt: Date?
     /// The reply audio playing for the first time, which an interruption may cut; nil once it ends or stops.
     @ObservationIgnored var unheardReply: String?
+    /// The turn of the latest conversation reply request, and the user message it answers.
+    @ObservationIgnored var replyRequest: (token: UUID, messageID: UUID)?
     /// The recording that started by itself after a reply; it is discarded if Mochi is locked or hidden meanwhile.
     @ObservationIgnored var unattendedRecording: UUID?
     /// The instructions or template sheet, and the drafts it edits.
@@ -382,15 +384,22 @@ struct MessageDeletionUndo {
             return
         }
     }
+    /// The reply being prepared is cancelled together with its voice message's transcription. Other transcriptions,
+    /// such as one still arriving for a reply already delivered or a retried one, finish across Stop and a change of
+    /// conversation: they write by conversation, and never into one archived or deleted meanwhile.
     /// False when the library could not be saved; the failure is already reported.
     @discardableResult func stop() -> Bool {
+        let pendingVoice = pendingReplyMessageID.flatMap { transcribingMessageIDs.contains($0) ? $0 : nil }
         // Playback ends first, so stopping listening has no reply left to move off the listening engine.
         let unfinishedRecording = cancelTurn()
         stopListening()
-        transcripts.cancelAll()
+        if let pendingVoice { transcripts.cancel(pendingVoice) }
+        // A transcript still marked pending with no job left to finish it never will be.
         for ci in library.conversations.indices {
             for mi in library.conversations[ci].messages.indices
-            where library.conversations[ci].messages[mi].transcriptionState == .pending {
+            where library.conversations[ci].messages[mi].transcriptionState == .pending
+                && !transcribingMessageIDs.contains(library.conversations[ci].messages[mi].id)
+            {
                 library.conversations[ci].messages[mi].transcriptionState = .interrupted
             }
         }
@@ -399,6 +408,16 @@ struct MessageDeletionUndo {
         let saved = save()
         removeUnreferencedRecording(unfinishedRecording?.lastPathComponent)
         return saved
+    }
+    /// Stop, and every transcription with it, for quitting: nothing is left running to finish later.
+    @discardableResult func stopForQuit() -> Bool {
+        transcripts.cancelAll()
+        return stop()
+    }
+    /// The user message the reply now being prepared answers; nil while no reply is being prepared.
+    var pendingReplyMessageID: UUID? {
+        guard let replyRequest, turn.epoch == replyRequest.token, turn.activity == .generating else { return nil }
+        return replyRequest.messageID
     }
     /// True while the turn is still the one a voice preview started; any other activity takes a new epoch.
     var previewActive: Bool { previewEpoch == turn.epoch && turn.activity != .idle }

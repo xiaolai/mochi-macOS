@@ -110,7 +110,7 @@ import SwiftUI
 
     /// Ends in-progress work and saves. False only when a readable library could not be written.
     static func finishWork(_ model: AppModel) -> Bool {
-        let saved = model.stop()
+        let saved = model.stopForQuit()
         return !model.libraryReadable || saved
     }
 

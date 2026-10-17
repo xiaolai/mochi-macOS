@@ -130,7 +130,10 @@ final class TranscriptRecoveryTests: XCTestCase {
         XCTAssertTrue(app.transcripts.isIdle)
     }
 
-    @MainActor func testLateTranscriptDuringPlaybackAndStopRejectsFurtherWrites() async throws {
+    /// The reply was already delivered, so Stop has nothing of this message's to cancel: its transcript still arrives.
+    /// (It used to be discarded and marked interrupted; the transcript writes by conversation and refuses archived or
+    /// deleted ones, so nothing makes it unsafe to let it finish.)
+    @MainActor func testLateTranscriptStillArrivesAfterStopDuringPlayback() async throws {
         let app = makeApp(demo: true)
         app.resume()
         app.newChat()
@@ -157,11 +160,95 @@ final class TranscriptRecoveryTests: XCTestCase {
         await fulfillment(of: [delivered], timeout: 2)
         XCTAssertEqual(app.turn.activity, .playing)
         app.stop()
+        XCTAssertEqual(app.turn.activity, .idle)
+        XCTAssertEqual(app.conversation?.messages.first?.transcriptionState, .pending)
         await gate.release()
         await fulfillment(of: [finished], timeout: 2)
-        XCTAssertEqual(app.conversation?.messages.first?.text, "")
-        XCTAssertEqual(app.conversation?.messages.first?.transcriptionState, .interrupted)
+        XCTAssertEqual(app.conversation?.messages.first?.text, "Late speech")
+        XCTAssertEqual(app.conversation?.messages.first?.transcriptionState, .completed)
         XCTAssertEqual(app.conversation?.messages.count, 2)
+        await waitUntil { app.transcripts.isIdle }
+    }
+
+    /// A transcription left running in a conversation the learner moved away from ends when that conversation is
+    /// archived: its result could no longer be written there.
+    @MainActor func testArchivingAConversationEndsItsTranscription() async throws {
+        let app = makeApp(demo: true)
+        app.resume()
+        app.newChat()
+        let id = try XCTUnwrap(app.selectedID)
+        var voice = Message(role: "user", text: "", audio: "saved.wav")
+        voice.transcriptionState = .failed
+        app.append(voice, to: id)
+        let gate = TestGate()
+        let started = expectation(description: "Transcription started")
+        app.speech.transcribe = { _, _, _ in
+            started.fulfill()
+            await gate.wait()
+            return TranscriptResult(text: "Too late")
+        }
+        app.retryTranscription(voice.id)
+        let job = try XCTUnwrap(app.transcripts.task(for: voice.id))
+        await fulfillment(of: [started], timeout: 2)
+        app.newChat()
+        XCTAssertTrue(app.transcribingMessageIDs.contains(voice.id), "A change of conversation leaves it running")
+        XCTAssertTrue(app.archiveChats([id]))
+        XCTAssertTrue(app.transcribingMessageIDs.isEmpty)
+        let archived = app.library.conversations.first { $0.id == id }?.messages.first
+        XCTAssertEqual(archived?.transcriptionState, .interrupted)
+        await gate.release()
+        await job.value
+        XCTAssertEqual(app.library.conversations.first { $0.id == id }?.messages.first?.text, "")
+    }
+
+    /// Switching to another conversation leaves a late transcript to finish in the one it belongs to; quitting
+    /// cancels it and records it as interrupted.
+    @MainActor func testLateTranscriptFinishesAcrossAConversationSwitchButNotAQuit() async throws {
+        let root = makeTemporaryFolder()
+        let app = makeApp(root: root)
+        for quitting in [false, true] {
+            app.newChat()
+            let id = try XCTUnwrap(app.selectedID)
+            let delivered = expectation(description: "Reply delivered")
+            let finished = expectation(description: "Late callback sent")
+            app.playReply = { _ in }
+            let gate = TestGate()
+            app.speech.conversationReply = { _, _, callbacks in
+                var reply = RealtimeAccumulator()
+                reply.text = "Reply"
+                reply.audio = Data([0, 0])
+                reply.done = true
+                try callbacks.response(reply)
+                delivered.fulfill()
+                await gate.wait()
+                reply.inputTranscript = "Late speech"
+                reply.transcriptionState = .completed
+                callbacks.transcription(reply)
+                finished.fulfill()
+            }
+            app.requestReply(
+                history: [], text: "", pcm: Data(repeating: 0, count: 4800), audioFile: "saved.wav",
+                conversationID: id)
+            await fulfillment(of: [delivered], timeout: 2)
+            if quitting {
+                XCTAssertTrue(TrayController.finishWork(app))
+            } else {
+                app.newChat()
+                XCTAssertNotEqual(app.selectedID, id)
+            }
+            if quitting {
+                let voice = app.library.conversations.first { $0.id == id }?.messages.first
+                XCTAssertEqual(
+                    voice?.transcriptionState, .interrupted, "Quitting records the transcript as interrupted")
+            }
+            await gate.release()
+            await fulfillment(of: [finished], timeout: 2)
+            await waitUntil { app.transcripts.isIdle }
+            let voice = try XCTUnwrap(
+                try LibraryStore(root: root).load().conversations.first { $0.id == id }?.messages.first)
+            XCTAssertEqual(voice.text, quitting ? "" : "Late speech")
+            XCTAssertEqual(voice.transcriptionState, quitting ? .interrupted : .completed)
+        }
     }
 
     @MainActor func testLateTranscriptCompletesWhileReplyIsPlaying() async throws {

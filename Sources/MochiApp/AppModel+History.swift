@@ -103,6 +103,8 @@ extension AppModel {
         messageDeletionUndo = MessageDeletionUndo(
             conversationID: library.conversations[ci].id, message: message, index: mi)
         // Commit first. A disk failure must not stop playback or cancel an active reply.
+        // The deleted message's own transcription ends with it; a late result must not reach an undone copy.
+        transcripts.cancel(id)
         stop()
         removeUnreferencedRecording(previous?.message.audio)
         showMessageDeletedNotice()
@@ -174,6 +176,17 @@ extension AppModel {
             item.meaning = help.meaning.trimmingCharacters(in: .whitespacesAndNewlines)
             next.storeExpression(item)
         }
+        // Transcriptions keep running across a change of conversation, but none can be written into a conversation
+        // archived or deleted: they end here, recorded as interrupted.
+        let affectedMessages = library.conversations.filter { affected.contains($0.id) }.flatMap {
+            $0.messages.map(\.id)
+        }
+        for ci in next.conversations.indices where affected.contains(next.conversations[ci].id) {
+            for mi in next.conversations[ci].messages.indices
+            where next.conversations[ci].messages[mi].transcriptionState == .pending {
+                next.conversations[ci].messages[mi].transcriptionState = .interrupted
+            }
+        }
         let selectedAffected = selectedID.map(affected.contains) ?? false
         if selectedAffected {
             // The first conversation the list shows, under its current filter and sort.
@@ -183,6 +196,7 @@ extension AppModel {
                 ).first?.id
         }
         guard commitHistory(next) else { return false }
+        for id in affectedMessages where transcribingMessageIDs.contains(id) { transcripts.cancel(id) }
         if selectedAffected {
             stop()
             leavePractice()

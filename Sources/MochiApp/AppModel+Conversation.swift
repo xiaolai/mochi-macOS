@@ -177,6 +177,7 @@ extension AppModel {
             }
         }
         let token = turn.begin(.generating)
+        replyRequest = (token, operationID)
         let chat = library.conversations.first { $0.id == conversationID }
         let instructions = ConversationInstructions.bounded(chat?.instructions ?? "")
         let personality = chat?.personality ?? ""
