@@ -22,8 +22,8 @@ LEDGER = ROOT / "scripts/e2e-ledger.json"
 # The test Mac is named outside this public repository: --host, or MOCHI_E2E_HOST (see AGENTS.md).
 DEFAULT_HOST = os.environ.get("MOCHI_E2E_HOST", "")
 KEPT_PER_CHECK = 10
-# The package graph and the build; every check depends on them.
-COMMON_INPUTS = ("Package.swift", "Package.resolved")
+# The package graph and the build, and the runner every check runs under; every check depends on them.
+COMMON_INPUTS = ("Package.swift", "Package.resolved", "scripts/e2e_contain.py")
 # What launching the app needs besides its targets: the bundle script and the catalogs it compiles in.
 APP_INPUTS = ("scripts/build-app.sh", "scripts/localization.py", "scripts/release_support.py", "Localization/")
 APP_ROOTS = ("MochiApp", "MochiMCP")
@@ -328,21 +328,42 @@ def stage(host, commit, folder):
 def run_check(host, folder, check):
     """Runs one check in the staged copy; returns (passed, summary, what it left: its evidence or its output)."""
     evidence = f"{folder}/evidence/{check.name}"
+    # Its own process group, ended with everything that names the staged folder on exit, timeout or interrupt.
+    contain = f"python3 -I scripts/e2e_contain.py {check.timeout} {folder}/"
     if check.app_args:
         args = " ".join(f'"{a}"' for a in check.app_args).replace("{learner}", f"{folder}/evidence/learner.pcm")
         body = (f"rm -rf {evidence}; mkdir -p {evidence}; cd {folder}\n"
-                f"perl -e 'alarm shift; exec @ARGV' {check.timeout} open -n -W -F "
+                f"{contain} open -n -W -F "
                 f"--env MOCHI_EVIDENCE_DIR={evidence} build/Mochi.app --args {args} > {evidence}/launch.txt 2>&1\n"
                 f"code=$?; cat {evidence}/{check.evidence} 2>/dev/null; exit $code")
     else:
         source = f"{folder}/{check.evidence}" if "/" in check.evidence else ""
         body = (f"mkdir -p {evidence}; cd {folder}\n"
-                f"perl -e 'alarm shift; exec @ARGV' {check.timeout} bash -c \"{check.command}\" "
+                f"{contain} bash -c \"{check.command}\" "
                 f"> {evidence}/output.txt 2>&1; code=$?\n"
                 + (f"cat {source} 2>/dev/null\n" if source else f"cat {evidence}/output.txt\n")
                 + "exit $code")
     code, out = remote(host, PRELUDE + body, timeout=check.timeout + 120)
     return (*verdict(check, out, code), out)
+
+
+def removal(folder):
+    """The script that removes a staged copy from the test Mac. First it ends whatever still runs from it, which a
+    timeout, an interrupt or a broken check can leave behind: every process whose command line names the folder (the
+    staged app and its fixtures, including those Launch Services started) or whose working folder is inside it.
+    It exits non-zero if the copy is still there."""
+    return PRELUDE + f"""folder="$HOME/{folder}"
+cd ~
+end_staged() {{
+    pkill -"$1" -f "$folder/"
+    lsof -nP -a -u "$(id -u)" -d cwd -Fpn 2>/dev/null |
+        awk -v f="$folder" '/^p/ {{ pid = substr($0, 2) }} /^n/ {{ n = substr($0, 2); if (n == f || index(n, f "/") == 1) print pid }}' |
+        while read -r pid; do kill -"$1" "$pid" 2>/dev/null; done
+}}
+end_staged TERM; sleep 2; end_staged KILL
+rm -rf "$folder"
+[ ! -e "$folder" ]
+"""
 
 
 def keep_failure(check, out):
@@ -458,7 +479,7 @@ def main():
         if a.keep:
             print(f"Kept {a.host}:~/{folder}")
         else:
-            remote(a.host, f"rm -rf ~/{folder}")
+            remote(a.host, removal(folder))
     print(f"Ledger: {LEDGER.relative_to(ROOT)}; commit it with the change it verified.")
     if failures:
         raise SystemExit(f"Failed: {', '.join(failures)}")

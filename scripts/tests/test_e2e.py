@@ -1,8 +1,12 @@
 import importlib.util
 import json
+import os
 import re
+import signal
 import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -25,6 +29,7 @@ TREE = {
     "Package.swift": "p1", "Package.resolved": "r1", "Sources/Kernel/K.swift": "k1",
     "Sources/Providers/P.swift": "v1", "Sources/App/A.swift": "a1", "Tests/Support/S.swift": "s1",
     "Tests/ProvidersTests/T.swift": "t1", "README.md": "m1", "scripts/build-app.sh": "b1",
+    "scripts/e2e_contain.py": "c1",
 }
 # A test reads a committed file by a path from the repository root: `repository.appendingPathComponent("Localization/
 # Localizable.xcstrings")`, or the same through `#filePath`. The literal may sit on the next line or end in an
@@ -236,6 +241,96 @@ class TestMacTests(unittest.TestCase):
             self.assertRegex(first, r"^host=[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}\n$")
             self.assertEqual(read(), first)
             self.assertEqual(sorted(p.name for p in (Path(home) / "mochi-e2e").iterdir()), [".machine-id"])
+
+
+def sleeper(marker, **kwargs):
+    """A process outside the caller's group whose command line names `marker`, as a Launch Services app would be."""
+    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", marker], start_new_session=True,
+                            **kwargs)
+
+
+def gone(process, seconds=10):
+    """Whether a process (a pid, or a child of this test, which is reaped so it does not linger as a zombie) ends."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if isinstance(process, subprocess.Popen):
+            if process.poll() is not None:
+                return True
+        else:
+            try:
+                os.kill(process, 0)
+            except ProcessLookupError:
+                return True
+        time.sleep(0.05)
+    return False
+
+
+class ContainmentTests(unittest.TestCase):
+    """The runner and the removal script run for real here, on processes these tests start; no app is launched."""
+    CONTAIN = str(Path(__file__).parents[1] / "e2e_contain.py")
+
+    def contain(self, folder, *command, timeout=30):
+        return subprocess.Popen([sys.executable, "-I", self.CONTAIN, str(timeout), f"{folder}/", *command])
+
+    def test_a_timeout_ends_the_whole_group_and_what_names_the_staged_folder(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = os.path.realpath(folder)
+            pidfile = Path(folder) / "grandchild"
+            outside = sleeper(f"{folder}/build/Mochi.app/Contents/MacOS/Mochi")
+            runner = self.contain(folder, "bash", "-c", f"sleep 60 & echo $! > {pidfile}; wait", timeout=1)
+            self.assertEqual(runner.wait(30), 124)
+            self.assertTrue(gone(int(pidfile.read_text())), "the command's child outlived the timeout")
+            self.assertTrue(gone(outside), "a process naming the staged folder outlived the check")
+
+    def test_an_interrupt_ends_the_group_and_reports_the_signal(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = os.path.realpath(folder)
+            pidfile = Path(folder) / "grandchild"
+            runner = self.contain(folder, "bash", "-c", f"sleep 60 & echo $! > {pidfile}; wait")
+            deadline = time.monotonic() + 10
+            while not (pidfile.exists() and pidfile.read_text().strip()) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            runner.send_signal(signal.SIGTERM)
+            self.assertEqual(runner.wait(30), 128 + signal.SIGTERM)
+            self.assertTrue(gone(int(pidfile.read_text())))
+
+    def test_the_commands_exit_code_passes_through_and_others_are_untouched(self):
+        with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as elsewhere:
+            folder = os.path.realpath(folder)
+            unrelated = sleeper(f"{os.path.realpath(elsewhere)}/Mochi")
+            try:
+                self.assertEqual(self.contain(folder, "bash", "-c", "exit 3").wait(30), 3)
+                self.assertIsNone(unrelated.poll())
+            finally:
+                unrelated.kill()
+                unrelated.wait(5)
+
+    def test_removal_ends_what_runs_from_the_copy_then_removes_it(self):
+        with tempfile.TemporaryDirectory() as home:
+            home = os.path.realpath(home)
+            staged = Path(home) / "mochi-e2e/abc-120000"
+            (staged / "build").mkdir(parents=True)
+            named = sleeper(f"{staged}/build/Mochi.app/Contents/MacOS/Mochi")
+            inside = sleeper("unnamed", cwd=staged / "build")
+            env = {"HOME": home, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"}
+            result = subprocess.run(["bash", "-c", e2e.removal("mochi-e2e/abc-120000")], env=env,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(gone(named) and gone(inside))
+            self.assertFalse(staged.exists())
+
+    def test_every_check_runs_contained(self):
+        scripts = []
+        def remote(host, script, timeout=120):
+            scripts.append(script)
+            return 0, ""
+        with mock.patch.object(e2e, "remote", remote):
+            for check in e2e.CHECKS:
+                e2e.run_check("mac", "$HOME/mochi-e2e/x", check)
+        for check, script in zip(e2e.CHECKS, scripts):
+            with self.subTest(check=check.name):
+                self.assertIn(f"python3 -I scripts/e2e_contain.py {check.timeout} $HOME/mochi-e2e/x/ ", script)
+                self.assertNotIn("alarm", script)
 
 
 class VerdictTests(unittest.TestCase):
