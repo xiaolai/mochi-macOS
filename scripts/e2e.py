@@ -13,7 +13,7 @@ again. `--force` reruns a covered check and needs a reason, which the ledger kee
 
 The ledger is scripts/e2e-ledger.json; commit it with the change it verified.
 """
-import argparse, datetime, hashlib, json, os, re, subprocess, sys, tarfile, tempfile
+import argparse, datetime, hashlib, json, os, re, subprocess, sys, tarfile, tempfile, uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -318,13 +318,79 @@ def busy(host):
     return out.strip()
 
 
+def free_gb(host):
+    code, free = remote(host, "df -g ~ | tail -1 | awk '{print $4}'")
+    return int(free.strip()) if code == 0 and free.strip().isdigit() else 0
+
+
+# Every step of a run is bounded, so a run cannot take longer than this; a lock older than it, with an hour to spare,
+# belongs to a run that is no longer going (its Mac lost power, or its process was killed) and is removed.
+STAGE_TIMEOUT, SETUP_TIMEOUT, COPY_TIMEOUT, REMOVAL_TIMEOUT = 1800, 1800, 600, 300
+STALE_LOCK = (STAGE_TIMEOUT + SETUP_TIMEOUT + REMOVAL_TIMEOUT + 3600
+              + sum(c.timeout + 120 + COPY_TIMEOUT for c in CHECKS))
+LOCK = "~/mochi-e2e/.lock"
+
+
+def lock_script(owner):
+    """Takes the test Mac's run lock: mkdir is atomic, so of two runs that start together exactly one gets it. The
+    busy check alone could not decide that, since both would see a free Mac."""
+    return PRELUDE + f"""mkdir -p ~/mochi-e2e
+lock={LOCK}
+if ! mkdir "$lock" 2>/dev/null; then
+    age=$(( $(date +%s) - $(stat -f %m "$lock" 2>/dev/null || date +%s) ))
+    holder=$(cat "$lock/owner" 2>/dev/null || echo unknown)
+    if [ "$age" -lt {STALE_LOCK} ]; then echo "held for $age s by $holder"; exit 3; fi
+    echo "removing a stale lock, $age s old, held by $holder"
+    rm -rf "$lock"
+    mkdir "$lock" 2>/dev/null || {{ echo "another run took the lock"; exit 3; }}
+fi
+printf '%s\\n' '{owner}' > "$lock/owner"
+"""
+
+
+def unlock_script(token):
+    """Releases the lock only if this run still holds it."""
+    return PRELUDE + f"""lock={LOCK}
+if [ "$(cut -d' ' -f1 "$lock/owner" 2>/dev/null)" != {token} ]; then echo "the lock is no longer this run's"; exit 4; fi
+rm -rf "$lock"
+"""
+
+
+def acquire_lock(host, owner):
+    code, out = remote(host, lock_script(owner))
+    if code != 0:
+        raise SystemExit(f"The test Mac is running another e2e run; try when it is done ({out.strip()}). A lock left "
+                         f"by a run that is no longer going is removed after {STALE_LOCK // 3600} h, or by hand: "
+                         f"rm -rf {LOCK}")
+    if out.strip():
+        print(out.strip())
+
+
+def release_lock(host, token):
+    code, out = remote(host, unlock_script(token))
+    if code != 0:
+        raise SystemExit(f"Could not release the test Mac's run lock (exit {code}): {out.strip()}")
+
+
 def stage(host, commit, folder):
     archive = subprocess.Popen(["git", "archive", "--format=tar", commit], cwd=ROOT, stdout=subprocess.PIPE)
-    extract = subprocess.run(["ssh", "-o", "BatchMode=yes", host, f"mkdir -p {folder} && tar -x -C {folder}"],
-                             stdin=archive.stdout)
-    archive.stdout.close()
+    try:
+        extract = subprocess.run(["ssh", "-o", "BatchMode=yes", host, f"mkdir -p {folder} && tar -x -C {folder}"],
+                                 stdin=archive.stdout, timeout=STAGE_TIMEOUT)
+    except BaseException:
+        archive.kill()
+        archive.wait()
+        raise
+    finally:
+        archive.stdout.close()
     if archive.wait() != 0 or extract.returncode != 0:
         raise SystemExit("Could not stage the commit on the test Mac")
+
+
+def remove_staged(host, folder):
+    code, out = remote(host, removal(folder), timeout=REMOVAL_TIMEOUT)
+    if code != 0:
+        raise SystemExit(f"Could not remove the staged copy ~/{folder} from the test Mac (exit {code}): {out.strip()}")
 
 
 def run_check(host, folder, check):
@@ -360,7 +426,8 @@ cd ~
 end_staged() {{
     pkill -"$1" -f "$folder/"
     lsof -nP -a -u "$(id -u)" -d cwd -Fpn 2>/dev/null |
-        awk -v f="$folder" '/^p/ {{ pid = substr($0, 2) }} /^n/ {{ n = substr($0, 2); if (n == f || index(n, f "/") == 1) print pid }}' |
+        awk -v f="$folder" '/^p/ {{ pid = substr($0, 2) }}
+            /^n/ {{ n = substr($0, 2); if (n == f || index(n, f "/") == 1) print pid }}' |
         while read -r pid; do kill -"$1" "$pid" 2>/dev/null; done
 }}
 end_staged TERM; sleep 2; end_staged KILL
@@ -379,7 +446,7 @@ def keep_evidence(host, folder, check, out, stamp):
     (local / "returned.txt").write_text(out)
     with tempfile.TemporaryFile() as archive:
         r = subprocess.run(["ssh", "-o", "BatchMode=yes", host, f"cd {folder}/evidence/{check.name} && tar -cf - ."],
-                           stdout=archive, stderr=subprocess.PIPE, timeout=600)
+                           stdout=archive, stderr=subprocess.PIPE, timeout=COPY_TIMEOUT)
         if r.returncode != 0:
             reason = r.stderr.decode(errors="replace").strip()
             raise RuntimeError(f"could not copy the evidence of {check.name}: {reason}")
@@ -440,6 +507,56 @@ def show(decisions):
             print(f"  SKIP   {d.check.name:34} passed at {c['commit'][:7]} on {c['ran_at'][:10]}: {c['evidence']}")
 
 
+def run_session(host, commit, needed, forced, keep):
+    """Runs the needed checks on the test Mac under its run lock; returns (failed check names, evidence not copied).
+    The lock is taken before the busy check, so two runs cannot both find the Mac free. The staged copy is removed
+    however the session ends, a half-staged one included, unless `keep`; a removal that fails is an error."""
+    started = datetime.datetime.now()
+    token = uuid.uuid4().hex
+    acquire_lock(host, f"{token} {commit[:12]} pid {os.getpid()} since {started.astimezone():%Y-%m-%dT%H:%M:%S%z}")
+    try:
+        if other := busy(host):
+            raise SystemExit(f"The test Mac is busy; run when it is free:\n{other}")
+        if (free := free_gb(host)) < 8:
+            raise SystemExit(f"The test Mac has {free} GB free; a staged copy and its builds need about 8")
+        folder = f"mochi-e2e/{commit[:12]}-{started:%H%M%S}"
+        stamp = f"{started:%Y%m%d-%H%M%S}-{commit[:7]}"
+        ledger, failures, lost = load_ledger(), [], []
+        try:
+            stage(host, commit, folder)
+            app = int(any(d.check.app_args or d.check.name == "single-instance" for d in needed))
+            code, out = remote(host, PRELUDE + f"cd ~ && mkdir -p {folder}/evidence\n"
+                               + SETUP.format(folder=folder, app=app, learner=LEARNER), timeout=SETUP_TIMEOUT)
+            if code != 0:
+                raise SystemExit(f"Setup failed on the test Mac:\n{out}")
+            for d in needed:
+                print(f"  running {d.check.name} …", flush=True)
+                passed, summary, out = run_check(host, f"$HOME/{folder}", d.check)
+                print(f"    {'PASS' if passed else 'FAIL'}: {summary}", flush=True)
+                if not passed:
+                    show_failure(out)
+                try:
+                    kept = keep_evidence(host, f"$HOME/{folder}", d.check, out, stamp)
+                    print(f"    evidence: {kept.relative_to(ROOT)}", flush=True)
+                except (RuntimeError, OSError, tarfile.TarError, subprocess.TimeoutExpired) as error:
+                    lost.append(f"{d.check.name}: {error}")
+                    print(f"    evidence NOT copied: {error}", flush=True)
+                if passed:
+                    ran_at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+                    record(ledger, d, commit, summary, ran_at, forced=forced.get(d.check.name, ""))
+                    save_ledger(ledger)  # after each pass, so an interrupted run keeps what it proved
+                else:
+                    failures.append(d.check.name)
+        finally:
+            if keep:
+                print(f"Kept the staged copy at ~/{folder} on the test Mac")
+            else:
+                remove_staged(host, folder)
+    finally:
+        release_lock(host, token)
+    return failures, lost
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=("plan", "run"))
@@ -469,45 +586,7 @@ def main():
         return
     if git("status", "--porcelain", "--untracked-files=no").strip():
         raise SystemExit("Commit first: the ledger records what HEAD contains, and only HEAD is staged")
-    if other := busy(a.host):
-        raise SystemExit(f"The test Mac is busy; run when it is free:\n{other}")
-    code, free = remote(a.host, "df -g ~ | tail -1 | awk '{print $4}'")
-    if code != 0 or int(free.strip() or 0) < 8:
-        raise SystemExit(f"The test Mac has {free.strip()} GB free; a staged copy and its builds need about 8")
-    started = datetime.datetime.now()
-    folder = f"mochi-e2e/{commit[:12]}-{started:%H%M%S}"
-    stamp = f"{started:%Y%m%d-%H%M%S}-{commit[:7]}"
-    ledger, failures, lost = load_ledger(), [], []
-    stage(a.host, commit, folder)
-    try:
-        app = int(any(d.check.app_args or d.check.name == "single-instance" for d in needed))
-        code, out = remote(a.host, PRELUDE + f"cd ~ && mkdir -p {folder}/evidence\n"
-                           + SETUP.format(folder=folder, app=app, learner=LEARNER), timeout=1800)
-        if code != 0:
-            raise SystemExit(f"Setup failed on the test Mac:\n{out}")
-        for d in needed:
-            print(f"  running {d.check.name} …", flush=True)
-            passed, summary, out = run_check(a.host, f"$HOME/{folder}", d.check)
-            print(f"    {'PASS' if passed else 'FAIL'}: {summary}", flush=True)
-            if not passed:
-                show_failure(out)
-            try:
-                kept = keep_evidence(a.host, f"$HOME/{folder}", d.check, out, stamp)
-                print(f"    evidence: {kept.relative_to(ROOT)}", flush=True)
-            except (RuntimeError, OSError, tarfile.TarError, subprocess.TimeoutExpired) as error:
-                lost.append(f"{d.check.name}: {error}")
-                print(f"    evidence NOT copied: {error}", flush=True)
-            if passed:
-                ran_at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
-                record(ledger, d, commit, summary, ran_at, forced=a.reason if d.check.name in forced else "")
-                save_ledger(ledger)  # after each pass, so an interrupted run keeps what it proved
-            else:
-                failures.append(d.check.name)
-    finally:
-        if a.keep:
-            print(f"Kept {a.host}:~/{folder}")
-        else:
-            remote(a.host, removal(folder))
+    failures, lost = run_session(a.host, commit, needed, {n: a.reason for n in forced}, a.keep)
     print(f"Ledger: {LEDGER.relative_to(ROOT)}; commit it with the change it verified.")
     problems = ([f"Failed: {', '.join(failures)}"] if failures else []) + [f"Evidence lost: {l}" for l in lost]
     if problems:

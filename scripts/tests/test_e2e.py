@@ -335,6 +335,102 @@ class ContainmentTests(unittest.TestCase):
                 self.assertNotIn("alarm", script)
 
 
+class SessionTests(unittest.TestCase):
+    """The order of a run on the test Mac, with every remote step replaced by a record of it."""
+
+    def session(self, removal_code=0, fail=None, busy=""):
+        calls = []
+        def step(name, result=None):
+            def call(*args, **kwargs):
+                calls.append(name)
+                if fail == name:
+                    raise fail_with
+                return result
+            return call
+        fail_with = KeyboardInterrupt() if fail == "check" else SystemExit(f"{fail} failed")
+        def remote(host, script, timeout=120):
+            name = "remove" if 'rm -rf "$folder"' in script else "setup"
+            calls.append(name)
+            if fail == name:
+                return 1, "setup broke"
+            return (removal_code, "rm: busy") if name == "remove" else (0, "")
+        decision = plan()["ui"]
+        patches = {
+            "acquire_lock": step("lock"), "release_lock": step("unlock"), "busy": step("busy", busy),
+            "free_gb": step("free", 100), "stage": step("stage"), "remote": remote,
+            "run_check": step("check", (True, "ok", "out")), "keep_evidence": step("evidence", e2e.ROOT / "build"),
+            "load_ledger": lambda: {"passes": []}, "save_ledger": step("save"),
+        }
+        with mock.patch.multiple(e2e, **patches):
+            try:
+                result = e2e.run_session("mac", "c0ffee" * 6 + "c0ff", [decision], {}, keep=False)
+            except BaseException as error:
+                return calls, error
+        return calls, result
+
+    def test_a_run_holds_the_lock_from_before_the_busy_check_to_after_removal(self):
+        calls, result = self.session()
+        self.assertEqual(result, ([], []))
+        self.assertEqual(calls, ["lock", "busy", "free", "stage", "setup", "check", "evidence", "save", "remove",
+                                 "unlock"])
+
+    def test_a_failed_or_interrupted_staging_is_removed_and_the_lock_released(self):
+        for fail in ("stage", "setup", "check"):
+            with self.subTest(fail=fail):
+                calls, error = self.session(fail=fail)
+                self.assertIsInstance(error, KeyboardInterrupt if fail == "check" else SystemExit)
+                self.assertEqual(calls[-2:], ["remove", "unlock"])
+
+    def test_a_removal_that_fails_is_an_error_and_still_releases_the_lock(self):
+        calls, error = self.session(removal_code=1)
+        self.assertIsInstance(error, SystemExit)
+        self.assertIn("Could not remove the staged copy", str(error))
+        self.assertEqual(calls[-1], "unlock")
+
+    def test_a_busy_mac_stages_nothing_and_a_held_lock_touches_nothing(self):
+        calls, error = self.session(busy="123 xctest")
+        self.assertIsInstance(error, SystemExit)
+        self.assertEqual(calls, ["lock", "busy", "unlock"])
+        calls, error = self.session(fail="lock")
+        self.assertIsInstance(error, SystemExit)
+        self.assertEqual(calls, ["lock"])
+
+
+class LockTests(unittest.TestCase):
+    """The lock scripts run for real here, in a temporary home."""
+
+    def run_script(self, home, script):
+        env = {"HOME": home, "PATH": "/usr/bin:/bin"}
+        return subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+
+    def test_one_run_holds_the_lock_and_only_its_owner_releases_it(self):
+        with tempfile.TemporaryDirectory() as home:
+            lock = Path(home) / "mochi-e2e/.lock"
+            self.assertEqual(self.run_script(home, e2e.lock_script("aaaa c0ffee pid 1")).returncode, 0)
+            self.assertEqual((lock / "owner").read_text(), "aaaa c0ffee pid 1\n")
+            second = self.run_script(home, e2e.lock_script("bbbb c0ffee pid 2"))
+            self.assertEqual(second.returncode, 3)
+            self.assertIn("held for", second.stdout)
+            self.assertIn("aaaa c0ffee pid 1", second.stdout)
+            self.assertEqual(self.run_script(home, e2e.unlock_script("bbbb")).returncode, 4)
+            self.assertTrue(lock.exists())
+            self.assertEqual(self.run_script(home, e2e.unlock_script("aaaa")).returncode, 0)
+            self.assertFalse(lock.exists())
+
+    def test_a_lock_older_than_any_run_can_take_is_stale(self):
+        with tempfile.TemporaryDirectory() as home:
+            lock = Path(home) / "mochi-e2e/.lock"
+            self.run_script(home, e2e.lock_script("aaaa old"))
+            old = time.time() - e2e.STALE_LOCK - 60
+            os.utime(lock, (old, old))
+            taken = self.run_script(home, e2e.lock_script("bbbb new"))
+            self.assertEqual(taken.returncode, 0, taken.stdout)
+            self.assertIn("removing a stale lock", taken.stdout)
+            self.assertEqual((lock / "owner").read_text(), "bbbb new\n")
+        # Longer than the bounded steps of the longest run.
+        self.assertGreater(e2e.STALE_LOCK, sum(c.timeout for c in e2e.CHECKS) + e2e.SETUP_TIMEOUT)
+
+
 class EvidenceTests(unittest.TestCase):
     def archive(self, files):
         data = io.BytesIO()
