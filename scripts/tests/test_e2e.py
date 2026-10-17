@@ -1,10 +1,12 @@
 import importlib.util
+import io
 import json
 import os
 import re
 import signal
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import unittest
@@ -331,6 +333,63 @@ class ContainmentTests(unittest.TestCase):
             with self.subTest(check=check.name):
                 self.assertIn(f"python3 -I scripts/e2e_contain.py {check.timeout} $HOME/mochi-e2e/x/ ", script)
                 self.assertNotIn("alarm", script)
+
+
+class EvidenceTests(unittest.TestCase):
+    def archive(self, files):
+        data = io.BytesIO()
+        with tarfile.open(fileobj=data, mode="w") as tar:
+            for name, text in files.items():
+                info = tarfile.TarInfo(f"./{name}")
+                info.size = len(text.encode())
+                tar.addfile(info, io.BytesIO(text.encode()))
+        return data.getvalue()
+
+    def test_what_a_check_left_is_copied_home_before_its_copy_is_removed(self):
+        # Coaching replies for blinded labelling, template transcripts and smoke snapshots are only on the test Mac.
+        check = next(c for c in e2e.CHECKS if c.name == "audition-CoachingAuditionTests")
+        commands = []
+        def run(args, **kwargs):
+            commands.append(args)
+            files = {"output.txt": "log", "build-evidence/coaching-audition/s/replies.jsonl": "{}"}
+            kwargs["stdout"].write(self.archive(files))
+            return subprocess.CompletedProcess(args, 0, None, b"")
+        with tempfile.TemporaryDirectory() as local, mock.patch.object(e2e, "EVIDENCE", Path(local)), \
+                mock.patch.object(e2e.subprocess, "run", run):
+            kept = e2e.keep_evidence("mac", "$HOME/mochi-e2e/x", check, "the output", "20261017-120000")
+            self.assertEqual(kept, Path(local) / check.name / "20261017-120000")
+            self.assertEqual((kept / "build-evidence/coaching-audition/s/replies.jsonl").read_text(), "{}")
+            self.assertEqual((kept / "returned.txt").read_text(), "the output")
+        self.assertIn(f"cd $HOME/mochi-e2e/x/evidence/{check.name} && tar -cf - .", commands[0][-1])
+
+    def test_the_evidence_folder_is_ignored_by_git(self):
+        self.assertTrue(str(e2e.EVIDENCE.relative_to(e2e.ROOT)).startswith("build/"))
+        self.assertIn("build/", (e2e.ROOT / ".gitignore").read_text().splitlines())
+
+    def test_a_copy_that_fails_is_an_error(self):
+        check = e2e.CHECKS[0]
+        def run(args, **kwargs):
+            return subprocess.CompletedProcess(args, 255, None, b"Connection closed")
+        with tempfile.TemporaryDirectory() as local, mock.patch.object(e2e, "EVIDENCE", Path(local)), \
+                mock.patch.object(e2e.subprocess, "run", run):
+            with self.assertRaisesRegex(RuntimeError, "Connection closed"):
+                e2e.keep_evidence("mac", "$HOME/mochi-e2e/x", check, "out", "s")
+            # What the check returned is kept even when the copy fails.
+            self.assertEqual((Path(local) / check.name / "s/returned.txt").read_text(), "out")
+
+    def test_what_tests_write_under_build_evidence_goes_with_the_check_that_wrote_it(self):
+        scripts = []
+        def remote(host, script, timeout=120):
+            scripts.append(script)
+            return 0, ""
+        with mock.patch.object(e2e, "remote", remote):
+            for check in e2e.CHECKS:
+                e2e.run_check("mac", "$HOME/mochi-e2e/x", check)
+        for check, script in zip(e2e.CHECKS, scripts):
+            with self.subTest(check=check.name):
+                move = f"mv build/evidence $HOME/mochi-e2e/x/evidence/{check.name}/build-evidence"
+                self.assertIn(move, script)
+                self.assertLess(script.index("cat "), script.index(move))
 
 
 class VerdictTests(unittest.TestCase):

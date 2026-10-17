@@ -13,12 +13,14 @@ again. `--force` reruns a covered check and needs a reason, which the ledger kee
 
 The ledger is scripts/e2e-ledger.json; commit it with the change it verified.
 """
-import argparse, datetime, hashlib, json, os, re, subprocess, sys, tempfile
+import argparse, datetime, hashlib, json, os, re, subprocess, sys, tarfile, tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LEDGER = ROOT / "scripts/e2e-ledger.json"
+# What each check left, copied back from the test Mac; build/ is ignored by git.
+EVIDENCE = ROOT / "build/e2e-evidence"
 # The test Mac is named outside this public repository: --host, or MOCHI_E2E_HOST (see AGENTS.md).
 DEFAULT_HOST = os.environ.get("MOCHI_E2E_HOST", "")
 KEPT_PER_CHECK = 10
@@ -335,14 +337,15 @@ def run_check(host, folder, check):
         body = (f"rm -rf {evidence}; mkdir -p {evidence}; cd {folder}\n"
                 f"{contain} open -n -W -F "
                 f"--env MOCHI_EVIDENCE_DIR={evidence} build/Mochi.app --args {args} > {evidence}/launch.txt 2>&1\n"
-                f"code=$?; cat {evidence}/{check.evidence} 2>/dev/null; exit $code")
+                f"code=$?; cat {evidence}/{check.evidence} 2>/dev/null\n")
     else:
         source = f"{folder}/{check.evidence}" if "/" in check.evidence else ""
         body = (f"mkdir -p {evidence}; cd {folder}\n"
                 f"{contain} bash -c \"{check.command}\" "
                 f"> {evidence}/output.txt 2>&1; code=$?\n"
-                + (f"cat {source} 2>/dev/null\n" if source else f"cat {evidence}/output.txt\n")
-                + "exit $code")
+                + (f"cat {source} 2>/dev/null\n" if source else f"cat {evidence}/output.txt\n"))
+    # What its tests wrote under build/evidence joins its evidence folder, so each check's copy holds only its own.
+    body += f"[ ! -d build/evidence ] || mv build/evidence {evidence}/build-evidence\nexit $code"
     code, out = remote(host, PRELUDE + body, timeout=check.timeout + 120)
     return (*verdict(check, out, code), out)
 
@@ -366,16 +369,32 @@ rm -rf "$folder"
 """
 
 
-def keep_failure(check, out):
-    """Saves what a failed check left before its staged copy is removed, and shows the lines that say why. Only the
-    lines that name a failure are printed: a live check's output also carries Codex's debug log."""
-    path = Path(tempfile.gettempdir()) / "mochi-e2e-failures" / f"{check.name}.txt"
-    path.parent.mkdir(exist_ok=True)
-    path.write_text(out)
+def keep_evidence(host, folder, check, out, stamp):
+    """Copies what a check left to EVIDENCE/<check>/<stamp>/ before its staged copy is removed, whether it passed or
+    failed: what run_check returned, as returned.txt, and its evidence folder on the test Mac, which holds what its
+    tests wrote under build/evidence (coaching replies for blinded labelling, template transcripts, the single-instance
+    report) and the app's snapshots. Returns the local folder; a copy that fails raises RuntimeError."""
+    local = EVIDENCE / check.name / stamp
+    local.mkdir(parents=True, exist_ok=True)
+    (local / "returned.txt").write_text(out)
+    with tempfile.TemporaryFile() as archive:
+        r = subprocess.run(["ssh", "-o", "BatchMode=yes", host, f"cd {folder}/evidence/{check.name} && tar -cf - ."],
+                           stdout=archive, stderr=subprocess.PIPE, timeout=600)
+        if r.returncode != 0:
+            reason = r.stderr.decode(errors="replace").strip()
+            raise RuntimeError(f"could not copy the evidence of {check.name}: {reason}")
+        archive.seek(0)
+        with tarfile.open(fileobj=archive) as tar:
+            tar.extractall(local, filter="data")
+    return local
+
+
+def show_failure(out):
+    """Shows the lines that say why a check failed. Only those lines are printed: a live check's output also carries
+    Codex's debug log."""
     lines = [l for l in out.splitlines() if "error:" in l or "FAIL" in l or "failed" in l]
     for line in lines[:12]:
         print(f"      {line[:240]}")
-    print(f"    saved: {path}")
 
 
 SETUP = """
@@ -455,8 +474,10 @@ def main():
     code, free = remote(a.host, "df -g ~ | tail -1 | awk '{print $4}'")
     if code != 0 or int(free.strip() or 0) < 8:
         raise SystemExit(f"The test Mac has {free.strip()} GB free; a staged copy and its builds need about 8")
-    folder = f"mochi-e2e/{commit[:12]}-{datetime.datetime.now():%H%M%S}"
-    ledger, failures = load_ledger(), []
+    started = datetime.datetime.now()
+    folder = f"mochi-e2e/{commit[:12]}-{started:%H%M%S}"
+    stamp = f"{started:%Y%m%d-%H%M%S}-{commit[:7]}"
+    ledger, failures, lost = load_ledger(), [], []
     stage(a.host, commit, folder)
     try:
         app = int(any(d.check.app_args or d.check.name == "single-instance" for d in needed))
@@ -468,21 +489,29 @@ def main():
             print(f"  running {d.check.name} …", flush=True)
             passed, summary, out = run_check(a.host, f"$HOME/{folder}", d.check)
             print(f"    {'PASS' if passed else 'FAIL'}: {summary}", flush=True)
+            if not passed:
+                show_failure(out)
+            try:
+                kept = keep_evidence(a.host, f"$HOME/{folder}", d.check, out, stamp)
+                print(f"    evidence: {kept.relative_to(ROOT)}", flush=True)
+            except (RuntimeError, OSError, tarfile.TarError, subprocess.TimeoutExpired) as error:
+                lost.append(f"{d.check.name}: {error}")
+                print(f"    evidence NOT copied: {error}", flush=True)
             if passed:
                 ran_at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
                 record(ledger, d, commit, summary, ran_at, forced=a.reason if d.check.name in forced else "")
                 save_ledger(ledger)  # after each pass, so an interrupted run keeps what it proved
             else:
                 failures.append(d.check.name)
-                keep_failure(d.check, out)
     finally:
         if a.keep:
             print(f"Kept {a.host}:~/{folder}")
         else:
             remote(a.host, removal(folder))
     print(f"Ledger: {LEDGER.relative_to(ROOT)}; commit it with the change it verified.")
-    if failures:
-        raise SystemExit(f"Failed: {', '.join(failures)}")
+    problems = ([f"Failed: {', '.join(failures)}"] if failures else []) + [f"Evidence lost: {l}" for l in lost]
+    if problems:
+        raise SystemExit("\n".join(problems))
 
 
 if __name__ == "__main__":
