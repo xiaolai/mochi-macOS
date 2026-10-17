@@ -1125,7 +1125,15 @@
                     }
                     // Every main-menu command with a rule in MainMenuState shows that rule: a command SwiftUI left
                     // stale would act, or refuse to, against what the model says.
-                    NSApp.mainMenu?.update()
+                    // Each submenu is brought up to date the way opening it does, so this reads what a person sees.
+                    @MainActor func refresh(_ menu: NSMenu?) {
+                        guard let menu else { return }
+                        menu.delegate?.menuNeedsUpdate?(menu)
+                        menu.update()
+                        for item in menu.items { refresh(item.submenu) }
+                    }
+                    refresh(NSApp.mainMenu)
+                    try? await Task.sleep(nanoseconds: 100_000_000)
                     let menuState = MainMenuState(app: model)
                     let governed: [(String, Bool)] = [
                         (String(localized: "New Conversation"), menuState.newConversation),
@@ -1150,7 +1158,9 @@
                         }
                         if item.isEnabled != expected {
                             captureFailures.append(
-                                "Main menu \(title) is \(item.isEnabled ? "enabled" : "disabled") against its rule")
+                                "Main menu \(title) is \(item.isEnabled ? "enabled" : "disabled") against its rule "
+                                    + "(busy \(model.busy), activity \(model.turn.activity), practice \(model.practice), "
+                                    + "modal \(model.automationModal), workspace key \(model.workspaceKey))")
                         }
                     }
                     _ = model.turn.finish(searchEpoch)
