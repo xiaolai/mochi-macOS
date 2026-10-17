@@ -135,7 +135,21 @@ class ReleaseTests(unittest.TestCase):
             calls.append(args); self.assertTrue(kwargs["check"])
             return subprocess.CompletedProcess(args,0,"normal","")
         release.check_distribution("app","helper",run=run)
-        self.assertEqual(calls,[["strings","app"],["nm","app"],["nm","helper"]])
+        self.assertEqual(calls,[["strings","app"],["nm","app"],["nm","helper"],["strings","helper"]])
+
+    def test_distribution_gate_rejects_a_resource_lookup_through_the_build_folder(self):
+        # An older SwiftPM accessor looked beside the executable and then in an absolute .build path: the bundle in
+        # Contents/Resources is never found, so the app works on the Mac that built it and crashes for everyone else.
+        release.validate_build_paths({"Mochi": "Mochi_MochiApp.bundle\nunable to find bundle named Mochi_MochiApp\n"})
+        accessor = "could not load resource bundle: from \n or \n"
+        build_path = "/tmp/checkout/mochi/.build/arm64-apple-macosx/release/Mochi_MochiApp.bundle\n"
+        for text in (accessor, build_path):
+            with self.assertRaisesRegex(ValueError,"Mochi"): release.validate_build_paths({"Mochi": text})
+            with self.assertRaisesRegex(ValueError,"mochi-mcp"):
+                release.validate_build_paths({"Mochi": "normal", "mochi-mcp": text})
+        def run(args, **kwargs):
+            return subprocess.CompletedProcess(args,0,build_path if args==["strings","helper"] else "normal","")
+        with self.assertRaisesRegex(ValueError,"helper"): release.check_distribution("app","helper",run=run)
 
     def test_distribution_gate_rejects_retired_providers(self):
         for retired in ("api.elevenlabs.io", "ELEVENLABS_API_KEY", "ElevenLabsSpeech", "ElevenLabsCredential"):

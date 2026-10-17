@@ -89,11 +89,23 @@ def validate_sources(sources=SOURCES):
             raise ValueError(f"OpenAI API-key fallback cannot ship: {path}")
 
 
+def validate_build_paths(strings_by_binary):
+    """The resource bundle has to be found inside the app. SwiftPM's older resource accessor looked beside the
+    executable and then fell back to the absolute .build path it was compiled in: the bundle the app ships in
+    Contents/Resources is never found, so the app works on the Mac that built it and crashes everywhere else."""
+    for name, text in strings_by_binary.items():
+        for marker in ("/.build/", "could not load resource bundle"):
+            if marker in text:
+                raise ValueError(f"{name} looks up resources through the build folder ({marker!r}); it cannot ship")
+
+
 def check_distribution(app, helper, *, run=subprocess.run, sources=SOURCES):
     app_strings = run(["strings", app], check=True, capture_output=True, text=True).stdout
     app_symbols = run(["nm", app], check=True, capture_output=True, text=True).stdout
     helper_symbols = run(["nm", helper], check=True, capture_output=True, text=True).stdout
+    helper_strings = run(["strings", helper], check=True, capture_output=True, text=True).stdout
     validate_distribution_symbols(app_strings, helper_symbols, app_symbols)
+    validate_build_paths({app: app_strings, helper: helper_strings})
     validate_sources(sources)
 
 
