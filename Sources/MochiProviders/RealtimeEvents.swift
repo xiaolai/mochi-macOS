@@ -79,11 +79,14 @@ public struct RealtimeAccumulator {
     /// The reply stopped at Mochi's output limit; what streamed before it is kept.
     public var truncated = false
     private var separateNextText = false
+    /// How much text and audio earlier rounds left, so a round cut off at the limit is judged by what it said.
+    private var roundStart = (text: 0, audio: 0)
     public init() {}
     /// Starts the reply that follows tool results, so its text does not run into the previous round's.
     public mutating func beginNextRound() {
         done = false
         separateNextText = !(text.last?.isWhitespace ?? true)
+        roundStart = (text.utf8.count, audio.count)
     }
     /// A log probability is at most 0, but `gpt-transcribe` sends some just above it from rounding (a fifth of its
     /// tokens, at most 1.1e-4, over 531 tokens on 2026-10-14). Those count as 0; anything further above is malformed.
@@ -158,7 +161,8 @@ public struct RealtimeAccumulator {
             let status = response?["status"] as? String
             let reason = (response?["status_details"] as? [String: Any])?["reason"] as? String
             if status == "incomplete" && reason == "max_output_tokens" {
-                truncated = true
+                // Only words or speech can be cut short; a round of tool calls alone is answered and continues.
+                if text.utf8.count > roundStart.text || audio.count > roundStart.audio { truncated = true }
                 done = true
                 return
             }

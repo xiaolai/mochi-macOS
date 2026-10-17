@@ -279,4 +279,34 @@ extension RealtimeToolTests {
         let answered = sent.compactMap { ($0["item"] as? [String: Any])?["call_id"] as? String }
         XCTAssertEqual(answered, ["done", "cut", "bare"])
     }
+
+    /// A round of tool calls cut off at the output limit says nothing; the reply after it is whole.
+    @MainActor func testOnlyARoundThatSaidSomethingMarksTheReplyCutShort() async throws {
+        func cutRound(text: String?) -> [[String: Any]] {
+            let done: [String: Any] = [
+                "type": "response.done",
+                "response": [
+                    "status": "incomplete", "status_details": ["reason": "max_output_tokens"],
+                    "output": [
+                        [
+                            "type": "function_call", "call_id": "a", "name": "get_session", "arguments": "{}",
+                            "status": "completed",
+                        ]
+                    ],
+                ],
+            ]
+            return (text.map { [["type": "response.output_text.delta", "delta": $0]] } ?? []) + [done]
+        }
+        for (said, truncated) in [(nil, false), ("Let me look", true)] as [(String?, Bool)] {
+            var events =
+                cutRound(text: said) + [
+                    ["type": "response.output_text.delta", "delta": "Here it is."],
+                    ["type": "response.done", "response": ["status": "completed"]],
+                ]
+            let reply = try await RealtimeService.deliverResponse(
+                RealtimeAccumulator(), receive: { events.removeFirst() }, onResponse: nil, onTranscription: nil,
+                onTool: { _, _, _ in ["ok": true] }, send: { _ in })
+            XCTAssertEqual(reply.truncated, truncated, "Cut round said \(said ?? "nothing")")
+        }
+    }
 }
