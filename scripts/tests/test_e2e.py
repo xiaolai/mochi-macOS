@@ -129,7 +129,8 @@ class DependencyTests(unittest.TestCase):
         top = {path.split("/")[0] for path in tree}
         for check in e2e.CHECKS:
             prefixes = e2e.inputs(check, package)
-            sources = [p for p in tree if p.endswith(".swift") and p.startswith("Tests/") and e2e.covered_by(p, prefixes)]
+            sources = [p for p in tree
+                       if p.endswith(".swift") and p.startswith("Tests/") and e2e.covered_by(p, prefixes)]
             for source in sources:
                 for path in repository_reads((e2e.ROOT / source).read_text(encoding="utf-8"), top):
                     with self.subTest(check=check.name, source=source, path=path):
@@ -177,6 +178,25 @@ class LedgerTests(unittest.TestCase):
         decision = plan(ledger=passed_all(), checks=(changed,))["ui"]
         self.assertTrue(decision.needed)
         self.assertIn("its definition changed", decision.reasons)
+
+    def test_changing_how_checks_are_run_or_judged_reruns_them(self):
+        # The learner, the setup, the shell prelude, the launch template and the verdicts decide a result as much as
+        # a check's own fields do.
+        def other_run_check(host, folder, check):
+            return False, "", ""
+
+        def other_verdict(check, text, exit_code):
+            return True, ""
+
+        ledger = passed_all()
+        changes = {"LEARNER": e2e.LEARNER + " Thanks.", "SETUP": e2e.SETUP + "true\n",
+                   "PRELUDE": e2e.PRELUDE + "set -e\n", "run_check": other_run_check, "verdict": other_verdict}
+        for name, value in changes.items():
+            with self.subTest(changed=name), mock.patch.object(e2e, name, value):
+                decision = plan(ledger=ledger)["ui"]
+                self.assertTrue(decision.needed)
+                self.assertIn("how checks are run or judged changed", decision.reasons)
+        self.assertFalse(plan(ledger=ledger)["ui"].needed)
 
     def test_a_check_never_passed_runs(self):
         self.assertEqual(plan()["ui"].reasons, ["never passed"])
@@ -513,7 +533,8 @@ class VerdictTests(unittest.TestCase):
                       'objc: Class X is implemented in both\n{"result": "PASS", "checks": [{}]}')
         cases = [(name, text) for name in ("hands-free", "barge-in", "single-instance") for text in unreadable]
         # The hands-free report's verdict reads each check, so a check without its result is unreadable too.
-        cases += [(name, text) for name in ("hands-free", "barge-in") for text in ('{"checks": [1]}', '{"checks": [{}]}')]
+        cases += [(name, text) for name in ("hands-free", "barge-in")
+                  for text in ('{"checks": [1]}', '{"checks": [{}]}')]
         for name, text in cases:
             with self.subTest(name=name, text=text):
                 passed, summary = e2e.verdict(self.check(name), text, 0)

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Native E2E checks with a ledger: a check that passed is not run again until something it depends on changes.
 
-A check's fingerprint covers its definition, every committed file it depends on and the test Mac's environment. Its
-files are the source folders of the Swift targets it exercises, found from the package graph, plus the files named in
-its definition: a change to a test, a doc or another check's script leaves it covered. The environment is the test
-Mac (by a random identifier it keeps), its macOS and Swift build, and for live checks the Codex version. Only passes are recorded; a failure always runs
-again. `--force` reruns a covered check and needs a reason, which the ledger keeps.
+A check's fingerprint covers its definition, the harness that runs and judges it, every committed file it depends on
+and the test Mac's environment. The harness is the source of what decides a result outside the check's own fields: the
+learner a hands-free check plays, the setup, how a check is launched and how its verdict is read. Its files are the
+source folders of the Swift targets it exercises, found from the package graph, plus the files named in its
+definition: a change to a test, a doc or another check's script leaves it covered. The environment is the test Mac (by
+a random identifier it keeps), its macOS and Swift build, and for live checks the Codex version. Only passes are
+recorded; a failure always runs again. `--force` reruns a covered check and needs a reason, which the ledger keeps.
 
     scripts/e2e.py plan              what would run on HEAD, and why
     scripts/e2e.py run               runs what is not covered, on the test Mac, and records the passes
@@ -13,7 +15,7 @@ again. `--force` reruns a covered check and needs a reason, which the ledger kee
 
 The ledger is scripts/e2e-ledger.json; commit it with the change it verified.
 """
-import argparse, datetime, hashlib, json, os, re, subprocess, sys, tarfile, tempfile, uuid
+import argparse, datetime, hashlib, inspect, json, os, re, subprocess, sys, tarfile, tempfile, uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -132,8 +134,17 @@ def environment(check, host_env):
     return {k: host_env.get(k, "") for k in keys}
 
 
-def fingerprint(check, digest, env):
-    body = json.dumps({"spec": check.spec(), "inputs": digest, "env": env}, sort_keys=True)
+def harness():
+    """The digest of what decides a result besides a check's own fields: the shell prelude, the setup and the learner
+    it synthesizes, how run_check launches a check and how verdict reads its evidence. They are read when a plan is
+    made, so a change to any of them runs every check again. (The runner, scripts/e2e_contain.py, is a committed input
+    of every check.)"""
+    parts = (PRELUDE, SETUP, LEARNER, inspect.getsource(run_check), inspect.getsource(verdict))
+    return hashlib.sha256("\0".join(parts).encode()).hexdigest()
+
+
+def fingerprint(check, digest, env, harness_digest):
+    body = json.dumps({"spec": check.spec(), "harness": harness_digest, "inputs": digest, "env": env}, sort_keys=True)
     return hashlib.sha256(body.encode()).hexdigest()
 
 
@@ -146,6 +157,7 @@ class Decision:
     fingerprint: str
     digest: str
     env: dict
+    harness: str = ""
     covering: dict = None  # the pass that covers it
     reasons: list = field(default_factory=list)
 
@@ -156,12 +168,12 @@ class Decision:
 
 def decide(checks, ledger, tree, package, host_env, changed=lambda commit, prefixes: None):
     """What each check needs. `changed(commit, prefixes)` lists the input paths changed since a commit, or None."""
-    decisions = []
+    decisions, harness_digest = [], harness()
     for check in checks:
         prefixes = inputs(check, package)
         digest = inputs_digest(tree, prefixes)
         env = environment(check, host_env)
-        d = Decision(check, fingerprint(check, digest, env), digest, env)
+        d = Decision(check, fingerprint(check, digest, env, harness_digest), digest, env, harness_digest)
         passes = [p for p in ledger.get("passes", []) if p["check"] == check.name]
         d.covering = next((p for p in reversed(passes) if p["fingerprint"] == d.fingerprint), None)
         if d.needed:
@@ -171,6 +183,8 @@ def decide(checks, ledger, tree, package, host_env, changed=lambda commit, prefi
             else:
                 if last.get("spec") != check.spec():
                     d.reasons.append("its definition changed")
+                if last.get("harness") != harness_digest:
+                    d.reasons.append("how checks are run or judged changed")
                 if last.get("inputs") != digest:
                     paths = changed(last["commit"], prefixes) or []
                     shown = ", ".join(paths[:4]) + (f" and {len(paths) - 4} more" if len(paths) > 4 else "")
@@ -186,6 +200,7 @@ def record(ledger, decision, commit, evidence, ran_at, forced=""):
     entry = {
         "check": decision.check.name, "fingerprint": decision.fingerprint, "commit": commit, "ran_at": ran_at,
         "inputs": decision.digest, "env": decision.env, "spec": decision.check.spec(), "evidence": evidence,
+        "harness": decision.harness,
     }
     if forced:
         entry["forced"] = forced
