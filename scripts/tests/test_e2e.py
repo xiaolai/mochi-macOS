@@ -201,7 +201,8 @@ class TestMacTests(unittest.TestCase):
     def test_the_swift_measured_is_the_swift_the_checks_run(self):
         # The checks run `swift` with Homebrew first on PATH; `xcrun swift` would name Xcode's even when another
         # toolchain is the one that builds.
-        remote, scripts = self.remote([(0, "host=x\nmacos=27.0.1 26A434\nswift=/opt/homebrew/bin/swift Swift 6.4\n")])
+        remote, scripts = self.remote([(0, "host=0C6F3A52-8E0B-4B8B-9A57-2B1D1E6E9F10\nmacos=27.0.1 26A434\n"
+                                           "swift=/opt/homebrew/bin/swift Swift 6.4\n")])
         with mock.patch.object(e2e, "remote", remote):
             env = e2e.host_environment("mac")
             e2e.run_check("mac", "$HOME/mochi-e2e/x", next(c for c in e2e.CHECKS if c.name == "smoke"))
@@ -210,6 +211,31 @@ class TestMacTests(unittest.TestCase):
         self.assertIn('swift=$(command -v swift) $(swift --version 2>&1 | head -1)', scripts[0])
         for script in scripts:
             self.assertTrue(script.startswith(e2e.PRELUDE))
+
+
+    def test_the_ledger_names_the_test_mac_by_a_random_identifier_it_keeps(self):
+        # A digest of the Mac's name can be reversed by guessing names; a random identifier says nothing about it.
+        machine = "0C6F3A52-8E0B-4B8B-9A57-2B1D1E6E9F10"
+        remote, scripts = self.remote([(0, f"host={machine}\nname=Lab-Mac\nmacos=27.0.1 26A434\nswift=s\n")])
+        with mock.patch.object(e2e, "remote", remote):
+            env = e2e.host_environment("mac")
+        self.assertEqual(env["host"], machine)
+        self.assertEqual(env["name"], "Lab-Mac")  # shown in the plan, never stored
+        self.assertNotIn("name", e2e.environment(e2e.CHECKS[0], env))
+        self.assertIn(e2e.MACHINE_ID, scripts[0])
+        for broken in ("host=\nname=x\n", "host=Lab-Mac\nname=x\n"):
+            remote, _ = self.remote([(0, broken)])
+            with mock.patch.object(e2e, "remote", remote), self.assertRaises(SystemExit):
+                e2e.host_environment("mac")
+
+    def test_the_identifier_is_created_once_and_then_kept(self):
+        with tempfile.TemporaryDirectory() as home:
+            read = lambda: subprocess.run(["bash", "-c", e2e.MACHINE_ID], env={"HOME": home, "PATH": "/usr/bin:/bin"},
+                                          check=True, capture_output=True, text=True).stdout
+            first = read()
+            self.assertRegex(first, r"^host=[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}\n$")
+            self.assertEqual(read(), first)
+            self.assertEqual(sorted(p.name for p in (Path(home) / "mochi-e2e").iterdir()), [".machine-id"])
 
 
 class VerdictTests(unittest.TestCase):

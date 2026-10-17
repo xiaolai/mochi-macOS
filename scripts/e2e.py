@@ -3,8 +3,8 @@
 
 A check's fingerprint covers its definition, every committed file it depends on and the test Mac's environment. Its
 files are the source folders of the Swift targets it exercises, found from the package graph, plus the files named in
-its definition: a change to a test, a doc or another check's script leaves it covered. The environment is the host,
-its macOS and Swift build, and for live checks the Codex version. Only passes are recorded; a failure always runs
+its definition: a change to a test, a doc or another check's script leaves it covered. The environment is the test
+Mac (by a random identifier it keeps), its macOS and Swift build, and for live checks the Codex version. Only passes are recorded; a failure always runs
 again. `--force` reruns a covered check and needs a reason, which the ledger keeps.
 
     scripts/e2e.py plan              what would run on HEAD, and why
@@ -13,7 +13,7 @@ again. `--force` reruns a covered check and needs a reason, which the ledger kee
 
 The ledger is scripts/e2e-ledger.json; commit it with the change it verified.
 """
-import argparse, datetime, hashlib, json, os, subprocess, sys, tempfile
+import argparse, datetime, hashlib, json, os, re, subprocess, sys, tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -282,10 +282,23 @@ def remote(host, script, timeout=120):
 PRELUDE = "export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH\nset -u\n"
 
 
+# The ledger is public, so it names the test Mac by a random identifier the Mac keeps, created on first use; a digest
+# of its name could be reversed by guessing names. The link makes creation atomic, so two first runs agree on one.
+# Removing the file gives the Mac a new identity, and every check runs again on it.
+MACHINE_ID = """mkdir -p ~/mochi-e2e
+if [ ! -s ~/mochi-e2e/.machine-id ]; then
+    uuidgen > ~/mochi-e2e/.machine-id.$$ && ln ~/mochi-e2e/.machine-id.$$ ~/mochi-e2e/.machine-id 2>/dev/null
+    rm -f ~/mochi-e2e/.machine-id.$$
+fi
+echo "host=$(cat ~/mochi-e2e/.machine-id)"
+"""
+UUID = r"[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"
+
+
 def host_environment(host):
     # Swift is measured as the checks run it: `swift` on the PRELUDE's PATH, which puts Homebrew first.
-    code, out = remote(host, PRELUDE + """
-echo "host=$(scutil --get LocalHostName)"
+    code, out = remote(host, PRELUDE + MACHINE_ID + """
+echo "name=$(scutil --get LocalHostName)"
 echo "macos=$(sw_vers -productVersion) $(sw_vers -buildVersion)"
 echo "swift=$(command -v swift) $(swift --version 2>&1 | head -1)"
 echo "codex=$(codex --version 2>/dev/null)"
@@ -293,9 +306,8 @@ echo "codex=$(codex --version 2>/dev/null)"
     if code != 0:
         raise SystemExit(f"Cannot read the test Mac {host}: {out.strip()}")
     env = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
-    # The ledger is public: it keeps a digest of the Mac's name, which still tells one Mac from another.
-    env["name"] = env.pop("host")
-    env["host"] = hashlib.sha256(env["name"].encode()).hexdigest()[:12]
+    if not re.fullmatch(UUID, env.get("host", "")):
+        raise SystemExit(f"The test Mac's identifier in ~/mochi-e2e/.machine-id is not a UUID: {env.get('host')!r}")
     return env
 
 
