@@ -178,8 +178,8 @@ final class LibraryVersionFiveTests: XCTestCase {
             { $0.conversations[0].messages[0].recording = RecordingMetadata(model: "m", language: "match") },
             "Match Me is not a language hint")
         refused(
-            { $0.conversations[0].messages[0].recording = RecordingMetadata(model: "m", language: "xx") },
-            "unknown language")
+            { $0.conversations[0].messages[0].recording = RecordingMetadata(model: "m", language: "not a code") },
+            "not a language code; a code this version does not know is kept")
         refused(
             { $0.conversations[0].messages[0].transcriptEvidence = self.evidence("I went home.") },
             "evidence for other text")

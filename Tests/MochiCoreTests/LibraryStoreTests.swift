@@ -113,6 +113,33 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: root.appendingPathComponent(aside[0])), "damaged")
     }
 
+    func testAMissingLibraryBesideAnEarlierCopyOrBackupIsNotStartedAgainEmpty() throws {
+        XCTAssertEqual(
+            try LibraryStore(root: try folder()).load().conversations.count, 0, "A fresh folder starts empty")
+        for kept in [
+            "library.previous.json", "library-v1-backup.json", "library-before-conversation-instructions.json",
+            "\(LibraryStore.reviewLibraryBackupPrefix)-1-x.json", "library-unreadable-1-x.json",
+        ] {
+            let root = try folder()
+            try Data("{}".utf8).write(to: root.appendingPathComponent(kept))
+            XCTAssertThrowsError(try LibraryStore(root: root).load(), kept)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("library.json").path))
+        }
+        // The library that went missing comes back from its earlier copy, and its recordings with it.
+        let root = try folder()
+        let store = LibraryStore(root: root)
+        let name = "recording-\(UUID()).wav"
+        try Data([1]).write(to: root.appendingPathComponent(name))
+        try store.save(voiceLibrary(name))
+        try store.save(voiceLibrary(name))
+        try FileManager.default.removeItem(at: store.file)
+        XCTAssertThrowsError(try LibraryStore(root: root).load())
+        let restored = try LibraryStore(root: root).restorePrevious()
+        XCTAssertEqual(restored.referencedAudio, [name])
+        try LibraryStore(root: root).cleanupOrphanedAudio(try LibraryStore(root: root).load())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path))
+    }
+
     func testRecoveryFileNamesAreNeverRecordingNames() {
         for name in ["library.previous.json", "library-unreadable-1-x.json"] {
             var library = Library()
@@ -180,6 +207,41 @@ final class LibraryStoreTests: XCTestCase {
         try store.save(Library())
         try store.cleanupOrphanedAudio(Library())
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(kept).path))
+    }
+
+    func testCleanupKeepsRecordingsAnUnreadableLibraryNames() throws {
+        let root = try folder()
+        let recording = "recording-\(UUID()).wav"
+        let reply = "reply-\(UUID()).wav"
+        let imported = LibraryStore.importedAudioName(extension: "mp3")
+        let orphan = "recording-\(UUID()).wav"
+        for name in [recording, reply, imported, orphan] { try Data([1]).write(to: root.appendingPathComponent(name)) }
+        // Set aside by Restore Earlier Copy and kept for recovery; damaged, so it is searched rather than decoded.
+        let unreadable =
+            #"{"conversations":[{"messages":[{"audio":"\#(recording)"},{"audio" : "\#(reply)"},"#
+            + #"{"audio":"\#(imported)"}"#
+        try Data(unreadable.utf8).write(to: root.appendingPathComponent("library-unreadable-1-\(UUID()).json"))
+        try LibraryStore(root: root).cleanupOrphanedAudio(Library(), now: Date(timeIntervalSinceNow: 30 * 86400))
+        for name in [recording, reply, imported] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path), name)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(orphan).path))
+    }
+
+    func testCleanupRemovesWriteStagingLeftByACrashButNeverFollowsALink() throws {
+        let root = try folder()
+        let outside = try folder().appendingPathComponent("kept.json")
+        try Data("outside".utf8).write(to: outside)
+        let staged = [".library-write-", ".library-previous-", ".backup-write-"].map {
+            root.appendingPathComponent("\($0)\(UUID()).json")
+        }
+        for url in staged { try Data("{}".utf8).write(to: url) }
+        let link = root.appendingPathComponent(".library-write-\(UUID()).json")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+        try LibraryStore(root: root).cleanupOrphanedAudio(Library())
+        for url in staged { XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), url.lastPathComponent) }
+        XCTAssertNotNil(try? FileManager.default.destinationOfSymbolicLink(atPath: link.path))
+        XCTAssertEqual(try String(contentsOf: outside), "outside")
     }
 
     func testCleanupRemovesExportStagingLeftByAForceQuit() throws {

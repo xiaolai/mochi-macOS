@@ -154,12 +154,39 @@ extension MediaAndFilesModelTests {
         let package = makeTemporaryFolder().appendingPathComponent("Backup.mochilibrary")
         let export = try XCTUnwrap(app.libraryController.exportBackup(to: package))
         try FileManager.default.removeItem(at: recording)
-        try await export.value
+        let omitted = try await export.value
+        XCTAssertEqual(omitted, [], "Linked first, so a deletion meanwhile leaves nothing out")
         XCTAssertEqual(try Data(contentsOf: package.appendingPathComponent(name)), Data([1, 2, 3]))
         XCTAssertFalse(
             try FileManager.default.contentsOfDirectory(atPath: app.store.root.path).contains {
                 $0.hasPrefix(LibraryStore.exportStagingPrefix)
             })
+    }
+
+    @MainActor func testAMissingRecordingNeverBlocksAnExportAndBothSidesSaySo() async throws {
+        let source = makeApp(root: makeTemporaryFolder())
+        let id = try XCTUnwrap(source.selectedID)
+        let kept = try toneWAV(in: source.store.root, name: "recording-\(UUID().uuidString).wav")
+        source.append(Message(role: "user", text: "Kept", audio: kept.lastPathComponent), to: id)
+        source.append(Message(role: "user", text: "Lost", audio: "recording-\(UUID().uuidString).wav"), to: id)
+        let package = makeTemporaryFolder().appendingPathComponent("Backup.mochilibrary")
+        try FileManager.default.createDirectory(
+            at: package.deletingLastPathComponent(), withIntermediateDirectories: true)
+        await source.exportLibraryBackup(to: package)?.value
+        XCTAssertNil(source.error)
+        XCTAssertEqual(
+            source.history.feedback,
+            "Library backup exported without 1 recordings that are missing from the data folder. The messages that named them are included."
+        )
+        let target = makeApp(root: makeTemporaryFolder())
+        await target.importLibraryBackup(from: package)?.value
+        XCTAssertNil(target.error)
+        XCTAssertTrue(
+            target.history.feedback?.hasSuffix(
+                "1 recordings named in the backup were not in it, so those messages have no audio.") == true,
+            target.history.feedback ?? "no feedback")
+        let imported = try XCTUnwrap(target.library.conversations.first { $0.messages.first?.text == "Kept" })
+        XCTAssertEqual(imported.messages.map(\.text), ["Kept", "Lost"])
     }
 
     @MainActor func testCancellingTheImportTaskChangesNothing() async throws {

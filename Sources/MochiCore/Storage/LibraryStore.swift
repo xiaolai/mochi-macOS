@@ -17,6 +17,19 @@ public final class LibraryStore {
     public static let characterLibraryBackupPrefix = "library-before-character-library-v4"
     /// Names the copies of a version-4 library kept before its first version-5 save.
     public static let reviewLibraryBackupPrefix = "library-before-review-v5"
+    /// Whether `name` names the library or one of the copies Mochi keeps of it: the earlier copy, an upgrade backup or
+    /// an unreadable library set aside. Compared as the file system sees names: volumes are case-insensitive by default.
+    public static func isLibraryFile(_ name: String) -> Bool {
+        let folded = name.precomposedStringWithCanonicalMapping.lowercased()
+        return folded.hasPrefix("library-before-character-templates-v3")
+            || (folded.hasPrefix(characterLibraryBackupPrefix) && folded.hasSuffix(".json"))
+            || (folded.hasPrefix(reviewLibraryBackupPrefix) && folded.hasSuffix(".json"))
+            || folded.hasPrefix(unreadablePrefix) || reservedNames.contains(folded)
+    }
+    /// Whether `name` names a copy Mochi keeps of the library, which a missing library can be recovered from.
+    static func isLibraryCopy(_ name: String) -> Bool {
+        isLibraryFile(name) && name.precomposedStringWithCanonicalMapping.lowercased() != "library.json"
+    }
     private struct FileIdentity: Equatable {
         let device: Int32
         let inode: UInt64
@@ -76,6 +89,21 @@ public final class LibraryStore {
         var info = stat()
         guard lstat(file.path, &info) == 0 else {
             known = nil
+            guard errno == ENOENT else {
+                throw AppFailure(
+                    "Mochi could not check its library file, so it did not start a new library.",
+                    underlying: POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO))
+            }
+            // A library missing beside its earlier copy or a backup was lost, not never made. Starting empty would let
+            // the next two saves replace the earlier copy, and the cleanup that trusts it remove every recording.
+            let names =
+                FileManager.default.fileExists(atPath: root.path)
+                ? try FileManager.default.contentsOfDirectory(atPath: root.path) : []
+            guard !names.contains(where: { Self.isLibraryCopy($0) }) else {
+                throw AppFailure(
+                    "Mochi's library file is missing, but earlier copies of it are in the data folder, so Mochi did not start a new library over them."
+                )
+            }
             return Library()
         }
         let before = identity(file)
@@ -139,7 +167,7 @@ public final class LibraryStore {
         var aside: URL?
         if FileManager.default.fileExists(atPath: file.path) {
             let url = root.appendingPathComponent(
-                "library-unreadable-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString).json")
+                "\(Self.unreadablePrefix)\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString).json")
             guard Darwin.link(file.path, url.path) == 0 else {
                 throw AppFailure(
                     "The unreadable library could not be set aside, so nothing was restored.",
@@ -155,15 +183,40 @@ public final class LibraryStore {
         }
         return library
     }
+    /// Names the unreadable libraries Restore Earlier Copy sets aside.
+    static let unreadablePrefix = "library-unreadable-"
+    /// Recordings named by the unreadable libraries set aside. Those are kept for recovery, so their recordings are
+    /// too; such a file may not decode, so it is searched for the names Mochi generates rather than read as a library.
+    func unreadableReferencedAudio() throws -> Set<String> {
+        var names = Set<String>()
+        for url in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) {
+            let name = url.lastPathComponent
+            guard name.hasPrefix(Self.unreadablePrefix), name.hasSuffix(".json"), identity(url) != nil,
+                let data = try? Data(contentsOf: url)
+            else { continue }
+            // Every name a library holds is a JSON string, so it lies between two quotation marks.
+            for piece in String(decoding: data, as: UTF8.self).split(separator: "\"")
+            where Self.generatedAudio(String(piece)) != nil {
+                names.insert(String(piece))
+            }
+        }
+        return names
+    }
     /// Folders of hard links that keep an export's recordings; one left by a force quit is removed at cleanup.
     public static let exportStagingPrefix = ".export-"
+    /// Files a save writes before renaming them into place. One left by a crash may hold a conversation deleted since,
+    /// so any left is removed at cleanup.
+    static let libraryStagingPrefix = ".library-write-"
+    static let previousStagingPrefix = ".library-previous-"
+    static let backupStagingPrefix = ".backup-write-"
     /// How long an unreferenced generated example or preview stays cached after its last use.
     public static let cacheLifetime: TimeInterval = 7 * 24 * 3600
     /// Removes audio Mochi created that nothing references: abandoned recordings and replies at once,
     /// generated examples, previews and replaced imports once unused for `cacheLifetime`. Other files are never touched.
     public func cleanupOrphanedAudio(_ library: Library, now: Date = Date()) throws {
         try library.validate()
-        let referenced = library.referencedAudio.union(previousReferencedAudio())
+        let referenced = library.referencedAudio.union(previousReferencedAudio()).union(try unreadableReferencedAudio())
+        let staging = [Self.libraryStagingPrefix, Self.previousStagingPrefix, Self.backupStagingPrefix]
         let keys: Set<URLResourceKey> = [
             .isRegularFileKey, .isSymbolicLinkKey, .isDirectoryKey, .contentModificationDateKey,
         ]
@@ -172,6 +225,13 @@ public final class LibraryStore {
             if name.hasPrefix(Self.exportStagingPrefix) {
                 let values = try url.resourceValues(forKeys: keys)
                 if values.isDirectory == true, values.isSymbolicLink != true {
+                    try FileManager.default.removeItem(at: url)
+                }
+                continue
+            }
+            if staging.contains(where: name.hasPrefix) {
+                let values = try url.resourceValues(forKeys: keys)
+                if values.isRegularFile == true, values.isSymbolicLink != true {
                     try FileManager.default.removeItem(at: url)
                 }
                 continue
@@ -241,7 +301,7 @@ public final class LibraryStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(library)
-        let staging = root.appendingPathComponent(".library-write-\(UUID().uuidString).json")
+        let staging = root.appendingPathComponent("\(Self.libraryStagingPrefix)\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: staging) }
         try writeDurably(data, to: staging)
         if current != nil { keepPrevious() }
@@ -298,7 +358,7 @@ public final class LibraryStore {
     }
     /// Keeps the file about to be replaced as `library.previous.json`. Losing this copy never blocks a save.
     private func keepPrevious() {
-        let staging = root.appendingPathComponent(".library-previous-\(UUID().uuidString).json")
+        let staging = root.appendingPathComponent("\(Self.previousStagingPrefix)\(UUID().uuidString).json")
         guard Darwin.link(file.path, staging.path) == 0 else {
             MochiLog.failure(
                 MochiLog.library, "Keep previous library", POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO),
@@ -323,7 +383,7 @@ public final class LibraryStore {
     }
     /// Creates a complete 0600 copy that never replaces an existing file, so a failed write cannot leave a partial or briefly readable backup under the final name.
     private func writeNewPrivateFile(_ data: Data, to destination: URL) throws {
-        let staging = root.appendingPathComponent(".backup-write-\(UUID().uuidString).json")
+        let staging = root.appendingPathComponent("\(Self.backupStagingPrefix)\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: staging) }
         try writeDurably(data, to: staging)
         guard renamex_np(staging.path, destination.path, UInt32(RENAME_EXCL)) == 0 else {

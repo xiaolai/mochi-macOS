@@ -40,15 +40,48 @@ final class LibraryBackupTests: XCTestCase {
         var library = Library()
         library.conversations = [chat]
         XCTAssertThrowsError(try library.validate())
-        chat.messages[0].audio = "missing.wav"
+        chat.messages[0].audio = "voice.wav"
         library.conversations = [chat]
-        XCTAssertThrowsError(try LibraryBackup.write(library, from: root, to: root.appendingPathComponent("backup"))) {
-            // The file system's own error must not hide which recording is missing.
-            XCTAssertEqual(
-                ($0 as? AppFailure)?.message, "The recording “missing.wav” is missing or is not a regular file.")
-        }
         library.conversations.append(chat)
         XCTAssertThrowsError(try library.validate())
+    }
+
+    func testAMissingRecordingIsLeftOutOfTheBackupAndImportedAsMissing() throws {
+        let root = try folder()
+        let package = try folder().appendingPathComponent("backup")
+        let target = try folder()
+        try Data([1, 2, 3]).write(to: root.appendingPathComponent("kept.wav"))
+        try FileManager.default.createSymbolicLink(
+            at: root.appendingPathComponent("linked.wav"), withDestinationURL: root.appendingPathComponent("kept.wav"))
+        var chat = Conversation()
+        chat.messages = [
+            Message(role: "user", text: "Kept", audio: "kept.wav"),
+            Message(role: "user", text: "Lost", audio: "lost.wav"),
+            Message(role: "user", text: "Linked", audio: "linked.wav"),
+        ]
+        var library = Library()
+        library.conversations = [chat]
+        XCTAssertEqual(try LibraryBackup.write(library, from: root, to: package), ["linked.wav", "lost.wav"])
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: package.path).sorted(), ["kept.wav", "library.json"])
+        let read = try LibraryBackup.read(package)
+        XCTAssertEqual(read.referencedAudio, ["kept.wav", "lost.wav", "linked.wav"], "The messages still name them")
+        let prepared = try LibraryBackup.prepareMerge(read, from: package, into: Library(), root: target)
+        XCTAssertEqual(prepared.missing, 2)
+        var local = Library()
+        XCTAssertEqual(try LibraryBackup.apply(prepared, to: &local), 1)
+        let names = local.conversations[0].messages.compactMap(\.audio)
+        XCTAssertEqual(names.count, 3)
+        XCTAssertTrue(names.allSatisfy { $0.hasPrefix("import-") }, "Remapped, so no local name can be taken over")
+        XCTAssertEqual(try Data(contentsOf: target.appendingPathComponent(names[0])), Data([1, 2, 3]))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: target.path), [names[0]])
+        // Anything present under a recording's name must still be a regular file.
+        try FileManager.default.createSymbolicLink(
+            at: package.appendingPathComponent("lost.wav"), withDestinationURL: root.appendingPathComponent("kept.wav"))
+        XCTAssertThrowsError(try LibraryBackup.read(package)) {
+            XCTAssertEqual(
+                ($0 as? AppFailure)?.message, "The recording “lost.wav” is missing or is not a regular file.")
+        }
     }
 
     func testImportSharesRemappedAudioAndRejectsSymlinksBeforeCopying() throws {

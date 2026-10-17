@@ -166,16 +166,14 @@ extension Library {
         guard expressions.allSatisfy({ $0.review?.isValid ?? true }) else {
             throw AppFailure("The library contains invalid review state.")
         }
+        guard expressions.allSatisfy({ $0.languageCode.map(ConversationLanguage.isPlausibleCode) ?? true }) else {
+            throw AppFailure("The library contains a practice language that is not a language code.")
+        }
         for name in referencedAudio {
-            // Compared as the file system sees it: volumes are case-insensitive by default, so "LIBRARY.JSON" would
-            // name the library itself. The v4 and v5 backups are matched by their suffix too: an older library may
-            // name a recording with that prefix.
-            let folded = name.precomposedStringWithCanonicalMapping.lowercased()
+            // "LIBRARY.JSON" would name the library itself. The v4 and v5 backups are matched by their suffix too: an
+            // older library may name a recording with that prefix.
             guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"),
-                !name.hasPrefix("."), !folded.hasPrefix("library-before-character-templates-v3"),
-                !(folded.hasPrefix(LibraryStore.characterLibraryBackupPrefix) && folded.hasSuffix(".json")),
-                !(folded.hasPrefix(LibraryStore.reviewLibraryBackupPrefix) && folded.hasSuffix(".json")),
-                !folded.hasPrefix("library-unreadable-"), !LibraryStore.reservedNames.contains(folded)
+                !name.hasPrefix("."), !LibraryStore.isLibraryFile(name)
             else { throw AppFailure("The library contains an unsafe recording filename.") }
         }
     }

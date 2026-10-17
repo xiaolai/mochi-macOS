@@ -3,12 +3,22 @@ import Foundation
 import MochiKernel
 
 public enum LibraryBackup {
-    public static func write(_ library: Library, from root: URL, to package: URL) throws {
+    /// Writes `library` and its recordings into a new package, and returns the recordings left out, sorted. One
+    /// missing from `root`, or not a regular file there, is left out: refusing the whole backup over it would leave
+    /// no way to make one. The library still names it, as the library itself does.
+    @discardableResult public static func write(_ library: Library, from root: URL, to package: URL) throws
+        -> [String]
+    {
         try library.validate()
         guard !FileManager.default.fileExists(atPath: package.path) else {
             throw AppFailure("Choose a new backup filename; an existing backup is never overwritten.")
         }
-        for name in library.referencedAudio { try requireRecording(name, in: root) }
+        let omitted = library.referencedAudio.filter { name in
+            let values = try? root.appendingPathComponent(name).resourceValues(forKeys: [
+                .isRegularFileKey, .isSymbolicLinkKey,
+            ])
+            return values?.isRegularFile != true || values?.isSymbolicLink == true
+        }
         try FileManager.default.createDirectory(
             at: package.deletingLastPathComponent(), withIntermediateDirectories: true)
         // Exclusive: a package that appeared since the check above is neither written into nor removed.
@@ -24,7 +34,7 @@ public enum LibraryBackup {
             var normalized = library
             normalized.version = Library.currentVersion
             try e.encode(normalized).write(to: package.appendingPathComponent("library.json"), options: .atomic)
-            for name in library.referencedAudio {
+            for name in library.referencedAudio.subtracting(omitted) {
                 try FileManager.default.copyItem(
                     at: root.appendingPathComponent(name), to: package.appendingPathComponent(name))
             }
@@ -32,6 +42,7 @@ public enum LibraryBackup {
             try? FileManager.default.removeItem(at: package)
             throw error
         }
+        return omitted.sorted()
     }
     public static func read(_ package: URL) throws -> Library {
         try requireRegularFile(package.appendingPathComponent("library.json")) {
@@ -43,7 +54,7 @@ public enum LibraryBackup {
             throw AppFailure("This backup requires a newer app.")
         }
         try library.validate()
-        for name in library.referencedAudio { try requireRecording(name, in: package) }
+        for name in library.referencedAudio { _ = try recordingIsPresent(name, in: package) }
         library.version = Library.currentVersion
         return library
     }
@@ -51,6 +62,8 @@ public enum LibraryBackup {
     public struct PreparedImport {
         public let additions: Library
         public let copied: [URL]
+        /// Recordings the additions name that the backup left out, as an export does with one already missing.
+        public let missing: Int
     }
     // Only missing IDs are imported; each imported audio name is remapped to avoid collisions.
     public static func merge(_ imported: Library, from package: URL, into local: inout Library, root: URL) throws -> Int
@@ -93,7 +106,7 @@ public enum LibraryBackup {
         -> PreparedImport
     {
         try imported.validate()
-        for name in imported.referencedAudio { try requireRecording(name, in: package) }
+        for name in imported.referencedAudio { _ = try recordingIsPresent(name, in: package) }
         let chatIDs = Set(local.conversations.map(\.id))
         let expressionIDs = Set(local.expressions.map(\.id))
         var additions = Library()
@@ -111,13 +124,20 @@ public enum LibraryBackup {
             at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         var mapping: [String: String] = [:]
         var copied: [URL] = []
+        var missing = 0
         do {
             for name in additions.referencedAudio {
                 try Task.checkCancellation()
                 let replacement = LibraryStore.importedAudioName(extension: URL(fileURLWithPath: name).pathExtension)
-                let destination = root.appendingPathComponent(replacement)
-                try FileManager.default.copyItem(at: package.appendingPathComponent(name), to: destination)
-                copied.append(destination)
+                // A recording the backup left out keeps a fresh name with no file, as it had none in the library
+                // exported: the message is kept, and no local file can ever be named by it.
+                if try recordingIsPresent(name, in: package) {
+                    let destination = root.appendingPathComponent(replacement)
+                    try FileManager.default.copyItem(at: package.appendingPathComponent(name), to: destination)
+                    copied.append(destination)
+                } else {
+                    missing += 1
+                }
                 mapping[name] = replacement
             }
             try remapAudio(in: &additions) { name in
@@ -127,7 +147,7 @@ public enum LibraryBackup {
                 return replacement
             }
             additions.interruptPendingTranscriptions()
-            return PreparedImport(additions: additions, copied: copied)
+            return PreparedImport(additions: additions, copied: copied, missing: missing)
         } catch {
             for url in copied { try? FileManager.default.removeItem(at: url) }
             throw error
@@ -151,6 +171,14 @@ public enum LibraryBackup {
                 library.expressions[i].attempts[ai].file = try mapped(library.expressions[i].attempts[ai].file)
             }
         }
+    }
+    /// Whether a recording a backup names is in it. It may be absent, as an export leaves out a recording its library
+    /// had lost, but anything under its name must be a regular file.
+    private static func recordingIsPresent(_ name: String, in folder: URL) throws -> Bool {
+        var info = stat()
+        if lstat(folder.appendingPathComponent(name).path, &info) != 0, errno == ENOENT { return false }
+        try requireRecording(name, in: folder)
+        return true
     }
     /// A recording a backup names must be a regular file in `folder`; the failure names it so it can be found.
     private static func requireRecording(_ name: String, in folder: URL) throws {

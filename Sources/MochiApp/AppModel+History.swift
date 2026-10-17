@@ -246,8 +246,14 @@ extension AppModel {
         guard let transfer = libraryController.exportBackup(to: url) else { return nil }
         return Task { [weak self] in
             do {
-                try await transfer.value
-                self?.history.feedback = String(localized: "Library backup exported.")
+                let omitted = try await transfer.value
+                self?.history.feedback =
+                    omitted.isEmpty
+                    ? String(localized: "Library backup exported.")
+                    : String(
+                        localized:
+                            "Library backup exported without \(omitted.count) recordings that are missing from the data folder. The messages that named them are included."
+                    )
             } catch {
                 MochiLog.failure(MochiLog.library, "Export library backup", error)
                 self?.report(
@@ -256,7 +262,7 @@ extension AppModel {
                         : AppFailure.message(
                             for: error,
                             fallback:
-                                "Could not export the backup. Use a new filename and check that referenced recordings are present."
+                                "Could not export the backup. Use a new filename and try again."
                         ), in: .privacy)
             }
         }
@@ -285,7 +291,7 @@ extension AppModel {
                     persistenceMessage(
                         error, action: "Import library backup",
                         fallback:
-                            "This backup could not be imported. It may contain missing recordings, invalid IDs, or an unsupported schema. Your history was not changed.",
+                            "This backup could not be imported. It may contain recordings that are not regular files, invalid IDs, or an unsupported schema. Your history was not changed.",
                         diskFull:
                             "This backup could not be imported because the disk is full. Your history was not changed."),
                     in: .privacy)

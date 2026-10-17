@@ -24,6 +24,13 @@ final class InterruptedReplyTests: XCTestCase {
         XCTAssertEqual(InterruptedReply.heard("Well, maybe. Or not at all.", fraction: 0.45), "Well, maybe…")
     }
 
+    func testOpeningPunctuationIsKept() {
+        XCTAssertEqual(InterruptedReply.heard("¿Qué tal tu fin de semana?", fraction: 12.5 / 26), "¿Qué tal tu…")
+        XCTAssertEqual(InterruptedReply.heard("“Really,” she said, smiling.", fraction: 13.5 / 28), "“Really,” she…")
+        XCTAssertEqual(InterruptedReply.heard("«Bonjour», dit-il encore.", fraction: 17.5 / 25), "«Bonjour», dit-il…")
+        XCTAssertEqual(InterruptedReply.heard("¿Sí? Claro.", fraction: 0.1), "…", "Punctuation alone is not kept")
+    }
+
     func testAWordEndingInPunctuationIsKept() {
         XCTAssertEqual(InterruptedReply.heard("Hello, world. How are you?", fraction: 5.0 / 26), "Hello…")
     }

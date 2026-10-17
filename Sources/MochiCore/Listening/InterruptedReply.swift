@@ -36,8 +36,12 @@ public enum InterruptedReply {
             }
             kept = kept[..<boundary]
         }
-        let trimmed = kept.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-        return trimmed + "…"
+        // `kept` starts where the trimmed text does. Punctuation is dropped only at its end: an opening mark ("¿", "“",
+        // "«") belongs to the words kept.
+        let ending = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+        let scalars = kept.unicodeScalars
+        let end = scalars.lastIndex { !ending.contains($0) }.map(scalars.index(after:)) ?? scalars.startIndex
+        return String(scalars[..<end]) + "…"
     }
 
     /// Whether a word ends before `next`. An apostrophe or hyphen with a letter after it is inside a word: "can't".

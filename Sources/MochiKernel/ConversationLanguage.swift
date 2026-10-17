@@ -24,6 +24,15 @@ public enum ConversationLanguage: String, Codable, CaseIterable, Sendable {
     case thai = "th"
     case indonesian = "id"
 
+    /// Whether `value` has the shape of a language code (letters, digits and hyphens, as in "sv" or "pt-BR"). A code
+    /// a newer Mochi stored is kept even when this version does not know it, so newer data is never rewritten.
+    public static func isPlausibleCode(_ value: String) -> Bool {
+        (1...35).contains(value.utf8.count)
+            && value.unicodeScalars.allSatisfy {
+                ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0) || $0 == "-"
+            }
+    }
+
     /// The language's name in English, which is how instructions to the model name it; nil for `match`.
     public var englishName: String? {
         self == .match ? nil : Locale(identifier: "en").localizedString(forLanguageCode: rawValue) ?? rawValue

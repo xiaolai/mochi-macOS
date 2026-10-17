@@ -187,7 +187,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
     /// Recovery feedback: counts only items this import added, and reports the soft caps without blocking recovery.
     public static func importSummary(
         conversations: Int, imported: [ConversationTemplate], merged: [ConversationTemplate], localIDs: Set<UUID>,
-        addedCharacters: Int = 0, characterCount: Int = 0
+        addedCharacters: Int = 0, characterCount: Int = 0, missingRecordings: Int = 0
     ) -> String {
         let added = merged.filter { !localIDs.contains($0.id) }
         var sentences = [
@@ -212,6 +212,13 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
                 String(
                     localized:
                         "You have \(characterCount) characters, above the \(ConversationCharacter.userLimit) limit; all remain usable, but remove some before creating more."
+                ))
+        }
+        if missingRecordings > 0 {
+            sentences.append(
+                String(
+                    localized:
+                        "\(missingRecordings) recordings named in the backup were not in it, so those messages have no audio."
                 ))
         }
         return sentences.joined(separator: " ")
