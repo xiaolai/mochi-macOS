@@ -80,7 +80,8 @@ final class LibraryControllerTests: XCTestCase {
         XCTAssertNotNil(controller.transfer)
         XCTAssertNil(controller.exportBackup(to: package.appendingPathExtension("second")))
         XCTAssertNil(controller.importBackup(from: package))
-        try await first.value
+        let omitted = try await first.value
+        XCTAssertEqual(omitted, [])
         XCTAssertNil(controller.transfer)
     }
 }

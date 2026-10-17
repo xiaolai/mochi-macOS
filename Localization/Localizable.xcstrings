@@ -819,6 +819,34 @@
         }
       }
     },
+    "%lld recordings named in the backup were not in it, so those messages have no audio." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "バックアップが参照する %lld 件の録音がバックアップ内に見つからなかったため、それらのメッセージには音声がありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "백업이 가리키는 녹음 %lld개가 백업에 없어 해당 메시지에는 오디오가 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备份中引用的 %lld 段录音不在备份内，因此这些消息没有音频。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "備份中引用的 %lld 段錄音不在備份內，因此這些訊息沒有音訊。"
+          }
+        }
+      }
+    },
     "%lld selected" : {
       "localizations" : {
         "ja" : {
@@ -5053,30 +5081,30 @@
         }
       }
     },
-    "Could not export the backup. Use a new filename and check that referenced recordings are present." : {
+    "Could not export the backup. Use a new filename and try again." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "バックアップを書き出せませんでした。新しいファイル名を使用し、参照されている録音が存在することを確認してください。"
+            "value" : "バックアップを書き出せませんでした。新しいファイル名を使用して、もう一度お試しください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "백업을 내보낼 수 없습니다. 새 파일 이름을 사용하고 참조된 녹음이 있는지 확인하십시오."
+            "value" : "백업을 내보낼 수 없습니다. 새 파일 이름을 사용하여 다시 시도하십시오."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法导出备份。请使用新的文件名，并确认所引用的录音都存在。"
+            "value" : "无法导出备份。请使用新的文件名后重试。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無法輸出備份。請使用新的檔案名稱，並確認所參照的錄音都存在。"
+            "value" : "無法輸出備份。請使用新的檔案名稱後重試。"
           }
         }
       }
@@ -9417,6 +9445,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "我們收尾吧。"
+          }
+        }
+      }
+    },
+    "Library backup exported without %lld recordings that are missing from the data folder. The messages that named them are included." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブラリのバックアップを書き出しました。データフォルダに見つからない %lld 件の録音は含まれていません。それらを参照するメッセージは含まれています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "라이브러리 백업을 내보냈습니다. 데이터 폴더에 없는 녹음 %lld개는 포함되지 않았습니다. 해당 녹음을 가리키는 메시지는 포함되어 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资料库备份已导出，但未包含数据文件夹中缺失的 %lld 段录音。引用这些录音的消息已包含在内。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "資料庫備份已匯出，但未包含資料檔案夾中缺少的 %lld 段錄音。引用這些錄音的訊息已包含在內。"
           }
         }
       }
@@ -20288,30 +20344,30 @@
         }
       }
     },
-    "This backup could not be imported. It may contain missing recordings, invalid IDs, or an unsupported schema. Your history was not changed." : {
+    "This backup could not be imported. It may contain recordings that are not regular files, invalid IDs, or an unsupported schema. Your history was not changed." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このバックアップを読み込めませんでした。録音の欠落、無効なID、またはサポートされていないスキーマが含まれている可能性があります。履歴は変更されていません。"
+            "value" : "このバックアップを読み込めませんでした。通常のファイルではない録音、無効なID、またはサポートされていないスキーマが含まれている可能性があります。履歴は変更されていません。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이 백업을 가져올 수 없습니다. 누락된 녹음, 유효하지 않은 ID 또는 지원되지 않는 스키마가 포함되어 있을 수 있습니다. 기록은 변경되지 않았습니다."
+            "value" : "이 백업을 가져올 수 없습니다. 일반 파일이 아닌 녹음, 유효하지 않은 ID 또는 지원되지 않는 스키마가 포함되어 있을 수 있습니다. 기록은 변경되지 않았습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法导入此备份。它可能缺少录音、包含无效 ID 或使用了不受支持的结构。你的历史记录未被更改。"
+            "value" : "无法导入此备份。它可能包含不是普通文件的录音、无效 ID 或使用了不受支持的结构。你的历史记录未被更改。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無法輸入此備份。其中可能有遺失的錄音、無效的 ID 或不支援的結構。你的記錄未被更改。"
+            "value" : "無法輸入此備份。其中可能有不是一般檔案的錄音、無效的 ID 或不支援的結構。你的記錄未被更改。"
           }
         }
       }

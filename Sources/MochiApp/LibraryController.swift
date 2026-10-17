@@ -211,7 +211,8 @@ import MochiKernel
     /// Copies a snapshot of the library and its recordings off the main thread. The transfer is claimed at once,
     /// so a second request cannot start alongside it; nil means another transfer is running or the library is closed.
     /// The snapshot's recordings are hard-linked first, so deleting or replacing one meanwhile cannot fail the backup.
-    func exportBackup(to url: URL) -> Task<Void, Error>? {
+    /// The task returns the recordings left out because they were missing.
+    func exportBackup(to url: URL) -> Task<[String], Error>? {
         guard readable, transfer == nil else { return nil }
         transfer = String(localized: "Exporting your library backup…")
         let snapshot = library
@@ -223,7 +224,7 @@ import MochiKernel
                 try? FileManager.default.removeItem(at: staging)
             }
             try retained.get()
-            try await Task.detached { try LibraryBackup.write(snapshot, from: staging, to: url) }.value
+            return try await Task.detached { try LibraryBackup.write(snapshot, from: staging, to: url) }.value
         }
     }
     private static func link(_ names: Set<String>, from root: URL, into staging: URL) throws {
@@ -231,7 +232,7 @@ import MochiKernel
             at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         for name in names {
             let source = root.appendingPathComponent(name)
-            // A missing or unsafe recording is left out, so the backup refuses it with its usual message.
+            // A missing or unsafe recording is not linked, so the backup leaves it out and reports it.
             let values = try? source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
             guard values?.isRegularFile == true, values?.isSymbolicLink != true else { continue }
             try FileManager.default.linkItem(at: source, to: staging.appendingPathComponent(name))
@@ -272,7 +273,7 @@ import MochiKernel
                     conversations: count, imported: imported.conversationTemplates,
                     merged: candidate.conversationTemplates, localIDs: templateIDsBeforeImport,
                     addedCharacters: candidate.characters.count - charactersBeforeImport,
-                    characterCount: candidate.characters.count)
+                    characterCount: candidate.characters.count, missingRecordings: prepared.missing)
             } catch {
                 LibraryBackup.discard(prepared, keeping: library)
                 throw error
