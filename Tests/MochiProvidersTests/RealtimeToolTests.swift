@@ -280,6 +280,57 @@ extension RealtimeToolTests {
         XCTAssertEqual(answered, ["done", "cut", "bare"])
     }
 
+    /// Output near the hard limit, then calls past the soft budget: their short refusals never end the reply, but a
+    /// model that keeps calling after them is stopped.
+    @MainActor func testRefusalsPastTheSoftBudgetNeverReachTheHardLimit() async throws {
+        func round(_ ids: [String]) -> [String: Any] {
+            [
+                "type": "response.done",
+                "response": [
+                    "status": "completed",
+                    "output": ids.map {
+                        ["type": "function_call", "call_id": $0, "name": "get_session", "arguments": "{}"]
+                    },
+                ],
+            ]
+        }
+        // `{"text":"…"}` is 11 bytes around its text: 7,900 + 4,000 + 7,600 = 19,500 bytes of real output.
+        let sizes = ["a": 7900, "b": 4000, "c": 7600]
+        let ending: [[String: Any]] = [
+            ["type": "response.output_text.delta", "delta": "Done."],
+            ["type": "response.done", "response": ["status": "completed"]],
+        ]
+        for (refusalRounds, finishes) in [
+            ([["d", "e", "f", "g", "h"]], true), ([["d", "e", "f", "g", "h"], ["i", "j", "k", "l"]], false),
+        ] {
+            var events = [round(["a", "b", "c"])] + refusalRounds.map(round) + ending
+            var outputs: [String] = []
+            var ran: [String] = []
+            do {
+                let reply = try await RealtimeService.deliverResponse(
+                    RealtimeAccumulator(), receive: { events.removeFirst() }, onResponse: nil, onTranscription: nil,
+                    onTool: { _, _, id in
+                        ran.append(id)
+                        return ["text": String(repeating: "x", count: (sizes[id] ?? 0) - 11)]
+                    },
+                    send: { event in
+                        if let output = (event["item"] as? [String: Any])?["output"] as? String {
+                            outputs.append(output)
+                        }
+                    })
+                XCTAssertTrue(finishes, "A reply that kept calling past the budget was not stopped")
+                XCTAssertEqual(reply.text, "Done.")
+            } catch {
+                XCTAssertFalse(finishes, "The reply was ended: \(error.localizedDescription)")
+                XCTAssertEqual(error.localizedDescription, "Mochi's tool request limit was reached. Please retry.")
+            }
+            XCTAssertEqual(ran, ["a", "b", "c"], "Nothing runs past the soft budget")
+            XCTAssertEqual(outputs.prefix(3).map(\.utf8.count), [7900, 4000, 7600])
+            XCTAssertEqual(outputs.count, finishes ? 8 : 3 + RealtimeService.toolRefusalLimit)
+            XCTAssertTrue(outputs.dropFirst(3).allSatisfy { $0.contains("budget") })
+        }
+    }
+
     /// A round of tool calls cut off at the output limit says nothing; the reply after it is whole.
     @MainActor func testOnlyARoundThatSaidSomethingMarksTheReplyCutShort() async throws {
         func cutRound(text: String?) -> [[String: Any]] {
