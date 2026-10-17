@@ -1109,32 +1109,49 @@
                         captureFailures.append("The workspace window did not take the keyboard")
                     }
                     let searchEpoch = model.turn.begin(.generating)
-                    // Escape goes through the main menu's key equivalents, as a key press does; SwiftUI rebuilds its
-                    // menu items as their state changes, so no item looked up earlier is pressed directly.
+                    // Escape is posted to the event queue, the path a key press takes, so the workspace's own Escape
+                    // handling sees it exactly as it sees a person's.
                     let escape = NSEvent.keyEvent(
                         with: .keyDown, location: .zero, modifierFlags: [],
                         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: mainWindow?.windowNumber ?? 0,
                         context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false,
                         keyCode: 53)
-                    let handled = escape.map { NSApp.mainMenu?.performKeyEquivalent(with: $0) ?? false } ?? false
-                    // SwiftUI runs a menu command's action after the key equivalent returns, so wait for its effect.
-                    _ = await waitFor(1) { !model.find.isOpen }
-                    if !handled || model.find.isOpen || model.turn.epoch != searchEpoch {
-                        func escapeItems(_ menu: NSMenu?) -> [String] {
-                            (menu?.items ?? []).flatMap { item in
-                                (item.keyEquivalent == "\u{1b}"
-                                    ? [
-                                        "\(item.title) enabled \(item.isEnabled) action \(item.action.map(NSStringFromSelector) ?? "none")"
-                                    ]
-                                    : []) + escapeItems(item.submenu)
-                            }
-                        }
+                    if let escape { NSApp.postEvent(escape, atStart: false) }
+                    _ = await waitFor(2) { !model.find.isOpen }
+                    if escape == nil || model.find.isOpen || model.turn.epoch != searchEpoch {
                         captureFailures.append(
-                            "Escape must close search without cancelling a pending reply (handled \(handled), "
-                                + "workspace key \(model.workspaceKey), Stop enabled \(MainMenuState(app: model).stop), "
-                                + "search open \(model.find.isOpen), reply kept \(model.turn.epoch == searchEpoch), "
-                                + "key window is workspace \(NSApp.keyWindow === mainWindow), "
-                                + "Escape items \(escapeItems(NSApp.mainMenu)))")
+                            "Escape must close search without cancelling a pending reply (search open "
+                                + "\(model.find.isOpen), reply kept \(model.turn.epoch == searchEpoch))")
+                    }
+                    // Every main-menu command with a rule in MainMenuState shows that rule: a command SwiftUI left
+                    // stale would act, or refuse to, against what the model says.
+                    NSApp.mainMenu?.update()
+                    let menuState = MainMenuState(app: model)
+                    let governed: [(String, Bool)] = [
+                        (String(localized: "New Conversation"), menuState.newConversation),
+                        (String(localized: "Search All Conversations"), menuState.searchAllConversations),
+                        (String(localized: "Manage Conversations…"), menuState.manageConversations),
+                        (String(localized: "Export Library Backup…"), menuState.libraryTransfer),
+                        (String(localized: "Start Again"), menuState.startAgain),
+                        (String(localized: "Help Me Say This"), menuState.helpMeSayThis),
+                        (String(localized: "Stop"), menuState.stop),
+                    ]
+                    func menuItem(_ title: String, in menu: NSMenu?) -> NSMenuItem? {
+                        for item in menu?.items ?? [] {
+                            if item.title == title { return item }
+                            if let found = menuItem(title, in: item.submenu) { return found }
+                        }
+                        return nil
+                    }
+                    for (title, expected) in governed {
+                        guard let item = menuItem(title, in: NSApp.mainMenu) else {
+                            captureFailures.append("Main menu has no \(title) command")
+                            continue
+                        }
+                        if item.isEnabled != expected {
+                            captureFailures.append(
+                                "Main menu \(title) is \(item.isEnabled ? "enabled" : "disabled") against its rule")
+                        }
                     }
                     _ = model.turn.finish(searchEpoch)
                     model.find.close()

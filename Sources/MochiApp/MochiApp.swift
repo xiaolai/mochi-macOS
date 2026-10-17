@@ -80,8 +80,10 @@ import SwiftUI
                     Button("Help Me Say This", action: model.startHelp).keyboardShortcut(
                         "h", modifiers: [.command, .shift]
                     ).disabled(!menu.helpMeSayThis)
-                    Button("Stop", action: menu.performStop).keyboardShortcut(.escape, modifiers: []).disabled(
-                        !menu.stop)
+                    // Escape is the workspace window's own key (see `AppDelegate.observeEscape`), not this item's:
+                    // SwiftUI can leave a command's enablement stale, and a stale Escape would do nothing or steal the
+                    // key from other windows.
+                    Button("Stop", action: menu.performStop).disabled(!menu.stop)
                 }
             }
         Settings {
@@ -104,16 +106,34 @@ import SwiftUI
     private var listeningObservers: [(NotificationCenter, NSObjectProtocol)] = []
     /// Observers that tell the model whether the workspace window has the keyboard.
     private var keyObservers: [NSObjectProtocol] = []
+    /// The workspace window's Escape, which runs Stop.
+    private var escapeMonitor: Any?
     func attachWindow(_ window: NSWindow, model: AppModel) {
         tray.attach(window, model: model)
         observeListeningConditions(window, model: model)
         observeKeyWindow(window, model: model)
+        observeEscape(window, model: model)
         #if MOCHI_DEVELOPMENT
             instanceE2E.attach(window, tray: tray)
         #endif
         SingleInstanceController.shared.revealWorkspace = { [weak self] in self?.tray.showWindow() }
     }
-    /// Stop takes Escape from the main menu only while the workspace has the keyboard; see `MainMenuState.stop`.
+    /// Escape in the workspace runs Stop when Stop can act, judged from the model as the key is pressed; otherwise,
+    /// and in every other window or while an input method is composing, the key goes on to the focused view.
+    private func observeEscape(_ window: NSWindow, model: AppModel) {
+        if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak window, weak model] event in
+            let stopped = MainActor.assumeIsolated {
+                guard let window, let model, MainMenuState.isPlainEscape(event, in: window) else { return false }
+                let menu = MainMenuState(app: model)
+                guard menu.stop else { return false }
+                menu.performStop()
+                return true
+            }
+            return stopped ? nil : event
+        }
+    }
+    /// Whether the workspace has the keyboard, which Stop's Escape needs; see `MainMenuState.stop`.
     private func observeKeyWindow(_ window: NSWindow, model: AppModel) {
         for observer in keyObservers { NotificationCenter.default.removeObserver(observer) }
         model.workspaceKey = window.isKeyWindow

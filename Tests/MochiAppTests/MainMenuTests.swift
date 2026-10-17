@@ -1,3 +1,5 @@
+import AppKit
+import Carbon.HIToolbox
 import MochiCore
 import XCTest
 
@@ -141,5 +143,34 @@ final class MainMenuTests: XCTestCase {
         XCTAssertFalse(app.takeSettingsRequest())
         app.settingsOpen = true
         XCTAssertTrue(app.takeSettingsRequest())
+    }
+
+    /// Escape runs Stop only when pressed in the workspace with no modifier; another window, a modified Escape or
+    /// another key goes on to the focused view. Windows are created but never shown: this runs on a Mac in use.
+    @MainActor func testOnlyAPlainEscapeInTheWorkspaceIsStopsKey() throws {
+        func window() -> NSWindow {
+            NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled],
+                backing: .buffered, defer: false)
+        }
+        let workspace = window()
+        let other = window()
+        func key(_ code: Int, _ characters: String, _ flags: NSEvent.ModifierFlags = [], in target: NSWindow) throws
+            -> NSEvent
+        {
+            try XCTUnwrap(
+                NSEvent.keyEvent(
+                    with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                    windowNumber: target.windowNumber, context: nil, characters: characters,
+                    charactersIgnoringModifiers: characters, isARepeat: false, keyCode: UInt16(code)))
+        }
+        XCTAssertTrue(MainMenuState.isPlainEscape(try key(kVK_Escape, "\u{1b}", in: workspace), in: workspace))
+        XCTAssertFalse(
+            MainMenuState.isPlainEscape(try key(kVK_Escape, "\u{1b}", in: other), in: workspace), "Another window")
+        XCTAssertFalse(
+            MainMenuState.isPlainEscape(try key(kVK_Escape, "\u{1b}", .option, in: workspace), in: workspace),
+            "A modified Escape")
+        XCTAssertFalse(
+            MainMenuState.isPlainEscape(try key(kVK_ANSI_A, "a", in: workspace), in: workspace), "Another key")
     }
 }
