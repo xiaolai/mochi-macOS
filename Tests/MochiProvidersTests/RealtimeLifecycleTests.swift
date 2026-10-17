@@ -10,7 +10,13 @@ private final class SocketFixture: @unchecked Sendable {
     private var events: [[String: Any]]
     private var waiting: CheckedContinuation<[String: Any], Error>?
     private var closed = false
-    private(set) var closeCount = 0
+    private var closes = 0
+    /// How many times the channel was closed, read under the lock: closes come from the service's own tasks.
+    var closeCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return closes
+    }
     var onWait: (() -> Void)?
     init(_ events: [[String: Any]] = []) { self.events = events }
     func receive() async throws -> [String: Any] {
@@ -35,7 +41,7 @@ private final class SocketFixture: @unchecked Sendable {
     func close() {
         lock.lock()
         closed = true
-        closeCount += 1
+        closes += 1
         let continuation = waiting
         waiting = nil
         lock.unlock()

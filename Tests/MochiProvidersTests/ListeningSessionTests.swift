@@ -11,9 +11,9 @@ private final class FakeConnection: @unchecked Sendable {
     private let lock = NSLock()
     private var queued: [[String: Any]]
     private var waiting: CheckedContinuation<[String: Any], Error>?
-    private(set) var sent: [[String: Any]] = []
-    private(set) var closed = false
-    private(set) var endpoint: RealtimeEndpoint?
+    private var sent: [[String: Any]] = []
+    private var closed = false
+    private var openedEndpoint: RealtimeEndpoint?
 
     init(_ events: [[String: Any]]) { queued = events }
 
@@ -33,6 +33,12 @@ private final class FakeConnection: @unchecked Sendable {
         defer { lock.unlock() }
         return sent
     }
+    /// The endpoint the session opened, read under the lock: the session opens it from its own task.
+    var endpoint: RealtimeEndpoint? {
+        lock.lock()
+        defer { lock.unlock() }
+        return openedEndpoint
+    }
     var isClosed: Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -40,7 +46,7 @@ private final class FakeConnection: @unchecked Sendable {
     }
     func channel(_ endpoint: RealtimeEndpoint) -> RealtimeChannel {
         lock.lock()
-        self.endpoint = endpoint
+        openedEndpoint = endpoint
         lock.unlock()
         return RealtimeChannel(
             send: { [self] event in
