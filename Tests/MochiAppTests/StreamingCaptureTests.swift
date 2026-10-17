@@ -214,8 +214,12 @@ final class StreamingCaptureLifecycleTests: XCTestCase {
         var ends: [Bool] = []
         let player = try XCTUnwrap(capture.player(try replyFile()) { _, reached in ends.append(reached) })
         XCTAssertTrue(player.play())
-        try engines.render(1)
-        await waitUntil { !ends.isEmpty }
+        // The hardware keeps pulling audio until the reply ends, and when its end is reported after the last sample
+        // varies by system, so render on until it is, for at most ten seconds of audio.
+        for _ in 0..<100 where ends.isEmpty {
+            try engines.render(0.1)
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
         XCTAssertEqual(ends, [true])
         XCTAssertFalse(capture.engineRunning)
     }
