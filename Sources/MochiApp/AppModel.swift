@@ -176,6 +176,8 @@ struct MessageDeletionUndo {
     var serviceStatus = String(localized: "Not checked")
     /// Codex's sign-in and model list, read at launch and whenever Settings opens or the connection is checked.
     var codex = CodexStatus()
+    /// The Codex check whose answer `codex` waits for; an older check that finishes later is ignored.
+    @ObservationIgnored var codexCheck: UUID?
     /// The model text requests use now: the user's choice while Codex lists it, otherwise the lightest listed.
     /// The reasoning effort text requests use now: the user's choice while the model supports it, otherwise low.
     var textEffort: String? {
@@ -297,12 +299,16 @@ struct MessageDeletionUndo {
         observeListeningConditions()
         if !demo { refreshCodex() }
     }
-    /// Asks Codex for its sign-in and reads its model list in the background; the answer lands in `codex`.
+    /// Asks Codex for its sign-in and reads its model list in the background; the answer lands in `codex`. Checks
+    /// can overlap and finish in any order, so only the latest one's answer is kept.
     func refreshCodex() {
         let status = speech.codexStatus
+        let check = UUID()
+        codexCheck = check
         Task { [weak self] in
             let result = await status()
-            self?.codex = result
+            guard let self, codexCheck == check else { return }
+            codex = result
         }
     }
     /// Preview launches create a fresh library each time; remove it so previews leave nothing behind.
