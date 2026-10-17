@@ -208,8 +208,10 @@ extension AppModel {
                         let filename = saveReply(reply, conversationID: conversationID, speakerName: speakerName)
                         _ = turn.finish(token)
                         if reply.truncated {
-                            notice =
-                                "\(speakerName)’s reply reached its length limit and was cut short. Ask a follow-up to continue."
+                            notice = String(
+                                localized:
+                                    "\(speakerName)’s reply reached its length limit and was cut short. Ask a follow-up to continue."
+                            )
                         }
                         playReplyThenDeferredAction(filename)
                     },

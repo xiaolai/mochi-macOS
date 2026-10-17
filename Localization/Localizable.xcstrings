@@ -567,6 +567,34 @@
         }
       }
     },
+    "%@’s reply reached its length limit and was cut short. Ask a follow-up to continue." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の返答は長さの上限に達したため、途中で切れました。続きを聞くには、もう一度質問してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 답변이 길이 제한에 도달하여 중간에 끊겼습니다. 이어서 들으려면 후속 질문을 하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@的回复达到长度上限，已被截断。请继续追问以接着聊。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的回覆達到長度上限，已被截斷。請繼續追問以接著聊。"
+          }
+        }
+      }
+    },
     "%@’s reply was saved without its audio because the audio file could not be written." : {
       "localizations" : {
         "ja" : {
@@ -12560,6 +12588,34 @@
         }
       }
     },
+    "On this Mac" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMac上"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac에"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这台 Mac 上"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在這台 Mac 上"
+          }
+        }
+      }
+    },
     "Open Help Me Say This from the conversation to record a new thought." : {
       "localizations" : {
         "ja" : {
@@ -16196,6 +16252,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已儲存的錄音會保留原本的語音。"
+          }
+        }
+      }
+    },
+    "Saved to My Expressions." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「マイ表現」に保存しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘나의 표현’에 저장되었습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已存入“我的表达”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已儲存到「我的表達」。"
           }
         }
       }

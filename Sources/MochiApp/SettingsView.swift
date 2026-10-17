@@ -61,7 +61,7 @@ struct SettingsView: View {
 
             Form {
                 Section("Storage") {
-                    LabeledContent("Conversations and recordings", value: "On this Mac")
+                    LabeledContent("Conversations and recordings") { Text("On this Mac") }
                     Button("Export Library Backup…", action: app.exportLibraryBackup).disabled(!canTransferLibrary)
                     Button("Import Library Backup…", action: app.importLibraryBackup).disabled(!canTransferLibrary)
                     Button("Show Data Folder…", action: app.revealDataFolder)

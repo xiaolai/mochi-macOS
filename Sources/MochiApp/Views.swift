@@ -690,7 +690,7 @@ struct PracticeActions: View {
         HStack(spacing: 10) {
             AttemptControls(app: app)
             Button {
-                if app.saveExpression() { app.notice = "Saved to My Expressions." }
+                if app.saveExpression() { app.notice = String(localized: "Saved to My Expressions.") }
             } label: {
                 Label("Save Expression", systemImage: "bookmark")
             }

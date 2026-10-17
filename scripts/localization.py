@@ -26,6 +26,11 @@ APPKIT_TEXT = re.compile(
     r"(?:\.(?:placeholderString|toolTip|title|messageText|informativeText|prompt|message|nameFieldLabel|label"
     r"|paletteLabel)\s*=|setAccessibility(?:Label|Title|Help|Value|RoleDescription)\(|(?:addButton|addItem|insertItem)"
     r"\(withTitle:|NSMenu(?:Item)?\(title:)\s*\"((?:[^\"\\]|\\.)*)\"")
+# Interface text the model holds as a plain String, which the compiler extracts nothing from: the notice, error and
+# warning lines, the manager's feedback, a reported failure, and a LabeledContent value. A ternary's first branch counts.
+MODEL_TEXT = re.compile(
+    r"(?:\b(?:notice|error|recordingWarning|feedback|serviceStatus|startupProgress|transfer|progress)\s*=\s*"
+    r"(?:[^\"\n=]*\?\s*)?|\breport\(\s*|\bLabeledContent\([^\n]*?\bvalue:\s*)\"((?:[^\"\\]|\\.)*)\"")
 # The product name reads the same in every language.
 UNTRANSLATED_TEXT = {"Mochi"}
 
@@ -95,7 +100,7 @@ def released(text):
 
 
 def literal_problems(sources=SOURCES):
-    """AppKit text set from a string literal, which no translation reaches."""
+    """AppKit text, or interface text the model holds as a String, set from a string literal no translation reaches."""
     problems = []
     for path in sorted(sources.rglob("*.swift")):
         relative = path.relative_to(sources)
@@ -106,7 +111,12 @@ def literal_problems(sources=SOURCES):
             if re.search(r"[A-Za-z]", match.group(1)) and match.group(1) not in UNTRANSLATED_TEXT:
                 line = text.count("\n", 0, match.start()) + 1
                 problems.append(f"{relative}:{line}: AppKit shows {match.group(1)!r} untranslated; use String(localized:)")
-    return problems
+        for match in MODEL_TEXT.finditer(text):
+            if re.search(r"[A-Za-z]", match.group(1)) and match.group(1) not in UNTRANSLATED_TEXT:
+                line = text.count("\n", 0, match.start()) + 1
+                problems.append(
+                    f"{relative}:{line}: the interface shows {match.group(1)!r} untranslated; use String(localized:)")
+    return sorted(problems, key=lambda problem: (problem.split(":")[0], int(problem.split(":")[1])))
 
 
 def translation_problems(key, entry):
