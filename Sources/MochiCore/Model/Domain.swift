@@ -192,8 +192,14 @@ public struct PracticeExpression: Codable, Identifiable {
     public var meaning: String
     /// The expression in the language practised; named for the English-only expressions saved before languages.
     public var english: String
-    /// The language of `english`; nil for expressions saved before languages existed, which are English.
-    public var language: ConversationLanguage?
+    /// The language of `english`; nil for expressions saved before languages existed, which are English. A stored
+    /// language this version does not know reads as English, and is kept until a language is set.
+    public var language: ConversationLanguage? {
+        get { languageCode.map { ConversationLanguage(rawValue: $0) ?? .english } }
+        set { languageCode = newValue?.rawValue }
+    }
+    /// The language as stored, so a code a newer Mochi wrote is written back unchanged.
+    var languageCode: String?
     public var reference: String?
     public var referenceKind: String = "Your voice"
     public var attempts: [Attempt] = []
@@ -205,6 +211,10 @@ public struct PracticeExpression: Codable, Identifiable {
         self.meaning = meaning
         self.english = english
         self.language = language
+    }
+    private enum CodingKeys: String, CodingKey {
+        case id, conversationID, meaning, english, reference, referenceKind, attempts, date, review
+        case languageCode = "language"
     }
 }
 public struct Library: Codable {

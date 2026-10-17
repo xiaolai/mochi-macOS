@@ -19084,6 +19084,34 @@
         }
       }
     },
+    "The library contains a practice language that is not a language code." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブラリに、言語コードではない練習言語が含まれています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "라이브러리에 언어 코드가 아닌 연습 언어가 포함되어 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资料库中包含一个不是语言代码的练习语言。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "資料庫中包含一個不是語言代碼的練習語言。"
+          }
+        }
+      }
+    },
     "The library contains an unsafe recording filename." : {
       "localizations" : {
         "ja" : {

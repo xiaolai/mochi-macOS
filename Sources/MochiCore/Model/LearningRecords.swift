@@ -5,7 +5,8 @@ import MochiKernel
 /// pair, so a later change of setup never makes a recording's evidence disagree with how it was recorded.
 public struct RecordingMetadata: Codable, Equatable, Sendable {
     public var model: String
-    /// The transcription language hint, as a `ConversationLanguage` raw value; nil when none was given.
+    /// The transcription language hint, as a `ConversationLanguage` raw value or a code a newer Mochi stored; nil when
+    /// none was given.
     public var language: String?
     public init(model: String, language: String? = nil) {
         self.model = model
@@ -13,7 +14,7 @@ public struct RecordingMetadata: Codable, Equatable, Sendable {
     }
     var isValid: Bool {
         !model.isEmpty && model.utf8.count <= 100
-            && language.map { ConversationLanguage(rawValue: $0) != nil && $0 != ConversationLanguage.match.rawValue }
+            && language.map { ConversationLanguage.isPlausibleCode($0) && $0 != ConversationLanguage.match.rawValue }
                 ?? true
     }
 }

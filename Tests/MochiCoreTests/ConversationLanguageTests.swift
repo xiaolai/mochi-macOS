@@ -1,4 +1,5 @@
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
@@ -50,6 +51,109 @@ final class ConversationLanguageTests: XCTestCase {
         let legacy =
             #"{"id":"\#(UUID().uuidString)","conversationID":"\#(UUID().uuidString)","meaning":"","english":"Hi","referenceKind":"Your voice","attempts":[],"date":0}"#
         XCTAssertNil(try JSONDecoder().decode(PracticeExpression.self, from: Data(legacy.utf8)).language)
+    }
+
+    func testALanguageThisVersionDoesNotKnowIsKeptAndReadsAsEnglish() throws {
+        let decoded = try JSONDecoder().decode(ConversationPreferences.self, from: Data(#"{"language":"sv"}"#.utf8))
+        XCTAssertEqual(decoded.language, .english)
+        XCTAssertEqual(decoded.unknownLanguage, "sv")
+        XCTAssertEqual(try storedLanguage(of: decoded), "sv", "Written back as stored")
+        var chosen = decoded
+        chosen.language = .english
+        XCTAssertNil(chosen.unknownLanguage, "Choosing a language replaces the stored one, even English")
+        XCTAssertEqual(try storedLanguage(of: chosen), "en")
+        for json in [#"{"language":"two words"}"#, #"{"language":""}"#, #"{"language":7}"#] {
+            let dropped = try JSONDecoder().decode(ConversationPreferences.self, from: Data(json.utf8))
+            XCTAssertNil(dropped.unknownLanguage, json)
+            XCTAssertEqual(try storedLanguage(of: dropped), "en", json)
+        }
+        // A settings change that leaves the language alone leaves the stored code alone.
+        var chat = Conversation()
+        chat.preferences = decoded
+        try ConversationSettingsPatch(coaching: .direct).apply(to: &chat)
+        XCTAssertEqual(chat.preferences.unknownLanguage, "sv")
+        var edited = chat
+        edited.preferences.coaching = .gentle
+        XCTAssertNil(ConversationSettingsPatch(changing: chat, to: edited).language)
+    }
+
+    func testALibraryWithLanguagesThisVersionDoesNotKnowOpensAndKeepsThem() throws {
+        let root = TestScratch.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var chat = Conversation()
+        var message = Message(role: "user", text: "Hej", audio: "recording-\(UUID()).wav")
+        message.recording = RecordingMetadata(model: "transcriber", language: "en")
+        chat.messages = [message]
+        var library = Library()
+        library.conversations = [chat]
+        library.conversationTemplates = [ConversationTemplate(title: "Svenska")]
+        library.expressions = [
+            PracticeExpression(conversationID: chat.id, meaning: "", english: "Hej", language: .english)
+        ]
+        // A newer Mochi wrote Swedish everywhere a language is stored.
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(library)) as? [String: Any])
+        func swedish(_ key: String, _ edit: (inout [String: Any]) -> Void) {
+            var items = json[key] as! [[String: Any]]
+            edit(&items[0])
+            json[key] = items
+        }
+        swedish("conversations") { chat in
+            var preferences = chat["preferences"] as! [String: Any]
+            preferences["language"] = "sv"
+            chat["preferences"] = preferences
+            var messages = chat["messages"] as! [[String: Any]]
+            var recording = messages[0]["recording"] as! [String: Any]
+            recording["language"] = "sv"
+            messages[0]["recording"] = recording
+            chat["messages"] = messages
+        }
+        swedish("conversationTemplates") { template in
+            var preferences = template["preferences"] as! [String: Any]
+            preferences["language"] = "sv"
+            template["preferences"] = preferences
+        }
+        swedish("expressions") { $0["language"] = "sv" }
+        let store = LibraryStore(root: root)
+        try store.prepare()
+        try JSONSerialization.data(withJSONObject: json).write(to: store.file)
+        let opened = try store.load()
+        XCTAssertEqual(opened.conversations[0].preferences.language, .english)
+        XCTAssertEqual(
+            opened.expressions[0].language, .english, "Read as English, the language a newer one falls back to")
+        try store.save(opened)
+        let saved = try String(contentsOf: store.file)
+        XCTAssertEqual(saved.components(separatedBy: #""language" : "sv""#).count - 1, 4, saved)
+        XCTAssertFalse(saved.contains(#""language" : "en""#), saved)
+    }
+
+    func testOnlyLanguageCodesAreKept() throws {
+        for code in ["sv", "pt-BR", "yue", "zh-Hant-TW"] {
+            XCTAssertTrue(ConversationLanguage.isPlausibleCode(code), code)
+        }
+        for code in ["", "two words", "sv_SE", "émoji", String(repeating: "a", count: 36)] {
+            XCTAssertFalse(ConversationLanguage.isPlausibleCode(code), code)
+        }
+        var library = Library()
+        let chat = Conversation()
+        library.conversations = [chat]
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(
+                    PracticeExpression(conversationID: chat.id, meaning: "", english: "Hi", language: .english)))
+                as? [String: Any])
+        json["language"] = "two words"
+        library.expressions = [
+            try JSONDecoder().decode(PracticeExpression.self, from: JSONSerialization.data(withJSONObject: json))
+        ]
+        XCTAssertThrowsError(try library.validate(), "Text that is no language code is refused, as before")
+        XCTAssertFalse(RecordingMetadata(model: "m", language: "two words").isValid)
+        XCTAssertFalse(RecordingMetadata(model: "m", language: "match").isValid)
+        XCTAssertTrue(RecordingMetadata(model: "m", language: "sv").isValid)
+    }
+
+    private func storedLanguage(of preferences: ConversationPreferences) throws -> String? {
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(preferences)) as? [String: Any]
+        return object?["language"] as? String
     }
 
     func testANewConversationIsPristineInAnyLanguage() {

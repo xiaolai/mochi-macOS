@@ -166,6 +166,9 @@ extension Library {
         guard expressions.allSatisfy({ $0.review?.isValid ?? true }) else {
             throw AppFailure("The library contains invalid review state.")
         }
+        guard expressions.allSatisfy({ $0.languageCode.map(ConversationLanguage.isPlausibleCode) ?? true }) else {
+            throw AppFailure("The library contains a practice language that is not a language code.")
+        }
         for name in referencedAudio {
             // "LIBRARY.JSON" would name the library itself. The v4 and v5 backups are matched by their suffix too: an
             // older library may name a recording with that prefix.
