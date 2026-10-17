@@ -7,13 +7,14 @@ struct ChatActions: View {
     var body: some View {
         if chat.isDeleted {
             Button("Recover Conversation") { app.restoreChats([chat.id]) }
-            Button("Delete Permanently…", role: .destructive) { app.history.permanentDeleteIDs = [chat.id] }
+            Button("Delete Permanently…", role: .destructive) { app.history.permanentDeleteIDs = [chat.id] }.disabled(
+                !app.canBeginHistoryEdit)
         } else {
             Button("Save as Template…") { app.saveConversationAsTemplate(chat.id) }.disabled(
                 chat.archived || !app.canOpenConversationInstructions)
             Button("Conversation Instructions…") { app.openConversationInstructions(chat.id) }.disabled(
                 chat.archived || !app.canOpenConversationInstructions)
-            Button("Rename…") { app.history.renameID = chat.id }
+            Button("Rename…") { app.history.renameID = chat.id }.disabled(!app.canBeginHistoryEdit)
             Button(chat.pinned ? "Unpin" : "Pin") { app.pinChats([chat.id], pinned: !chat.pinned) }
             if chat.archived {
                 Button("Move to Conversations") { app.restoreChats([chat.id]) }

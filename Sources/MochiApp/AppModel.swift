@@ -114,6 +114,8 @@ struct MessageDeletionUndo {
     var screenLocked = false
     /// True while the workspace is minimized, closed to the menu bar, or Mochi is hidden.
     var workspaceHidden = false
+    /// True while the workspace window has the keyboard; false while Settings, a sheet or the message bar has it.
+    var workspaceKey = false
     /// True while an open or save panel covers the workspace.
     var panelOpen = false
     @ObservationIgnored var listeningServices: ListeningServices
@@ -170,7 +172,15 @@ struct MessageDeletionUndo {
     var voicePreviewFailed = false
     var speaking = false
     var slow = false
+    /// A request to open Settings, made before or after the workspace view that opens it exists.
     var settingsOpen = false
+    /// Takes the pending Settings request, so it is acted on once: when the workspace view appears with one waiting,
+    /// or when one arrives while the view is shown.
+    func takeSettingsRequest() -> Bool {
+        guard settingsOpen else { return false }
+        settingsOpen = false
+        return true
+    }
     var recordingSeconds = 0
     var recordingMeaning = false
     var serviceStatus = String(localized: "Not checked")
@@ -369,6 +379,9 @@ struct MessageDeletionUndo {
             return
         }
     }
+    /// True while Stop has something to end: a reply, recording, playback or preview owning the turn, listening or
+    /// its permission request, or a transcription in flight.
+    var canStop: Bool { busy || listening.isOn || listeningRequest != nil || !transcripts.isIdle }
     /// False when the library could not be saved; the failure is already reported.
     @discardableResult func stop() -> Bool {
         // Playback ends first, so stopping listening has no reply left to move off the listening engine.

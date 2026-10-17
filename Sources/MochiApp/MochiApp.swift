@@ -1,11 +1,13 @@
 import AppKit
 import CryptoKit
+import MochiKernel
 import SwiftUI
 
 @main struct MochiApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model: AppModel
     init() {
+        DevelopmentLaunch.refuseInDistribution()
         DevelopmentLaunch.pinSmokeLanguage()
         Self.ignoreRestoredWindows()
         SingleInstanceController.shared.enforce()
@@ -33,6 +35,7 @@ import SwiftUI
         }.defaultSize(width: 1040, height: 760)
             .windowToolbarStyle(.unified)
             .commands {
+                let menu = MainMenuState(app: model)
                 WorkspaceWindowCommands(tray: delegate.tray)
                 CommandGroup(replacing: .appTermination) {
                     Button("Close Window to Tray", action: delegate.tray.closeToTray).keyboardShortcut("q")
@@ -40,49 +43,45 @@ import SwiftUI
                 }
                 CommandGroup(replacing: .newItem) {
                     Button("New Conversation", action: model.newChat).keyboardShortcut("n").disabled(
-                        model.automationModal)
+                        !menu.newConversation)
                     Button("New Conversation from Template…", action: model.openTemplatePicker).keyboardShortcut(
                         "n", modifiers: [.command, .shift]
-                    ).disabled(!model.canOpenConversationInstructions)
-                    Button("Manage Templates…", action: model.openTemplateManager).disabled(
-                        !model.canOpenConversationInstructions)
-                    Button("Manage Characters…", action: model.openCharacterManager).disabled(
-                        !model.canOpenConversationInstructions)
+                    ).disabled(!menu.customization)
+                    Button("Manage Templates…", action: model.openTemplateManager).disabled(!menu.customization)
+                    Button("Manage Characters…", action: model.openCharacterManager).disabled(!menu.customization)
                 }
                 CommandMenu("Conversation") {
                     Button("Find in Conversation", action: model.findInConversation).keyboardShortcut("f").disabled(
-                        !model.canFindInConversation)
+                        !menu.findInConversation)
                     Button("Next Match") { model.find.move(1) }.keyboardShortcut("g").disabled(
-                        model.find.matchIDs.isEmpty)
+                        !menu.moveBetweenMatches)
                     Button("Previous Match") { model.find.move(-1) }.keyboardShortcut(
                         "g", modifiers: [.command, .shift]
-                    ).disabled(model.find.matchIDs.isEmpty)
+                    ).disabled(!menu.moveBetweenMatches)
                     Button("Search All Conversations") {
                         model.history.searchOpen = true
                         model.history.searchFocusRequest += 1
-                    }.keyboardShortcut("f", modifiers: [.command, .shift]).disabled(
-                        model.practice || model.history.renameID != nil || !model.history.permanentDeleteIDs.isEmpty)
+                    }.keyboardShortcut("f", modifiers: [.command, .shift]).disabled(!menu.searchAllConversations)
                     Button("Manage Conversations…") { model.history.managerOpen = true }.keyboardShortcut(
                         "m", modifiers: [.command, .shift]
-                    ).disabled(model.automationModal)
-                    if let chat = model.conversation { ChatActions(app: model, chat: chat).disabled(model.practice) }
+                    ).disabled(!menu.manageConversations)
+                    if let chat = model.conversation {
+                        ChatActions(app: model, chat: chat).disabled(!menu.conversationActions)
+                    }
                     Divider()
                     Button("Export Library Backup…", action: model.exportLibraryBackup).disabled(
-                        model.libraryTransfer != nil)
+                        !menu.libraryTransfer)
                     Button("Import Library Backup…", action: model.importLibraryBackup).disabled(
-                        model.libraryTransfer != nil)
+                        !menu.libraryTransfer)
                     Divider()
-                    Button("Start Again", action: model.startAgain).disabled(
-                        !model.canStartAgain || model.automationModal)
-                    Button(model.listeningMenuTitle, action: model.toggleListening).disabled(
-                        !model.listening.isOn && !model.canStartListening)
+                    Button("Start Again", action: model.startAgain).disabled(!menu.startAgain)
+                    Button(model.listeningMenuTitle, action: model.toggleListening).disabled(!menu.listening)
                     SendNowCommand(app: model)
                     Button("Help Me Say This", action: model.startHelp).keyboardShortcut(
                         "h", modifiers: [.command, .shift]
-                    ).disabled(!model.canHelp || model.automationModal)
-                    Button("Stop") {
-                        if model.find.isOpen { model.find.close() } else { model.stop() }
-                    }.keyboardShortcut(.escape, modifiers: [])
+                    ).disabled(!menu.helpMeSayThis)
+                    Button("Stop", action: menu.performStop).keyboardShortcut(.escape, modifiers: []).disabled(
+                        !menu.stop)
                 }
             }
         Settings {
@@ -103,13 +102,35 @@ import SwiftUI
     #endif
     /// Observers that pause hands-free listening while the screen is locked or the workspace is out of sight.
     private var listeningObservers: [(NotificationCenter, NSObjectProtocol)] = []
+    /// Observers that tell the model whether the workspace window has the keyboard.
+    private var keyObservers: [NSObjectProtocol] = []
     func attachWindow(_ window: NSWindow, model: AppModel) {
         tray.attach(window, model: model)
         observeListeningConditions(window, model: model)
+        observeKeyWindow(window, model: model)
         #if MOCHI_DEVELOPMENT
             instanceE2E.attach(window, tray: tray)
         #endif
         SingleInstanceController.shared.revealWorkspace = { [weak self] in self?.tray.showWindow() }
+    }
+    /// Stop takes Escape from the main menu only while the workspace has the keyboard; see `MainMenuState.stop`.
+    private func observeKeyWindow(_ window: NSWindow, model: AppModel) {
+        for observer in keyObservers { NotificationCenter.default.removeObserver(observer) }
+        model.workspaceKey = window.isKeyWindow
+        keyObservers = [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) {
+                [weak window, weak model] note in
+                MainActor.assumeIsolated {
+                    guard let window, let model, let changed = note.object as? NSWindow else { return }
+                    // Another window becoming key, a sheet included, takes the keyboard from the workspace.
+                    if changed === window {
+                        model.workspaceKey = name == NSWindow.didBecomeKeyNotification
+                    } else if name == NSWindow.didBecomeKeyNotification {
+                        model.workspaceKey = false
+                    }
+                }
+            }
+        }
     }
     private func observeListeningConditions(_ window: NSWindow, model: AppModel) {
         for (center, observer) in listeningObservers { center.removeObserver(observer) }
@@ -162,21 +183,19 @@ import SwiftUI
     }
     func runDevelopmentActions(_ model: AppModel) {
         #if MOCHI_DEVELOPMENT
-            if CommandLine.arguments.contains("--tools-probe") {
+            if DevelopmentLaunch.Flag.toolsProbe.isSet {
                 toolsProbe(model)
                 return
             }
-            if CommandLine.arguments.contains("--probe") {
+            if DevelopmentLaunch.Flag.probe.isSet {
                 probe(model)
                 return
             }
-            if CommandLine.arguments.contains("--smoke-test") { smoke(model) }
-            if CommandLine.arguments.contains("--hands-free-smoke-test") {
-                if CommandLine.arguments.contains("--barge-in") { smokeBargeIn(model) } else { smokeHandsFree(model) }
+            if DevelopmentLaunch.Flag.smokeTest.isSet { smoke(model) }
+            if DevelopmentLaunch.Flag.handsFreeSmokeTest.isSet {
+                if DevelopmentLaunch.Flag.bargeIn.isSet { smokeBargeIn(model) } else { smokeHandsFree(model) }
             }
-            if CommandLine.arguments.contains("--tray-smoke-test")
-                || CommandLine.arguments.contains("--single-instance-smoke-test")
-            {
+            if DevelopmentLaunch.Flag.traySmokeTest.isSet || DevelopmentLaunch.Flag.singleInstanceSmokeTest.isSet {
                 smokeTray(model)
             }
         #endif
@@ -225,6 +244,57 @@ private struct WorkspaceWindowCommands: Commands {
 }
 
 enum DevelopmentLaunch {
+    /// Every development flag starts with this, and a distribution build takes no argument that does. It recognises a
+    /// development launch by the prefix alone, so it carries no flag's name: the distribution check refuses any.
+    static let flagPrefix = "--"
+    /// The arguments of a launch, its program first, that ask for a development session.
+    static func developmentFlags(in arguments: [String]) -> [String] {
+        arguments.dropFirst().filter { $0.hasPrefix(flagPrefix) }
+    }
+    /// A distribution build has no development sessions: it would ignore the flags and open the real library. One
+    /// launched with any refuses to start, before it touches the library or the instance lock.
+    static func refuseInDistribution(_ arguments: [String] = CommandLine.arguments) {
+        #if !MOCHI_DEVELOPMENT
+            let flags = developmentFlags(in: arguments)
+            guard !flags.isEmpty else { return }
+            let explanation =
+                "Mochi did not start: this build has no development sessions, and it was launched with "
+                + flags.joined(separator: " ")
+            MochiLog.app.error("\(explanation, privacy: .public)")
+            FileHandle.standardError.write(Data((explanation + "\n").utf8))
+            exit(EXIT_FAILURE)
+        #endif
+    }
+    /// The development flags this build acts on; a distribution build acts on none.
+    static var flags: [String] {
+        #if MOCHI_DEVELOPMENT
+            Flag.allCases.map(\.rawValue)
+        #else
+            []
+        #endif
+    }
+    #if MOCHI_DEVELOPMENT
+        /// The development flags, each named once. Every one starts with `flagPrefix`, so a distribution build
+        /// launched with it refuses to start; scripts/release_support.py refuses a binary that names one.
+        enum Flag: String, CaseIterable {
+            case preview = "--preview"
+            case smokeTest = "--smoke-test"
+            case traySmokeTest = "--tray-smoke-test"
+            case singleInstanceSmokeTest = "--single-instance-smoke-test"
+            case handsFreeSmokeTest = "--hands-free-smoke-test"
+            case bargeIn = "--barge-in"
+            case probe = "--probe"
+            case toolsProbe = "--tools-probe"
+
+            var isSet: Bool { CommandLine.arguments.contains(rawValue) }
+            /// The scripted runs, which compare English interface text.
+            static let scripted: [Flag] = [
+                .smokeTest, .traySmokeTest, .singleInstanceSmokeTest, .toolsProbe, .probe, .handsFreeSmokeTest,
+            ]
+            /// The runs that open a throwaway preview library rather than the user's.
+            static let demo: [Flag] = [.preview] + scripted
+        }
+    #endif
     static var libraryRoot: URL? {
         #if MOCHI_DEVELOPMENT
             if let root = ProcessInfo.processInfo.environment["MOCHI_E2E_LIBRARY_ROOT"] {
@@ -249,11 +319,7 @@ enum DevelopmentLaunch {
     /// string: the bundle fixes its language on first use.
     static func pinSmokeLanguage() {
         #if MOCHI_DEVELOPMENT
-            let smoke = [
-                "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "--tools-probe", "--probe",
-                "--hands-free-smoke-test",
-            ]
-            guard smoke.contains(where: CommandLine.arguments.contains) else { return }
+            guard Flag.scripted.contains(where: \.isSet) else { return }
             var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
             guard arguments["AppleLanguages"] == nil else { return }
             arguments["AppleLanguages"] = ["en"]
@@ -262,10 +328,7 @@ enum DevelopmentLaunch {
     }
     static var demo: Bool {
         #if MOCHI_DEVELOPMENT
-            return [
-                "--preview", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "--tools-probe",
-                "--probe", "--hands-free-smoke-test",
-            ].contains { CommandLine.arguments.contains($0) }
+            return Flag.demo.contains(where: \.isSet)
         #else
             return false
         #endif

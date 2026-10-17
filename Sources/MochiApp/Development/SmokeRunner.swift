@@ -248,11 +248,11 @@
                         try await Task.sleep(nanoseconds: 1_000_000)
                     }
                     checks.append(("Left click brings Mochi in front", NSApp.isActive && window.isKeyWindow))
-                    if CommandLine.arguments.contains("--single-instance-smoke-test") {
+                    if DevelopmentLaunch.Flag.singleInstanceSmokeTest.isSet {
                         tray.closeToTray()
                         let duplicate = Process()
                         duplicate.executableURL = Bundle.main.executableURL
-                        duplicate.arguments = ["--single-instance-smoke-test"]
+                        duplicate.arguments = [DevelopmentLaunch.Flag.singleInstanceSmokeTest.rawValue]
                         try duplicate.run()
                         let deadline = Date().addingTimeInterval(8)
                         while (duplicate.isRunning || !window.isVisible || NSApp.isHidden || !NSApp.isActive

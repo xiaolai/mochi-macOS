@@ -112,5 +112,28 @@ class LocalizationTests(unittest.TestCase):
                 "MochiApp/Search.swift:15"])
             self.assertIn("'Search this conversation'", problems[0])
 
+    def test_interface_text_held_as_a_plain_string_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            sources = Path(d)
+            (sources / "MochiApp").mkdir()
+            (sources / "MochiApp/Views.swift").write_text("\n".join((
+                'if app.saveExpression() { app.notice = "Saved to My Expressions." }',
+                'app.notice = String(localized: "Saved to My Expressions.")',
+                'self.error = AppFailure.message(for: error, fallback: "Could not save.")',
+                'model.recordingWarning = quiet ? "Mochi hears nothing." : nil',
+                'history.feedback = "Archived"',
+                'report("The folder could not be opened.", in: .privacy)',
+                'LabeledContent("Conversations and recordings", value: "On this Mac")',
+                'LabeledContent("Conversations and recordings") { Text("On this Mac") }',
+                'notice = ""',
+                'error = nil',
+            )))
+            problems = localization.literal_problems(sources)
+            self.assertEqual([problem.split(": ")[0] for problem in problems], [
+                "MochiApp/Views.swift:1", "MochiApp/Views.swift:4", "MochiApp/Views.swift:5",
+                "MochiApp/Views.swift:6", "MochiApp/Views.swift:7"])
+            self.assertIn("'Saved to My Expressions.'", problems[0])
+            self.assertIn("'On this Mac'", problems[4])
+
 if __name__ == "__main__":
     unittest.main()

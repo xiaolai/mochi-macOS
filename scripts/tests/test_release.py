@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import plistlib
+import re
 import subprocess
 import tempfile
 import unittest
@@ -122,9 +123,18 @@ class ReleaseTests(unittest.TestCase):
         def failing(args, **kwargs): raise subprocess.CalledProcessError(1,args)
         with self.assertRaises(subprocess.CalledProcessError): release.check_binary("bad",run=failing)
 
+    def test_distribution_gate_rejects_every_development_flag_the_app_names(self):
+        # DevelopmentLaunch.Flag names each development flag once; a new flag must not ship unnoticed.
+        source = (Path(__file__).parents[2] / "Sources/MochiApp/MochiApp.swift").read_text()
+        flags = re.findall(r'^\s*case \w+ = "(--[a-z-]+)"$', source, re.MULTILINE)
+        self.assertIn("--preview", flags)
+        self.assertIn("--barge-in", flags)
+        for flag in flags:
+            with self.assertRaises(ValueError, msg=flag): release.validate_distribution_symbols(flag, "normal")
+
     def test_distribution_gate_rejects_probes_and_provider_symbols(self):
         release.validate_distribution_symbols("normal app", "normal helper")
-        for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "MOCHI_INSTANCE_EVENTS_DIR", "MOCHI_INSTANCE_TEST_ID", "--preview", "native-smoke", "mochi-instance-", "MOCHI_E2E_LIBRARY_ROOT", "mochi.e2e.command", "SingleInstanceE2E", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer", "ComposerGeometryProbe", "mochi-composer-geometry-probe", "ClickProbe", "mochi-phrase-chip-probe", "--hands-free-smoke-test", "RecordedStreamFeeder"):
+        for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "MOCHI_INSTANCE_EVENTS_DIR", "MOCHI_INSTANCE_TEST_ID", "--preview", "native-smoke", "mochi-instance-", "MOCHI_E2E_LIBRARY_ROOT", "mochi.e2e.command", "SingleInstanceE2E", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer", "ComposerGeometryProbe", "mochi-composer-geometry-probe", "ClickProbe", "mochi-phrase-chip-probe", "--hands-free-smoke-test", "--barge-in", "RecordedStreamFeeder"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols(probe,"normal")
         for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal",symbol)

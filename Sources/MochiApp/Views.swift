@@ -94,8 +94,8 @@ struct WorkspaceView: View {
                     } label: {
                         Image(systemName: "chevron.down")
                     }
-                    .menuStyle(.borderlessButton).fixedSize().help("Conversation Templates").disabled(
-                        !app.canOpenConversationInstructions)
+                    .menuStyle(.borderlessButton).fixedSize().help("Conversation Templates")
+                    .accessibilityLabel("Conversation Templates").disabled(!app.canOpenConversationInstructions)
                 }
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 320)
@@ -178,12 +178,9 @@ struct WorkspaceView: View {
             PracticePane(app: app).frame(width: 640, height: 580)
         }
         .onChange(of: app.history.searchFocusRequest) { _, _ in if !app.history.managerOpen { searchFocused = true } }
-        .onChange(of: app.settingsOpen) { _, show in
-            if show {
-                openSettings()
-                app.settingsOpen = false
-            }
-        }
+        // A request made before this view existed, as from the menu bar icon at launch, is taken when it appears.
+        .onAppear { if app.takeSettingsRequest() { openSettings() } }
+        .onChange(of: app.settingsOpen) { _, _ in if app.takeSettingsRequest() { openSettings() } }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 760, minHeight: 580)
     }
@@ -448,6 +445,7 @@ struct WorkspaceView: View {
                     .onSubmit { app.send() }.disabled(app.busy)
                 Button(action: app.send) { Image(systemName: "arrow.up").fontWeight(.semibold) }
                     .buttonStyle(.borderedProminent).buttonBorderShape(.circle)
+                    .help("Send Message").accessibilityLabel("Send Message")
                     .disabled(app.busy || app.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.return, modifiers: .command)
             }
@@ -690,7 +688,7 @@ struct PracticeActions: View {
         HStack(spacing: 10) {
             AttemptControls(app: app)
             Button {
-                if app.saveExpression() { app.notice = "Saved to My Expressions." }
+                if app.saveExpression() { app.notice = String(localized: "Saved to My Expressions.") }
             } label: {
                 Label("Save Expression", systemImage: "bookmark")
             }

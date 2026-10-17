@@ -23,6 +23,11 @@ extension AppModel {
         customization.isPresented || practice || history.isEditing
     }
     var canOpenConversationInstructions: Bool { !busy && !automationModal }
+    /// Rename and permanent deletion open a sheet of their own, so they wait while another sheet or edit is open. The
+    /// conversation manager is the exception: it shows them itself.
+    var canBeginHistoryEdit: Bool {
+        !customization.isPresented && !practice && history.renameID == nil && history.permanentDeleteIDs.isEmpty
+    }
     func openConversationInstructions(_ id: UUID) {
         guard canOpenConversationInstructions,
             library.conversations.contains(where: { $0.id == id && !$0.archived && !$0.isDeleted })

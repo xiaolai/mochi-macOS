@@ -45,9 +45,13 @@ final class ProcessInstanceLock {
 }
 
 struct LegacyInstance {
-    static func eligible(build: String?, guarded: Bool, finished: Bool, alive: Bool, distribution: Bool = false) -> Bool
-    {
-        guard finished, alive else { return false }
+    /// - Parameter development: the process was launched with development flags. Such a session, a preview above
+    ///   all, holds no lock and opens a throwaway library, so a launch never hands the user over to it.
+    static func eligible(
+        build: String?, guarded: Bool, finished: Bool, alive: Bool, distribution: Bool = false,
+        development: Bool = false
+    ) -> Bool {
+        guard finished, alive, !development else { return false }
         // A finished distribution process cannot be an unlocked current owner.
         // Its on-disk bundle may already have been replaced during an upgrade.
         if distribution { return true }
@@ -72,7 +76,7 @@ struct LegacyInstance {
     private let notification = Notification.Name(AppIdentity.bundleIdentifier + ".reopen")
     private var fixtureID: String? {
         #if MOCHI_DEVELOPMENT
-            if CommandLine.arguments.contains("--single-instance-smoke-test") {
+            if DevelopmentLaunch.Flag.singleInstanceSmokeTest.isSet {
                 return ProcessInfo.processInfo.environment["MOCHI_INSTANCE_TEST_ID"] ?? "native-smoke"
             }
         #endif
@@ -219,6 +223,39 @@ struct LegacyInstance {
         return timespec(tv_sec: started.tv_sec, tv_nsec: Int(started.tv_usec) * 1000)
     }
 
+    /// True when the process was launched with development flags, read from the arguments the kernel recorded when it
+    /// started. Those cannot change afterwards and need nothing from the build that runs, so this recognises preview
+    /// sessions of builds made before it existed. False when the arguments cannot be read.
+    nonisolated static func launchedForDevelopment(_ pid: pid_t) -> Bool {
+        arguments(of: pid).map { !DevelopmentLaunch.developmentFlags(in: $0).isEmpty } ?? false
+    }
+
+    /// A process's arguments, its program first, as the kernel recorded them at launch; nil when they cannot be read.
+    nonisolated static func arguments(of pid: pid_t) -> [String]? {
+        var name: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size = 0
+        guard sysctl(&name, u_int(name.count), nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else {
+            return nil
+        }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&name, u_int(name.count), &buffer, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else {
+            return nil
+        }
+        // The argument count, the executable's path and its padding, then each argument, all NUL-terminated.
+        let count = Int(buffer.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) })
+        var index = MemoryLayout<Int32>.size
+        while index < size, buffer[index] != 0 { index += 1 }
+        while index < size, buffer[index] == 0 { index += 1 }
+        var arguments: [String] = []
+        while arguments.count < count, index < size {
+            let start = index
+            while index < size, buffer[index] != 0 { index += 1 }
+            arguments.append(String(decoding: buffer[start..<index], as: UTF8.self))
+            index += 1
+        }
+        return arguments.count == count ? arguments : nil
+    }
+
     /// Waits for Mochi processes that are still launching, so a legacy build cannot finish starting unseen.
     private static func awaitLaunching(_ identifiers: [String], timeout: TimeInterval = 5) throws {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
@@ -227,6 +264,7 @@ struct LegacyInstance {
                 NSRunningApplication.runningApplications(withBundleIdentifier: identifier).contains {
                     $0.processIdentifier != getpid() && !$0.isFinishedLaunching && !$0.isTerminated
                         && kill($0.processIdentifier, 0) == 0 && !lockAware($0)
+                        && !launchedForDevelopment($0.processIdentifier)
                 }
             }
         }
@@ -259,7 +297,8 @@ struct LegacyInstance {
                         build: bundle?.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
                         guarded: bundle?.object(forInfoDictionaryKey: "MochiSingleInstanceProtocol") as? Bool == true,
                         finished: existing.isFinishedLaunching && !existing.isTerminated,
-                        alive: kill(existing.processIdentifier, 0) == 0, distribution: distribution || bundle == nil)
+                        alive: kill(existing.processIdentifier, 0) == 0, distribution: distribution || bundle == nil,
+                        development: Self.launchedForDevelopment(existing.processIdentifier))
                 else { continue }
                 // Without a bundle to reopen, fail closed rather than run beside it.
                 guard let url = existing.bundleURL else {

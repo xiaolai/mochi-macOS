@@ -148,7 +148,8 @@
                 try? FileManager.default.removeItem(at: report)
                 try? await Task.sleep(nanoseconds: 700_000_000)
                 do {
-                    guard let index = arguments.firstIndex(of: "--hands-free-smoke-test"), index + 1 < arguments.count
+                    guard let index = arguments.firstIndex(of: DevelopmentLaunch.Flag.handsFreeSmokeTest.rawValue),
+                        index + 1 < arguments.count
                     else { throw AppFailure(verbatim: "Pass the recorded stream after --hands-free-smoke-test.") }
                     let feeder = RecordedStreamFeeder(try Data(contentsOf: URL(fileURLWithPath: arguments[index + 1])))
                     let realMicrophone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
@@ -342,7 +343,8 @@
                 try? await Task.sleep(nanoseconds: 700_000_000)
                 let capture = StreamingCapture()
                 do {
-                    guard let index = arguments.firstIndex(of: "--hands-free-smoke-test"), index + 1 < arguments.count
+                    guard let index = arguments.firstIndex(of: DevelopmentLaunch.Flag.handsFreeSmokeTest.rawValue),
+                        index + 1 < arguments.count
                     else { throw AppFailure(verbatim: "Pass the recorded stream after --hands-free-smoke-test.") }
                     let stream = try Data(contentsOf: URL(fileURLWithPath: arguments[index + 1]))
                     let feeder = RecordedStreamFeeder(stream)
