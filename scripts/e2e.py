@@ -29,7 +29,7 @@ APP_INPUTS = ("scripts/build-app.sh", "scripts/localization.py", "scripts/releas
 APP_ROOTS = ("MochiApp", "MochiMCP")
 # The learner a hands-free check plays: synthesized on the test Mac, so its recipe is part of the definition.
 LEARNER = "I would like to order a coffee, please. Could you also tell me how long it will take?"
-BUSY = "CheckmateAcceptance|run-gates.py|xctest|swift-test|swift-build"
+BUSY = "CheckmateAcceptance|run-gates.py|XDict|xctest|swift-test|swift-build"
 
 
 @dataclass(frozen=True)
