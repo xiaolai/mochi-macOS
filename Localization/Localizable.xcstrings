@@ -1217,6 +1217,34 @@
         }
       }
     },
+    "A conversation title must be one line of 1 to 160 characters and at most 2 KB, without control characters or text-direction overrides." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会話のタイトルは 1〜160 文字、2 KB 以内の 1 行にし、制御文字や文字方向の上書きを含めないでください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대화 제목은 1~160자, 2KB 이하의 한 줄이어야 하며 제어 문자나 텍스트 방향 재정의를 포함할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对话标题必须是一行，长度为 1 到 160 个字符且不超过 2 KB，不能包含控制字符或文字方向覆盖符。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "對話標題必須是一行，長度為 1 到 160 個字元且不超過 2 KB，不能包含控制字元或文字方向覆寫符。"
+          }
+        }
+      }
+    },
     "A greeting must be one line of at most 160 characters." : {
       "localizations" : {
         "ja" : {
@@ -1913,6 +1941,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要一個進行中的對話。"
+          }
+        }
+      }
+    },
+    "An expression and its meaning must each fit within 1,000 characters and 8 KB." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表現とその意味は、それぞれ 1,000 文字・8 KB 以内にしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표현과 그 의미는 각각 1,000자, 8KB 이내여야 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表达及其含义各自不能超过 1,000 个字符和 8 KB。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表達及其含義各自不能超過 1,000 個字元和 8 KB。"
           }
         }
       }
@@ -21068,6 +21124,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "今天 %@"
+          }
+        }
+      }
+    },
+    "Tools can create at most %lld conversations an hour. Try again later." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ツールが作成できる会話は 1 時間に %lld 件までです。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구는 한 시간에 대화를 최대 %lld개까지 만들 수 있습니다. 나중에 다시 시도하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具每小时最多只能创建 %lld 个对话。请稍后再试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具每小時最多只能建立 %lld 個對話。請稍後再試。"
+          }
+        }
+      }
+    },
+    "Tools can save at most %lld expressions an hour. Try again later." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ツールが保存できる表現は 1 時間に %lld 件までです。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구는 한 시간에 표현을 최대 %lld개까지 저장할 수 있습니다. 나중에 다시 시도하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具每小时最多只能保存 %lld 个表达。请稍后再试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具每小時最多只能儲存 %lld 個表達。請稍後再試。"
           }
         }
       }

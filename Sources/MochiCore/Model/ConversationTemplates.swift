@@ -76,7 +76,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
     public var needsReview: Bool { (try? validateForWrite()) == nil }
     public static let userLimit = 200
     public typealias FieldLimit = (characters: Int, bytes: Int)
-    public static let titleLimit: FieldLimit = (160, 2048)
+    public static let titleLimit: FieldLimit = (ConversationTitle.maxCharacters, ConversationTitle.maxBytes)
     public static let descriptionLimit: FieldLimit = (500, 4096)
     public static let nameLimit: FieldLimit = (80, 1024)
     public static let instructionsLimit: FieldLimit = (

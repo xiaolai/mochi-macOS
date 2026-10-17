@@ -146,7 +146,8 @@ final class ToolCatalogTests: XCTestCase {
             try MochiTools.validate(
                 name: "save_expression",
                 arguments: [
-                    "conversation_id": UUID().uuidString, "text": String(repeating: "a", count: 8001),
+                    "conversation_id": UUID().uuidString,
+                    "text": String(repeating: "a", count: ExpressionText.maxCharacters + 1),
                 ], origin: .voice))
         XCTAssertThrowsError(
             try MochiTools.validate(
@@ -155,10 +156,13 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertNoThrow(
             try MochiTools.validate(
                 name: "save_expression",
-                arguments: ["conversation_id": UUID().uuidString, "text": String(repeating: "a", count: 8000)],
+                arguments: [
+                    "conversation_id": UUID().uuidString,
+                    "text": String(repeating: "a", count: ExpressionText.maxCharacters),
+                ],
                 origin: .voice))
         let advertised = MochiTools.catalog(origin: .external).first { $0.name == .saveExpression }
-        XCTAssertEqual(advertised?.properties["text"]?["maxLength"] as? Int, ConversationInstructions.maxCharacters)
+        XCTAssertEqual(advertised?.properties["text"]?["maxLength"] as? Int, ExpressionText.maxCharacters)
         XCTAssertEqual(
             advertised?.properties["expected_revision"]?["maxLength"] as? Int, ConversationInstructions.maxCharacters)
     }

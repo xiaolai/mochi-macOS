@@ -371,10 +371,17 @@ import MochiKernel
                 chat = reused
                 candidate.conversations[index] = reused
             } else {
+                guard app.automation.conversationCreations.allows(at: app.automation.now()) else {
+                    throw AppFailure(
+                        "Tools can create at most \(app.automation.conversationCreations.limit) conversations an hour. Try again later."
+                    )
+                }
                 candidate.conversations.insert(chat, at: 0)
             }
             candidate.selectedConversationID = chat.id
+            let inserted = candidate.conversations.count > app.library.conversations.count
             try persist(candidate)
+            if inserted { app.automation.conversationCreations.record(at: app.automation.now()) }
             app.select(chat.id)
             app.history.scope = .active
             app.offerWorkspace?()
@@ -426,10 +433,16 @@ import MochiKernel
                 }) {
                     return success(["expression_id": existing.id.uuidString])
                 }
+                guard app.automation.expressionCreations.allows(at: app.automation.now()) else {
+                    throw AppFailure(
+                        "Tools can save at most \(app.automation.expressionCreations.limit) expressions an hour. Try again later."
+                    )
+                }
                 let item = PracticeExpression(
                     conversationID: chatID, meaning: meaning, english: english, language: language)
                 candidate.storeExpression(item)
                 try persist(candidate)
+                app.automation.expressionCreations.record(at: app.automation.now())
                 return success(["expression_id": item.id.uuidString])
             }
             func hasDraft(_ chat: Conversation) -> Bool {
