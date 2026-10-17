@@ -813,6 +813,40 @@
     ],
     "timeout": 900
    }
+  },
+  {
+   "check": "smoke",
+   "commit": "44877501825510dc00f7a552b2c0414f13c42027",
+   "env": {
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "Native smoke: PASS. 82 native window and sheet snapshots (82 AppKit view captures). Capture failures: 0. No network, microphone or speaker output.",
+   "fingerprint": "eb84eb75c95df9f87d935340de31441478c24b83422f3faf15230d7722e6a503",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "888838972ade09ebffbbd5d10bcdc6161618ff7c385073c24395a03d8a8e2289",
+   "ran_at": "2026-10-17T17:29:45+08:00",
+   "spec": {
+    "app_args": [
+     "--smoke-test"
+    ],
+    "command": "",
+    "evidence": "smoke.txt",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/"
+    ],
+    "live": false,
+    "name": "smoke",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 900
+   }
   }
  ],
  "schema": 1
