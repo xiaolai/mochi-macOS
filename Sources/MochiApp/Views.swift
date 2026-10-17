@@ -178,12 +178,9 @@ struct WorkspaceView: View {
             PracticePane(app: app).frame(width: 640, height: 580)
         }
         .onChange(of: app.history.searchFocusRequest) { _, _ in if !app.history.managerOpen { searchFocused = true } }
-        .onChange(of: app.settingsOpen) { _, show in
-            if show {
-                openSettings()
-                app.settingsOpen = false
-            }
-        }
+        // A request made before this view existed, as from the menu bar icon at launch, is taken when it appears.
+        .onAppear { if app.takeSettingsRequest() { openSettings() } }
+        .onChange(of: app.settingsOpen) { _, _ in if app.takeSettingsRequest() { openSettings() } }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 760, minHeight: 580)
     }

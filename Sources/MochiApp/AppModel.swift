@@ -170,7 +170,15 @@ struct MessageDeletionUndo {
     var voicePreviewFailed = false
     var speaking = false
     var slow = false
+    /// A request to open Settings, made before or after the workspace view that opens it exists.
     var settingsOpen = false
+    /// Takes the pending Settings request, so it is acted on once: when the workspace view appears with one waiting,
+    /// or when one arrives while the view is shown.
+    func takeSettingsRequest() -> Bool {
+        guard settingsOpen else { return false }
+        settingsOpen = false
+        return true
+    }
     var recordingSeconds = 0
     var recordingMeaning = false
     var serviceStatus = String(localized: "Not checked")

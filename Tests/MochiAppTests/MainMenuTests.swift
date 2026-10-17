@@ -79,4 +79,16 @@ final class MainMenuTests: XCTestCase {
         XCTAssertFalse(menu.moveBetweenMatches)
         XCTAssertEqual(menu.listening, app.listening.isOn || app.canStartListening)
     }
+
+    @MainActor func testASettingsRequestIsTakenOnceWhetherMadeBeforeOrAfterTheWorkspaceAppears() {
+        let app = conversationApp()
+        XCTAssertFalse(app.takeSettingsRequest())
+        // Made before the workspace view exists: the view takes it when it appears.
+        app.settingsOpen = true
+        XCTAssertTrue(app.takeSettingsRequest())
+        XCTAssertFalse(app.settingsOpen, "Taken, so a later request changes the value again")
+        XCTAssertFalse(app.takeSettingsRequest())
+        app.settingsOpen = true
+        XCTAssertTrue(app.takeSettingsRequest())
+    }
 }
