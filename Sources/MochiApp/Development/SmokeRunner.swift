@@ -1117,6 +1117,8 @@
                         context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false,
                         keyCode: 53)
                     let handled = escape.map { NSApp.mainMenu?.performKeyEquivalent(with: $0) ?? false } ?? false
+                    // SwiftUI runs a menu command's action after the key equivalent returns, so wait for its effect.
+                    _ = await waitFor(1) { !model.find.isOpen }
                     if !handled || model.find.isOpen || model.turn.epoch != searchEpoch {
                         captureFailures.append(
                             "Escape must close search without cancelling a pending reply (handled \(handled), "
