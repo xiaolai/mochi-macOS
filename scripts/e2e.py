@@ -302,7 +302,7 @@ def stage(host, commit, folder):
 
 
 def run_check(host, folder, check):
-    """Runs one check in the staged copy; returns (passed, summary)."""
+    """Runs one check in the staged copy; returns (passed, summary, what it left: its evidence or its output)."""
     evidence = f"{folder}/evidence/{check.name}"
     if check.app_args:
         args = " ".join(f'"{a}"' for a in check.app_args).replace("{learner}", f"{folder}/evidence/learner.pcm")
@@ -318,7 +318,19 @@ def run_check(host, folder, check):
                 + (f"cat {source} 2>/dev/null\n" if source else f"cat {evidence}/output.txt\n")
                 + "exit $code")
     code, out = remote(host, PRELUDE + body, timeout=check.timeout + 120)
-    return verdict(check, out, code)
+    return (*verdict(check, out, code), out)
+
+
+def keep_failure(check, out):
+    """Saves what a failed check left before its staged copy is removed, and shows the lines that say why. Only the
+    lines that name a failure are printed: a live check's output also carries Codex's debug log."""
+    path = Path(tempfile.gettempdir()) / "mochi-e2e-failures" / f"{check.name}.txt"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(out)
+    lines = [l for l in out.splitlines() if "error:" in l or "FAIL" in l or "failed" in l]
+    for line in lines[:12]:
+        print(f"      {line[:240]}")
+    print(f"    saved: {path}")
 
 
 SETUP = """
@@ -409,7 +421,7 @@ def main():
             raise SystemExit(f"Setup failed on the test Mac:\n{out}")
         for d in needed:
             print(f"  running {d.check.name} …", flush=True)
-            passed, summary = run_check(a.host, f"$HOME/{folder}", d.check)
+            passed, summary, out = run_check(a.host, f"$HOME/{folder}", d.check)
             print(f"    {'PASS' if passed else 'FAIL'}: {summary}", flush=True)
             if passed:
                 ran_at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
@@ -417,6 +429,7 @@ def main():
                 save_ledger(ledger)  # after each pass, so an interrupted run keeps what it proved
             else:
                 failures.append(d.check.name)
+                keep_failure(d.check, out)
     finally:
         if a.keep:
             print(f"Kept {a.host}:~/{folder}")
