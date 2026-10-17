@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 : "${MOCHI_SIGN_ID:?Set a Developer ID Application signing identity}"
 : "${MOCHI_NOTARY_PROFILE:?Set a notarytool Keychain profile}"
 [ "$MOCHI_SIGN_ID" != - ] || { echo 'Ad-hoc signing cannot ship' >&2; exit 1; }
+[ "${MOCHI_ADHOC_DISTRIBUTION:-0}" = 0 ] || { echo 'MOCHI_ADHOC_DISTRIBUTION is for CI checks and cannot ship' >&2; exit 1; }
 # MOCHI_RESUME_DMG=1 continues an unfinished run from its existing DMG, so a notarization retry reuses the submission.
 resume="${MOCHI_RESUME_DMG:-0}"
 OUT="$PWD/build/release"

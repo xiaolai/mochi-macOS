@@ -61,10 +61,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Version file is valid
         run: python3 scripts/release_support.py version VERSION
-      - name: No development probes or retired providers ship
+      # The release's own bundle script, in the shipped configuration, signed ad hoc since CI has no Developer ID.
+      # It builds with the localized-strings list and fails if any interface string is untranslated.
+      - name: The distribution app builds and every interface string is translated
+        env:
+          MOCHI_DISTRIBUTION: 1
+          MOCHI_ADHOC_DISTRIBUTION: 1
+        run: MOCHI_APP_PATH="$PWD/build/ci/Mochi.app" ./scripts/build-app.sh
+      - name: The bundle's metadata matches VERSION
         run: |
-          swift build -c release -Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path \
-            -Xswiftc "$PWD/.build/localized-strings"
-          python3 scripts/release_support.py distribution .build/release/Mochi .build/release/mochi-mcp
-      - name: Every interface string is translated
-        run: python3 scripts/localization.py check .build/localized-strings
+          read -r version build <<< "$(python3 scripts/release_support.py version VERSION)"
+          python3 scripts/release_support.py metadata build/ci/Mochi.app/Contents/Info.plist "$version" "$build"
+      - name: No development probes, retired providers or build-folder paths ship
+        run: python3 scripts/release_support.py distribution build/ci/Mochi.app/Contents/MacOS/Mochi build/ci/Mochi.app/Contents/MacOS/mochi-mcp

@@ -217,3 +217,20 @@ class ReleaseSourceTests(unittest.TestCase):
         self.assertLess(source,script.index("dmg-commit check"))
         self.assertLess(script.index("dmg-commit check"),script.index('notarize "$dmg"'))
         self.assertLess(script.index('hdiutil create'),script.index("dmg-commit record"))
+
+    def test_ad_hoc_distribution_builds_are_for_checks_and_cannot_ship(self):
+        scripts=Path(__file__).parents[1]
+        release_script=(scripts/"release.sh").read_text()
+        refusal=release_script.index('"${MOCHI_ADHOC_DISTRIBUTION:-0}" = 0 ] || {')
+        self.assertLess(refusal,release_script.index("build-app.sh"))
+        build=(scripts/"build-app.sh").read_text()
+        branch=build.index('[ "${MOCHI_DISTRIBUTION:-0}" = 1 ] && [ "${MOCHI_ADHOC_DISTRIBUTION:-0}" = 1 ]')
+        developer_id=build.index(': "${MOCHI_SIGN_ID:?Distribution requires MOCHI_SIGN_ID}"')
+        self.assertLess(branch,developer_id)
+        self.assertNotIn("--sign -",build[developer_id:build.index("else",developer_id)])
+        ci=(scripts.parent/".github/workflows/ci.yml").read_text()
+        job=ci[ci.index("  distribution:"):]
+        steps=[job.index(s) for s in ("MOCHI_ADHOC_DISTRIBUTION: 1","./scripts/build-app.sh",
+                                       "release_support.py metadata build/ci/Mochi.app/Contents/Info.plist",
+                                       "release_support.py distribution build/ci/Mochi.app/Contents/MacOS/Mochi")]
+        self.assertEqual(steps,sorted(steps))

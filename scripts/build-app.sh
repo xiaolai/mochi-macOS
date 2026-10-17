@@ -74,7 +74,12 @@ PLIST
 for language in "${LANGUAGES[@]}"; do
     /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations: string $language" "$APP/Contents/Info.plist"
 done
-if [ "${MOCHI_DISTRIBUTION:-0}" = 1 ]; then
+if [ "${MOCHI_DISTRIBUTION:-0}" = 1 ] && [ "${MOCHI_ADHOC_DISTRIBUTION:-0}" = 1 ]; then
+    # CI builds the shipped configuration without a Developer ID: signed ad hoc, so it can be checked but never
+    # shipped. release.sh refuses this variable and verifies the Developer ID signature it needs.
+    codesign --force --options runtime --timestamp=none --sign - "$APP/Contents/MacOS/mochi-mcp"
+    codesign --force --options runtime --timestamp=none --entitlements scripts/release-entitlements.plist --sign - "$APP"
+elif [ "${MOCHI_DISTRIBUTION:-0}" = 1 ]; then
     : "${MOCHI_SIGN_ID:?Distribution requires MOCHI_SIGN_ID}"
     [ "$MOCHI_SIGN_ID" != - ] || { echo "Distribution cannot use ad-hoc signing" >&2; exit 1; }
     codesign --force --options runtime --timestamp --sign "$MOCHI_SIGN_ID" "$APP/Contents/MacOS/mochi-mcp"
