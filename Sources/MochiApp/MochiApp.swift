@@ -33,6 +33,7 @@ import SwiftUI
         }.defaultSize(width: 1040, height: 760)
             .windowToolbarStyle(.unified)
             .commands {
+                let menu = MainMenuState(app: model)
                 WorkspaceWindowCommands(tray: delegate.tray)
                 CommandGroup(replacing: .appTermination) {
                     Button("Close Window to Tray", action: delegate.tray.closeToTray).keyboardShortcut("q")
@@ -40,46 +41,43 @@ import SwiftUI
                 }
                 CommandGroup(replacing: .newItem) {
                     Button("New Conversation", action: model.newChat).keyboardShortcut("n").disabled(
-                        model.automationModal)
+                        !menu.newConversation)
                     Button("New Conversation from Template…", action: model.openTemplatePicker).keyboardShortcut(
                         "n", modifiers: [.command, .shift]
-                    ).disabled(!model.canOpenConversationInstructions)
-                    Button("Manage Templates…", action: model.openTemplateManager).disabled(
-                        !model.canOpenConversationInstructions)
-                    Button("Manage Characters…", action: model.openCharacterManager).disabled(
-                        !model.canOpenConversationInstructions)
+                    ).disabled(!menu.customization)
+                    Button("Manage Templates…", action: model.openTemplateManager).disabled(!menu.customization)
+                    Button("Manage Characters…", action: model.openCharacterManager).disabled(!menu.customization)
                 }
                 CommandMenu("Conversation") {
                     Button("Find in Conversation", action: model.findInConversation).keyboardShortcut("f").disabled(
-                        !model.canFindInConversation)
+                        !menu.findInConversation)
                     Button("Next Match") { model.find.move(1) }.keyboardShortcut("g").disabled(
-                        model.find.matchIDs.isEmpty)
+                        !menu.moveBetweenMatches)
                     Button("Previous Match") { model.find.move(-1) }.keyboardShortcut(
                         "g", modifiers: [.command, .shift]
-                    ).disabled(model.find.matchIDs.isEmpty)
+                    ).disabled(!menu.moveBetweenMatches)
                     Button("Search All Conversations") {
                         model.history.searchOpen = true
                         model.history.searchFocusRequest += 1
-                    }.keyboardShortcut("f", modifiers: [.command, .shift]).disabled(
-                        model.practice || model.history.renameID != nil || !model.history.permanentDeleteIDs.isEmpty)
+                    }.keyboardShortcut("f", modifiers: [.command, .shift]).disabled(!menu.searchAllConversations)
                     Button("Manage Conversations…") { model.history.managerOpen = true }.keyboardShortcut(
                         "m", modifiers: [.command, .shift]
-                    ).disabled(model.automationModal)
-                    if let chat = model.conversation { ChatActions(app: model, chat: chat).disabled(model.practice) }
+                    ).disabled(!menu.manageConversations)
+                    if let chat = model.conversation {
+                        ChatActions(app: model, chat: chat).disabled(!menu.conversationActions)
+                    }
                     Divider()
                     Button("Export Library Backup…", action: model.exportLibraryBackup).disabled(
-                        model.libraryTransfer != nil)
+                        !menu.libraryTransfer)
                     Button("Import Library Backup…", action: model.importLibraryBackup).disabled(
-                        model.libraryTransfer != nil)
+                        !menu.libraryTransfer)
                     Divider()
-                    Button("Start Again", action: model.startAgain).disabled(
-                        !model.canStartAgain || model.automationModal)
-                    Button(model.listeningMenuTitle, action: model.toggleListening).disabled(
-                        !model.listening.isOn && !model.canStartListening)
+                    Button("Start Again", action: model.startAgain).disabled(!menu.startAgain)
+                    Button(model.listeningMenuTitle, action: model.toggleListening).disabled(!menu.listening)
                     SendNowCommand(app: model)
                     Button("Help Me Say This", action: model.startHelp).keyboardShortcut(
                         "h", modifiers: [.command, .shift]
-                    ).disabled(!model.canHelp || model.automationModal)
+                    ).disabled(!menu.helpMeSayThis)
                     Button("Stop") {
                         if model.find.isOpen { model.find.close() } else { model.stop() }
                     }.keyboardShortcut(.escape, modifiers: [])
