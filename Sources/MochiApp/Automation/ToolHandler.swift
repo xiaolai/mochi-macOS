@@ -638,7 +638,11 @@ import MochiKernel
         var index = offset
         while index < values.count && items.count < limit {
             let item = values[index].representation(includeInstructions: false)
-            if try JSONSerialization.data(withJSONObject: page(items + [item], next: index + 1)).count >= 110000 {
+            // The first item is listed whatever its size, so every page advances and paging always ends. Every field
+            // it lists is bounded, and the library refuses revisions Mochi never writes, so it fits the result cap.
+            if !items.isEmpty,
+                try JSONSerialization.data(withJSONObject: page(items + [item], next: index + 1)).count >= 110000
+            {
                 break
             }
             items.append(item)

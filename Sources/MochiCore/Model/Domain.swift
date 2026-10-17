@@ -40,7 +40,10 @@ public struct TurnMachine {
 }
 public struct Message: Codable, Identifiable, Equatable {
     public var id = UUID()
+    /// Who wrote the message: one of `roles`. A library naming any other is refused when it is read.
     public var role: String
+    /// The only roles Mochi has ever stored: the user's messages and the companion's replies.
+    public static let roles: Set<String> = ["user", "assistant"]
     public var text: String
     public var audio: String?
     public var speakerName: String?

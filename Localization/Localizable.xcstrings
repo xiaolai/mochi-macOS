@@ -19000,6 +19000,34 @@
         }
       }
     },
+    "The library contains a message from an unknown sender." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブラリに送信者が不明なメッセージが含まれています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "라이브러리에 보낸 사람을 알 수 없는 메시지가 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资料库包含发送者未知的消息。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "資料庫中含有傳送者不明的訊息。"
+          }
+        }
+      }
+    },
     "The library contains an unsafe recording filename." : {
       "localizations" : {
         "ja" : {

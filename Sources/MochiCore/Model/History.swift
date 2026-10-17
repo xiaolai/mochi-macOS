@@ -136,12 +136,11 @@ extension Library {
             Set(expressions.map(\.id)).count == expressions.count
         else { throw AppFailure("The library contains duplicate IDs.") }
         guard Set(conversationTemplates.map(\.id)).count == conversationTemplates.count,
-            !conversationTemplates.contains(where: {
-                $0.isBuiltin || $0.revision.isEmpty || $0.revision.utf8.count > 200
-            })
+            !conversationTemplates.contains(where: { $0.isBuiltin || !ConversationTemplate.isRevision($0.revision) }),
+            conversations.allSatisfy({ $0.sourceTemplateRevision.map(ConversationTemplate.isRevision) ?? true })
         else { throw AppFailure("The library contains invalid or duplicate template IDs/revisions.") }
         guard Set(characters.map(\.id)).count == characters.count,
-            !characters.contains(where: { $0.isBuiltin || $0.revision.isEmpty || $0.revision.utf8.count > 200 })
+            !characters.contains(where: { $0.isBuiltin || !ConversationTemplate.isRevision($0.revision) })
         else { throw AppFailure("The library contains invalid or duplicate character IDs/revisions.") }
         let attempts = expressions.flatMap(\.attempts)
         guard Set(attempts.map(\.id)).count == attempts.count else {
@@ -150,6 +149,9 @@ extension Library {
         let messages = conversations.flatMap(\.messages)
         guard Set(messages.map(\.id)).count == messages.count else {
             throw AppFailure("The library contains duplicate message IDs.")
+        }
+        guard messages.allSatisfy({ Message.roles.contains($0.role) }) else {
+            throw AppFailure("The library contains a message from an unknown sender.")
         }
         for chat in conversations { try chat.preferences.validate() }
         for message in messages {

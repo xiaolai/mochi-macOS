@@ -66,6 +66,13 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         if !phrases.isEmpty { try c.encode(phrases, forKey: .phrases) }
     }
     public var isBuiltin: Bool { Self.reservedIDs.contains(id) }
+    /// Whether `text` is a revision Mochi generates: a UUID for a user's template or character, or the lowercase
+    /// SHA-256 digest of a built-in's definition. A library naming anything else was not written by Mochi.
+    public static func isRevision(_ text: String) -> Bool {
+        if text.utf8.count == 36 { return UUID(uuidString: text) != nil }
+        return text.utf8.count == 64
+            && text.utf8.allSatisfy { (0x30...0x39).contains($0) || (0x61...0x66).contains($0) }
+    }
     public var needsReview: Bool { (try? validateForWrite()) == nil }
     public static let userLimit = 200
     public typealias FieldLimit = (characters: Int, bytes: Int)

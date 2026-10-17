@@ -338,6 +338,17 @@ extension ConversationTemplateModelTests {
             }
         } while true
         XCTAssertEqual(seen, 80)
+        // A template too large for a page on its own still advances the listing, so paging can never repeat a page.
+        let firstListed = try XCTUnwrap(
+            app.library.conversationTemplates.indices.min {
+                app.library.conversationTemplates[$0].id.uuidString
+                    < app.library.conversationTemplates[$1].id.uuidString
+            })
+        app.library.conversationTemplates[firstListed].revision = String(repeating: "f", count: 120_000)
+        let first = try app.tools.execute(
+            "list_conversation_templates", arguments: ["origin": "user", "limit": 100], origin: .external)
+        XCTAssertEqual((first["templates"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual(first["next_offset"] as? Int, 1)
     }
     @MainActor func testInvalidRecoveredNameIsFlaggedWithoutSendingOrLosingDraft() throws {
         let app = makeApp(demo: true)
