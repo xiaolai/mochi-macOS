@@ -376,7 +376,8 @@ class SessionTests(unittest.TestCase):
             return (removal_code, "rm: busy") if name == "remove" else (0, "")
         decision = plan()["ui"]
         patches = {
-            "acquire_lock": step("lock"), "release_lock": step("unlock"), "busy": step("busy", busy),
+            "acquire_lock": step("lock"), "release_lock": step("unlock"), "hold_lock": step("hold"),
+            "busy": step("busy", busy),
             "free_gb": step("free", 100), "stage": step("stage"), "remote": remote,
             "run_check": step("check", (True, "ok", "out")), "keep_evidence": step("evidence", e2e.ROOT / "build"),
             "load_ledger": lambda: {"passes": []}, "save_ledger": step("save"),
@@ -391,11 +392,11 @@ class SessionTests(unittest.TestCase):
     def test_a_run_holds_the_lock_from_before_the_busy_check_to_after_removal(self):
         calls, result = self.session()
         self.assertEqual(result, ([], []))
-        self.assertEqual(calls, ["lock", "busy", "free", "stage", "setup", "check", "evidence", "save", "remove",
-                                 "unlock"])
+        self.assertEqual(calls, ["lock", "busy", "free", "hold", "stage", "hold", "setup", "hold", "check",
+                                 "evidence", "save", "remove", "unlock"])
 
     def test_a_failed_or_interrupted_staging_is_removed_and_the_lock_released(self):
-        for fail in ("stage", "setup", "check"):
+        for fail in ("stage", "setup", "check", "hold"):
             with self.subTest(fail=fail):
                 calls, error = self.session(fail=fail)
                 self.assertIsInstance(error, KeyboardInterrupt if fail == "check" else SystemExit)
@@ -433,7 +434,12 @@ class LockTests(unittest.TestCase):
             self.assertIn("held for", second.stdout)
             self.assertIn("aaaa c0ffee pid 1", second.stdout)
             self.assertEqual(self.run_script(home, e2e.unlock_script("bbbb")).returncode, 4)
+            self.assertEqual(self.run_script(home, e2e.heartbeat_script("bbbb")).returncode, 4)
             self.assertTrue(lock.exists())
+            old = time.time() - 600
+            os.utime(lock, (old, old))
+            self.assertEqual(self.run_script(home, e2e.heartbeat_script("aaaa")).returncode, 0)
+            self.assertGreater(lock.stat().st_mtime, old + 300)
             self.assertEqual(self.run_script(home, e2e.unlock_script("aaaa")).returncode, 0)
             self.assertFalse(lock.exists())
 
@@ -447,8 +453,9 @@ class LockTests(unittest.TestCase):
             self.assertEqual(taken.returncode, 0, taken.stdout)
             self.assertIn("removing a stale lock", taken.stdout)
             self.assertEqual((lock / "owner").read_text(), "bbbb new\n")
-        # Longer than the bounded steps of the longest run.
-        self.assertGreater(e2e.STALE_LOCK, sum(c.timeout for c in e2e.CHECKS) + e2e.SETUP_TIMEOUT)
+        # Longer than the longest bounded step between two touches of the lock.
+        self.assertGreater(e2e.STALE_LOCK, max(c.timeout + 120 + e2e.COPY_TIMEOUT for c in e2e.CHECKS))
+        self.assertGreater(e2e.STALE_LOCK, max(e2e.STAGE_TIMEOUT, e2e.SETUP_TIMEOUT))
 
 
 class EvidenceTests(unittest.TestCase):

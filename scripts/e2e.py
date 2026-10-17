@@ -338,11 +338,12 @@ def free_gb(host):
     return int(free.strip()) if code == 0 and free.strip().isdigit() else 0
 
 
-# Every step of a run is bounded, so a run cannot take longer than this; a lock older than it, with an hour to spare,
-# belongs to a run that is no longer going (its Mac lost power, or its process was killed) and is removed.
+# A run touches its lock before every step, and every step is bounded, so a lock untouched for longer than the longest
+# step, with an hour to spare, belongs to a run that is no longer going (its Mac lost power, or its process was killed)
+# and is removed.
 STAGE_TIMEOUT, SETUP_TIMEOUT, COPY_TIMEOUT, REMOVAL_TIMEOUT = 1800, 1800, 600, 300
-STALE_LOCK = (STAGE_TIMEOUT + SETUP_TIMEOUT + REMOVAL_TIMEOUT + 3600
-              + sum(c.timeout + 120 + COPY_TIMEOUT for c in CHECKS))
+STALE_LOCK = 3600 + max(STAGE_TIMEOUT, SETUP_TIMEOUT, REMOVAL_TIMEOUT,
+                        *(c.timeout + 120 + COPY_TIMEOUT for c in CHECKS))
 LOCK = "~/mochi-e2e/.lock"
 
 
@@ -363,22 +364,39 @@ printf '%s\\n' '{owner}' > "$lock/owner"
 """
 
 
-def unlock_script(token):
-    """Releases the lock only if this run still holds it."""
+def owned_script(token, then):
+    """Runs `then` on the lock only if this run still holds it; exits 4 if it does not."""
     return PRELUDE + f"""lock={LOCK}
 if [ "$(cut -d' ' -f1 "$lock/owner" 2>/dev/null)" != {token} ]; then echo "the lock is no longer this run's"; exit 4; fi
-rm -rf "$lock"
+{then} "$lock"
 """
+
+
+def unlock_script(token):
+    return owned_script(token, "rm -rf")
+
+
+def heartbeat_script(token):
+    return owned_script(token, "touch")
 
 
 def acquire_lock(host, owner):
     code, out = remote(host, lock_script(owner))
-    if code != 0:
+    if code not in (0, 3):
+        raise SystemExit(f"Could not take the test Mac's run lock (exit {code}): {out.strip()}")
+    if code == 3:
         raise SystemExit(f"The test Mac is running another e2e run; try when it is done ({out.strip()}). A lock left "
                          f"by a run that is no longer going is removed after {STALE_LOCK // 3600} h, or by hand: "
                          f"rm -rf {LOCK}")
     if out.strip():
         print(out.strip())
+
+
+def hold_lock(host, token):
+    """Marks the lock as still in use before a step; fails if another run has taken it as stale."""
+    code, out = remote(host, heartbeat_script(token))
+    if code != 0:
+        raise SystemExit(f"The test Mac's run lock is no longer this run's (exit {code}): {out.strip()}")
 
 
 def release_lock(host, token):
@@ -538,13 +556,16 @@ def run_session(host, commit, needed, forced, keep):
         stamp = f"{started:%Y%m%d-%H%M%S}-{commit[:7]}"
         ledger, failures, lost = load_ledger(), [], []
         try:
+            hold_lock(host, token)
             stage(host, commit, folder)
+            hold_lock(host, token)
             app = int(any(d.check.app_args or d.check.name == "single-instance" for d in needed))
             code, out = remote(host, PRELUDE + f"cd ~ && mkdir -p {folder}/evidence\n"
                                + SETUP.format(folder=folder, app=app, learner=LEARNER), timeout=SETUP_TIMEOUT)
             if code != 0:
                 raise SystemExit(f"Setup failed on the test Mac:\n{out}")
             for d in needed:
+                hold_lock(host, token)
                 print(f"  running {d.check.name} …", flush=True)
                 passed, summary, out = run_check(host, f"$HOME/{folder}", d.check)
                 print(f"    {'PASS' if passed else 'FAIL'}: {summary}", flush=True)
