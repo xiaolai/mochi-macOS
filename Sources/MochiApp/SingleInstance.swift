@@ -72,7 +72,7 @@ struct LegacyInstance {
     private let notification = Notification.Name(AppIdentity.bundleIdentifier + ".reopen")
     private var fixtureID: String? {
         #if MOCHI_DEVELOPMENT
-            if CommandLine.arguments.contains("--single-instance-smoke-test") {
+            if DevelopmentLaunch.Flag.singleInstanceSmokeTest.isSet {
                 return ProcessInfo.processInfo.environment["MOCHI_INSTANCE_TEST_ID"] ?? "native-smoke"
             }
         #endif

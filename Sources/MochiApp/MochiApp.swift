@@ -1,11 +1,13 @@
 import AppKit
 import CryptoKit
+import MochiKernel
 import SwiftUI
 
 @main struct MochiApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model: AppModel
     init() {
+        DevelopmentLaunch.refuseInDistribution()
         DevelopmentLaunch.pinSmokeLanguage()
         Self.ignoreRestoredWindows()
         SingleInstanceController.shared.enforce()
@@ -181,21 +183,19 @@ import SwiftUI
     }
     func runDevelopmentActions(_ model: AppModel) {
         #if MOCHI_DEVELOPMENT
-            if CommandLine.arguments.contains("--tools-probe") {
+            if DevelopmentLaunch.Flag.toolsProbe.isSet {
                 toolsProbe(model)
                 return
             }
-            if CommandLine.arguments.contains("--probe") {
+            if DevelopmentLaunch.Flag.probe.isSet {
                 probe(model)
                 return
             }
-            if CommandLine.arguments.contains("--smoke-test") { smoke(model) }
-            if CommandLine.arguments.contains("--hands-free-smoke-test") {
-                if CommandLine.arguments.contains("--barge-in") { smokeBargeIn(model) } else { smokeHandsFree(model) }
+            if DevelopmentLaunch.Flag.smokeTest.isSet { smoke(model) }
+            if DevelopmentLaunch.Flag.handsFreeSmokeTest.isSet {
+                if DevelopmentLaunch.Flag.bargeIn.isSet { smokeBargeIn(model) } else { smokeHandsFree(model) }
             }
-            if CommandLine.arguments.contains("--tray-smoke-test")
-                || CommandLine.arguments.contains("--single-instance-smoke-test")
-            {
+            if DevelopmentLaunch.Flag.traySmokeTest.isSet || DevelopmentLaunch.Flag.singleInstanceSmokeTest.isSet {
                 smokeTray(model)
             }
         #endif
@@ -244,6 +244,57 @@ private struct WorkspaceWindowCommands: Commands {
 }
 
 enum DevelopmentLaunch {
+    /// Every development flag starts with this, and a distribution build takes no argument that does. It recognises a
+    /// development launch by the prefix alone, so it carries no flag's name: the distribution check refuses any.
+    static let flagPrefix = "--"
+    /// The arguments of a launch, its program first, that ask for a development session.
+    static func developmentFlags(in arguments: [String]) -> [String] {
+        arguments.dropFirst().filter { $0.hasPrefix(flagPrefix) }
+    }
+    /// A distribution build has no development sessions: it would ignore the flags and open the real library. One
+    /// launched with any refuses to start, before it touches the library or the instance lock.
+    static func refuseInDistribution(_ arguments: [String] = CommandLine.arguments) {
+        #if !MOCHI_DEVELOPMENT
+            let flags = developmentFlags(in: arguments)
+            guard !flags.isEmpty else { return }
+            let explanation =
+                "Mochi did not start: this build has no development sessions, and it was launched with "
+                + flags.joined(separator: " ")
+            MochiLog.app.error("\(explanation, privacy: .public)")
+            FileHandle.standardError.write(Data((explanation + "\n").utf8))
+            exit(EXIT_FAILURE)
+        #endif
+    }
+    /// The development flags this build acts on; a distribution build acts on none.
+    static var flags: [String] {
+        #if MOCHI_DEVELOPMENT
+            Flag.allCases.map(\.rawValue)
+        #else
+            []
+        #endif
+    }
+    #if MOCHI_DEVELOPMENT
+        /// The development flags, each named once. Every one starts with `flagPrefix`, so a distribution build
+        /// launched with it refuses to start; scripts/release_support.py refuses a binary that names one.
+        enum Flag: String, CaseIterable {
+            case preview = "--preview"
+            case smokeTest = "--smoke-test"
+            case traySmokeTest = "--tray-smoke-test"
+            case singleInstanceSmokeTest = "--single-instance-smoke-test"
+            case handsFreeSmokeTest = "--hands-free-smoke-test"
+            case bargeIn = "--barge-in"
+            case probe = "--probe"
+            case toolsProbe = "--tools-probe"
+
+            var isSet: Bool { CommandLine.arguments.contains(rawValue) }
+            /// The scripted runs, which compare English interface text.
+            static let scripted: [Flag] = [
+                .smokeTest, .traySmokeTest, .singleInstanceSmokeTest, .toolsProbe, .probe, .handsFreeSmokeTest,
+            ]
+            /// The runs that open a throwaway preview library rather than the user's.
+            static let demo: [Flag] = [.preview] + scripted
+        }
+    #endif
     static var libraryRoot: URL? {
         #if MOCHI_DEVELOPMENT
             if let root = ProcessInfo.processInfo.environment["MOCHI_E2E_LIBRARY_ROOT"] {
@@ -268,11 +319,7 @@ enum DevelopmentLaunch {
     /// string: the bundle fixes its language on first use.
     static func pinSmokeLanguage() {
         #if MOCHI_DEVELOPMENT
-            let smoke = [
-                "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "--tools-probe", "--probe",
-                "--hands-free-smoke-test",
-            ]
-            guard smoke.contains(where: CommandLine.arguments.contains) else { return }
+            guard Flag.scripted.contains(where: \.isSet) else { return }
             var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
             guard arguments["AppleLanguages"] == nil else { return }
             arguments["AppleLanguages"] = ["en"]
@@ -281,10 +328,7 @@ enum DevelopmentLaunch {
     }
     static var demo: Bool {
         #if MOCHI_DEVELOPMENT
-            return [
-                "--preview", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "--tools-probe",
-                "--probe", "--hands-free-smoke-test",
-            ].contains { CommandLine.arguments.contains($0) }
+            return Flag.demo.contains(where: \.isSet)
         #else
             return false
         #endif

@@ -106,6 +106,25 @@ final class SingleInstanceTests: XCTestCase {
         XCTAssertFalse(
             LegacyInstance.eligible(build: "26", guarded: true, finished: true, alive: false, distribution: true))
     }
+    func testDevelopmentFlagsAreRecognisedByTheirPrefixAlone() {
+        XCTAssertEqual(DevelopmentLaunch.developmentFlags(in: ["/Applications/Mochi.app/Contents/MacOS/Mochi"]), [])
+        // What macOS, Xcode and AppKit themselves pass: single-dash user defaults and process serial numbers.
+        XCTAssertEqual(
+            DevelopmentLaunch.developmentFlags(in: [
+                "Mochi", "-psn_0_12345", "-NSDocumentRevisionsDebugMode", "YES", "-ApplePersistenceIgnoreState", "YES",
+            ]), [])
+        XCTAssertEqual(
+            DevelopmentLaunch.developmentFlags(in: ["Mochi", "--hands-free-smoke-test", "/tmp/stream.raw"]),
+            ["--hands-free-smoke-test"])
+        XCTAssertEqual(
+            DevelopmentLaunch.developmentFlags(in: ["--preview"]), [], "The program's own path is not a flag")
+        XCTAssertEqual(
+            DevelopmentLaunch.developmentFlags(in: ["Mochi", "--a-flag-added-later"]), ["--a-flag-added-later"])
+        // Every flag a development build acts on is one a distribution build refuses to start with.
+        for flag in DevelopmentLaunch.flags {
+            XCTAssertEqual(DevelopmentLaunch.developmentFlags(in: ["Mochi", flag]), [flag])
+        }
+    }
     func testInvalidAndSymlinkLockPathsFailClosed() throws {
         XCTAssertThrowsError(try ProcessInstanceLock(url: URL(fileURLWithPath: "/dev/null/instance.lock")))
         let root = try root()
