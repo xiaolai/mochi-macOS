@@ -341,14 +341,17 @@ struct MessageDeletionUndo {
     }
     func restorePreviousLibrary() {
         do {
-            try libraryController.restorePrevious()
+            let setAside = try libraryController.restorePrevious()
             guard libraryReadable else { return }
             error = nil
             if library.conversations.isEmpty { library.conversations = [freshConversation()] }
             restoreSelection()
-            notice = String(
-                localized: "Restored the earlier copy of your library. The unreadable file was kept in the data folder."
-            )
+            notice =
+                setAside
+                ? String(
+                    localized:
+                        "Restored the earlier copy of your library. The unreadable file was kept in the data folder.")
+                : String(localized: "Restored the earlier copy of your library.")
         } catch {
             report(
                 persistenceMessage(

@@ -113,6 +113,33 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: root.appendingPathComponent(aside[0])), "damaged")
     }
 
+    func testAMissingLibraryBesideAnEarlierCopyOrBackupIsNotStartedAgainEmpty() throws {
+        XCTAssertEqual(
+            try LibraryStore(root: try folder()).load().conversations.count, 0, "A fresh folder starts empty")
+        for kept in [
+            "library.previous.json", "library-v1-backup.json", "library-before-conversation-instructions.json",
+            "\(LibraryStore.reviewLibraryBackupPrefix)-1-x.json", "library-unreadable-1-x.json",
+        ] {
+            let root = try folder()
+            try Data("{}".utf8).write(to: root.appendingPathComponent(kept))
+            XCTAssertThrowsError(try LibraryStore(root: root).load(), kept)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("library.json").path))
+        }
+        // The library that went missing comes back from its earlier copy, and its recordings with it.
+        let root = try folder()
+        let store = LibraryStore(root: root)
+        let name = "recording-\(UUID()).wav"
+        try Data([1]).write(to: root.appendingPathComponent(name))
+        try store.save(voiceLibrary(name))
+        try store.save(voiceLibrary(name))
+        try FileManager.default.removeItem(at: store.file)
+        XCTAssertThrowsError(try LibraryStore(root: root).load())
+        let restored = try LibraryStore(root: root).restorePrevious()
+        XCTAssertEqual(restored.referencedAudio, [name])
+        try LibraryStore(root: root).cleanupOrphanedAudio(try LibraryStore(root: root).load())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path))
+    }
+
     func testRecoveryFileNamesAreNeverRecordingNames() {
         for name in ["library.previous.json", "library-unreadable-1-x.json"] {
             var library = Library()

@@ -45,6 +45,30 @@ final class LibraryControllerTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: root.appendingPathComponent("library.json")), "damaged")
     }
 
+    @MainActor func testAMissingLibraryWithAnEarlierCopyRefusesWritesUntilItIsRestored() throws {
+        let root = makeTemporaryFolder()
+        let store = LibraryStore(root: root)
+        var kept = Library()
+        kept.conversations = [Conversation(title: "Kept")]
+        try store.save(kept)
+        try store.save(kept)
+        try FileManager.default.removeItem(at: store.file)
+        let controller = LibraryController(root: root, demo: false)
+        var reports: [String] = []
+        controller.report = { reports.append($0) }
+        controller.open(managedIn: nil, isolated: true) {}
+        XCTAssertFalse(controller.readable)
+        XCTAssertTrue(controller.canRestorePrevious)
+        XCTAssertEqual(reports.count, 1)
+        XCTAssertThrowsError(try controller.commit(Library()))
+        XCTAssertFalse(controller.save())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.file.path))
+        XCTAssertFalse(try controller.restorePrevious(), "A missing library leaves no file to set aside")
+        XCTAssertTrue(controller.readable)
+        XCTAssertEqual(controller.library.conversations.map(\.title), ["Kept"])
+        XCTAssertEqual(try LibraryStore(root: root).load().conversations.map(\.title), ["Kept"])
+    }
+
     @MainActor func testOnlyOneTransferRunsAndItIsClaimedImmediately() async throws {
         let root = makeTemporaryFolder()
         let controller = LibraryController(root: root, demo: false)

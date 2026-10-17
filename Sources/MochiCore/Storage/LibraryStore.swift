@@ -17,6 +17,19 @@ public final class LibraryStore {
     public static let characterLibraryBackupPrefix = "library-before-character-library-v4"
     /// Names the copies of a version-4 library kept before its first version-5 save.
     public static let reviewLibraryBackupPrefix = "library-before-review-v5"
+    /// Whether `name` names the library or one of the copies Mochi keeps of it: the earlier copy, an upgrade backup or
+    /// an unreadable library set aside. Compared as the file system sees names: volumes are case-insensitive by default.
+    public static func isLibraryFile(_ name: String) -> Bool {
+        let folded = name.precomposedStringWithCanonicalMapping.lowercased()
+        return folded.hasPrefix("library-before-character-templates-v3")
+            || (folded.hasPrefix(characterLibraryBackupPrefix) && folded.hasSuffix(".json"))
+            || (folded.hasPrefix(reviewLibraryBackupPrefix) && folded.hasSuffix(".json"))
+            || folded.hasPrefix(unreadablePrefix) || reservedNames.contains(folded)
+    }
+    /// Whether `name` names a copy Mochi keeps of the library, which a missing library can be recovered from.
+    static func isLibraryCopy(_ name: String) -> Bool {
+        isLibraryFile(name) && name.precomposedStringWithCanonicalMapping.lowercased() != "library.json"
+    }
     private struct FileIdentity: Equatable {
         let device: Int32
         let inode: UInt64
@@ -76,6 +89,21 @@ public final class LibraryStore {
         var info = stat()
         guard lstat(file.path, &info) == 0 else {
             known = nil
+            guard errno == ENOENT else {
+                throw AppFailure(
+                    "Mochi could not check its library file, so it did not start a new library.",
+                    underlying: POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO))
+            }
+            // A library missing beside its earlier copy or a backup was lost, not never made. Starting empty would let
+            // the next two saves replace the earlier copy, and the cleanup that trusts it remove every recording.
+            let names =
+                FileManager.default.fileExists(atPath: root.path)
+                ? try FileManager.default.contentsOfDirectory(atPath: root.path) : []
+            guard !names.contains(where: { Self.isLibraryCopy($0) }) else {
+                throw AppFailure(
+                    "Mochi's library file is missing, but earlier copies of it are in the data folder, so Mochi did not start a new library over them."
+                )
+            }
             return Library()
         }
         let before = identity(file)

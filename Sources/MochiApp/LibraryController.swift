@@ -124,12 +124,15 @@ import MochiKernel
                     ))
         }
     }
-    /// Reinstates the copy kept before the last save, setting the unreadable file aside.
-    func restorePrevious() throws {
-        guard !readable, canRestorePrevious else { return }
+    /// Reinstates the copy kept before the last save, setting the unreadable file aside. Returns whether there was a
+    /// file to set aside: a missing library leaves none.
+    @discardableResult func restorePrevious() throws -> Bool {
+        guard !readable, canRestorePrevious else { return false }
+        let setAside = FileManager.default.fileExists(atPath: store.file.path)
         library = try store.restorePrevious()
         readable = true
         canRestorePrevious = false
+        return setAside
     }
     func revealDataFolder() -> Bool {
         FileManager.default.fileExists(atPath: dataFolder.path) && NSWorkspace.shared.open(dataFolder)

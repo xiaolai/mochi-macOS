@@ -10348,6 +10348,34 @@
         }
       }
     },
+    "Mochi could not check its library file, so it did not start a new library." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi はライブラリファイルを確認できなかったため、新しいライブラリを作成しませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 라이브러리 파일을 확인할 수 없어 새 라이브러리를 만들지 않았습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 无法检查其资料库文件，因此没有新建资料库。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 無法檢查其資料庫檔案，因此沒有新建資料庫。"
+          }
+        }
+      }
+    },
     "Mochi could not check this attempt. The attempt itself is saved." : {
       "localizations" : {
         "ja" : {
@@ -10904,6 +10932,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mochi 的資料庫檔案是一個連結或其他特殊檔案，因此 Mochi 沒有打開或取代它。請將資料庫檔案本身放在該位置。"
+          }
+        }
+      }
+    },
+    "Mochi's library file is missing, but earlier copies of it are in the data folder, so Mochi did not start a new library over them." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi のライブラリファイルが見つかりませんが、データフォルダにその以前のコピーがあるため、Mochi はそれらを上書きする新しいライブラリを作成しませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 라이브러리 파일이 없지만 데이터 폴더에 이전 사본이 있으므로 Mochi가 그 위에 새 라이브러리를 만들지 않았습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 的资料库文件不见了，但数据文件夹中有它的较早副本，因此 Mochi 没有在其上新建资料库。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 的資料庫檔案不見了，但資料檔案夾中有它的較早副本，因此 Mochi 沒有在其上新建資料庫。"
           }
         }
       }
@@ -15272,6 +15328,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "回復較早的副本…"
+          }
+        }
+      }
+    },
+    "Restored the earlier copy of your library." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブラリの以前のコピーを復元しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "라이브러리의 이전 사본을 복원했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已恢复资料库的较早副本。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已回復資料庫的較早副本。"
           }
         }
       }
