@@ -1,8 +1,11 @@
 import importlib.util
 import json
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("e2e", Path(__file__).parents[1] / "e2e.py")
 e2e = importlib.util.module_from_spec(spec)
@@ -75,6 +78,29 @@ class DependencyTests(unittest.TestCase):
         package = e2e.package_graph()
         for check in e2e.CHECKS:
             e2e.inputs_digest(tree, e2e.inputs(check, package))
+
+    def test_the_committed_tree_keeps_unusual_paths_as_they_are(self):
+        # Without -z, git quotes a path with a space or non-ASCII letters, and the quoted form matches no input.
+        names = ("Localization/a b.txt", "Localization/语言 é.txt", "VERSION")
+        with tempfile.TemporaryDirectory() as folder:
+            run = lambda *args: subprocess.run(["git", "-C", folder, *args], check=True, capture_output=True)
+            run("init", "-q")
+            for name in names:
+                (Path(folder) / name).parent.mkdir(exist_ok=True)
+                (Path(folder) / name).write_text(name)
+            run("add", ".")
+            run("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "t")
+            first = run("rev-parse", "HEAD").stdout.decode().strip()
+            for name in names[:2]:
+                (Path(folder) / name).write_text("changed")
+            run("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-am", "t")
+            with mock.patch.object(e2e, "ROOT", Path(folder)):
+                tree = e2e.committed_tree()
+                changed = e2e.changed_paths(first, ("Localization/",))
+        self.assertEqual(sorted(tree), sorted(names))
+        self.assertEqual(sorted(changed), sorted(names[:2]))
+        self.assertTrue(all(len(blob) == 40 for blob in tree.values()))
+        e2e.inputs_digest(tree, ("Localization/",))
 
     def test_the_scanner_finds_repository_reads_in_every_form(self):
         text = (

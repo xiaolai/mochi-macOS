@@ -240,16 +240,19 @@ def git(*args):
 
 
 def committed_tree(commit="HEAD"):
+    """Each committed path with its blob. -z keeps a path with a space or non-ASCII letters as it is; without it git
+    quotes the path, which then matches no input."""
     tree = {}
-    for line in git("ls-tree", "-r", commit).splitlines():
-        meta, path = line.split("\t", 1)
-        tree[path] = meta.split()[2]
+    for entry in git("ls-tree", "-r", "-z", commit).split("\0"):
+        if entry:
+            meta, path = entry.split("\t", 1)
+            tree[path] = meta.split()[2]
     return tree
 
 
 def changed_paths(commit, prefixes):
     try:
-        paths = git("diff", "--name-only", commit, "HEAD").split()
+        paths = [p for p in git("diff", "--name-only", "-z", commit, "HEAD").split("\0") if p]
     except subprocess.CalledProcessError:
         return None  # the commit is not in this clone
     return [p for p in paths if covered_by(p, prefixes)]
