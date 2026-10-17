@@ -95,19 +95,23 @@
                     let epoch = model.turn.begin(.generating)
                     window.performClose(nil)
                     checks.append(("Close hides the workspace", !window.isVisible))
+                    // Work that is not a reply being prepared ends with the window; a retried transcription does
+                    // not: it writes by conversation, so it lands in the open conversation behind the closed window.
                     checks.append(("Close cancels active work", model.turn.epoch != epoch && !model.busy))
                     checks.append(
                         (
-                            "Close cancels pending transcription",
-                            recoveryStarted && model.transcribingMessageIDs.isEmpty
-                                && model.conversation?.messages.first(where: { $0.id == voice.id })?.transcriptionState
-                                    == .interrupted
+                            "Close keeps a pending transcription",
+                            recoveryStarted && !model.transcribingMessageIDs.isEmpty
                         ))
-                    try await Task.sleep(nanoseconds: 150_000_000)
+                    let landedDeadline = Date().addingTimeInterval(2)
+                    while !model.transcribingMessageIDs.isEmpty && Date() < landedDeadline {
+                        try await Task.sleep(nanoseconds: 10_000_000)
+                    }
+                    let retried = model.conversation?.messages.first(where: { $0.id == voice.id })
                     checks.append(
                         (
-                            "Late transcript cannot rewrite closed workspace",
-                            model.conversation?.messages.first(where: { $0.id == voice.id })?.text == ""
+                            "Late transcript lands behind the closed workspace",
+                            retried?.text == "Late tray transcript" && retried?.transcriptionState == .completed
                         ))
                     checks.append(("Tray remains installed", tray.statusItem?.button?.image?.isTemplate == true))
                     tray.showWindow()
@@ -1100,6 +1104,12 @@
                     await capture("conversation-search-compact.png")
                     let escapeCommand = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items).first {
                         $0.title == String(localized: "Stop") && $0.keyEquivalent == "\u{1b}"
+                    }
+                    // Stop takes Escape only while the workspace has the keyboard, as it does when a person types in it.
+                    mainWindow?.makeKeyAndOrderFront(nil)
+                    NSApp.activate()
+                    if !(await waitFor(2) { model.workspaceKey }) {
+                        captureFailures.append("The workspace window did not take the keyboard")
                     }
                     let searchEpoch = model.turn.begin(.generating)
                     if let command = escapeCommand, let menu = command.menu {
