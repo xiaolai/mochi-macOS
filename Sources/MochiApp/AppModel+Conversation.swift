@@ -94,19 +94,43 @@ extension AppModel {
             error = String(localized: "Review the character name in Conversation Instructions before retrying.")
             return
         }
-        do {
-            let pcm =
-                try last.contextText == nil
-                ? last.audio.map { try AudioFile.pcm(store.root.appendingPathComponent($0)) } : nil
-            // A retried Start Again keeps its opening, also after Mochi restarts.
-            let earlier = Array(chat.messages.dropLast())
+        // A retried Start Again keeps its opening, also after Mochi restarts.
+        let earlier = Array(chat.messages.dropLast())
+        let history = last.startsAgain == true ? RestartHistory.select(earlier) : earlier
+        guard last.contextText == nil, let audio = last.audio else {
             requestReply(
-                history: last.startsAgain == true ? RestartHistory.select(earlier) : earlier,
-                text: last.text,
-                pcm: pcm, audioFile: last.audio,
-                conversationID: chat.id, existingUserID: last.id)
-        } catch {
-            self.error = String(localized: "The saved recording could not be read. Record a new message to continue.")
+                history: history, text: last.text, pcm: nil, audioFile: last.audio, conversationID: chat.id,
+                existingUserID: last.id)
+            return
+        }
+        // Without a transcript the reply needs the recording itself, decoded off the main actor as a new take is.
+        // The recording belongs to the saved message, so a failure keeps it.
+        let url = store.root.appendingPathComponent(audio)
+        let read = readRecording
+        let chatID = chat.id
+        runExclusive("Read saved recording") { [weak self] job in
+            let work = Task.detached(priority: .userInitiated) { try read(url) }
+            let pcm: Data
+            do {
+                pcm = try await withTaskCancellationHandler {
+                    try await work.value
+                } onCancel: {
+                    work.cancel()
+                }
+            } catch {
+                guard job.isCurrent() else { return }
+                throw AppFailure(
+                    verbatim: String(
+                        localized: "The saved recording could not be read. Record a new message to continue."),
+                    underlying: error)
+            }
+            // The message may have been deleted while its recording was read.
+            guard let self, job.isCurrent(),
+                library.conversations.first(where: { $0.id == chatID })?.messages.last?.id == last.id
+            else { return }
+            requestReply(
+                history: history, text: last.text, pcm: pcm, audioFile: audio, conversationID: chatID,
+                existingUserID: last.id)
         }
     }
     /// Renames the recording of a voice message that could not be saved to a name Mochi never generates, so launch

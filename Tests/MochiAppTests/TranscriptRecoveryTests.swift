@@ -1,6 +1,8 @@
 import MochiCore
 import MochiProviders
+import PCM16
 import XCTest
+import os
 
 @testable import MochiApp
 @testable import MochiProviders
@@ -74,6 +76,60 @@ final class TranscriptRecoveryTests: XCTestCase {
         XCTAssertTrue(deleted.messages.first(where: { $0.id == voice.id })!.text.isEmpty)
         XCTAssertTrue(app.transcribingMessageIDs.isEmpty)
         XCTAssertTrue(app.library.referencedAudio.contains("saved.wav"))
+    }
+
+    /// Retrying the reply to an untranscribed voice message reads its recording in the background, as a new take is
+    /// read: the turn is taken at once, and the reply is asked for once the audio is ready.
+    @MainActor func testRetryReplyReadsTheRecordingInTheBackground() async throws {
+        let app = makeApp(root: makeTemporaryFolder())
+        app.resume()
+        app.newChat()
+        let audio = Data((0..<48000).map { UInt8(truncatingIfNeeded: $0 * 7) })
+        try PCM.wav(audio, rate: PCM.sampleRate).write(to: app.store.root.appendingPathComponent("voice.wav"))
+        var voice = Message(role: "user", text: "", audio: "voice.wav")
+        voice.transcriptionState = .failed
+        app.append(voice, to: app.selectedID!)
+        var sent: Data?
+        app.speech.conversationReply = { _, request, callbacks in
+            sent = request.pcm
+            var reply = RealtimeAccumulator()
+            reply.text = "Sorry?"
+            reply.done = true
+            try callbacks.response(reply)
+        }
+        let readOnMain = OSAllocatedUnfairLock<Bool?>(initialState: nil)
+        app.readRecording = { url in
+            readOnMain.withLock { $0 = Thread.isMainThread }
+            return try AudioFile.pcm(url)
+        }
+        app.retryReply()
+        XCTAssertEqual(app.turn.activity, .generating, "The turn is taken while the recording is read")
+        XCTAssertFalse(app.canRetry)
+        await waitUntil { readOnMain.withLock { $0 } != nil }
+        XCTAssertEqual(readOnMain.withLock { $0 }, false, "The recording is decoded off the main thread")
+        await waitUntil { !app.busy }
+        XCTAssertEqual(sent?.count, audio.count, "The reply is asked for with the decoded recording")
+        XCTAssertEqual(app.conversation?.messages.last?.text, "Sorry?")
+        XCTAssertNil(app.error)
+    }
+
+    /// A recording that cannot be read fails the retry with an explanation, and is kept: it is the saved message's.
+    @MainActor func testRetryReplyWithAnUnreadableRecordingKeepsIt() async throws {
+        let app = makeApp(root: makeTemporaryFolder())
+        app.resume()
+        app.newChat()
+        let file = app.store.root.appendingPathComponent("broken.wav")
+        try Data("not audio".utf8).write(to: file)
+        var voice = Message(role: "user", text: "", audio: "broken.wav")
+        voice.transcriptionState = .failed
+        app.append(voice, to: app.selectedID!)
+        app.retryReply()
+        await waitUntil { !app.busy }
+        XCTAssertEqual(
+            app.error, String(localized: "The saved recording could not be read. Record a new message to continue."))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertEqual(app.conversation?.messages.count, 1)
+        XCTAssertTrue(app.canRetry)
     }
 
     @MainActor func testRetryReplyUsesCorrectedTextAndDoesNotRearmTranscription() async throws {

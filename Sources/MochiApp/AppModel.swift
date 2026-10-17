@@ -109,6 +109,8 @@ struct MessageDeletionUndo {
     @ObservationIgnored var playReply: ((String) -> Void)?
     /// Writes a reply's audio file; replaceable so a failed audio write can be tested while the library still saves.
     @ObservationIgnored var writeReplyAudio: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
+    /// Decodes a saved recording for a retried reply, off the main actor; replaceable so tests can see where it runs.
+    @ObservationIgnored var readRecording: @Sendable (URL) throws -> Data = { try AudioFile.pcm($0) }
     var greetingActive = false
     @ObservationIgnored var recordingNow: () -> Date = Date.init
     @ObservationIgnored var recordingSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
