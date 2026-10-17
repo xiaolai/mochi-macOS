@@ -94,8 +94,8 @@ struct WorkspaceView: View {
                     } label: {
                         Image(systemName: "chevron.down")
                     }
-                    .menuStyle(.borderlessButton).fixedSize().help("Conversation Templates").disabled(
-                        !app.canOpenConversationInstructions)
+                    .menuStyle(.borderlessButton).fixedSize().help("Conversation Templates")
+                    .accessibilityLabel("Conversation Templates").disabled(!app.canOpenConversationInstructions)
                 }
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 320)
@@ -448,6 +448,7 @@ struct WorkspaceView: View {
                     .onSubmit { app.send() }.disabled(app.busy)
                 Button(action: app.send) { Image(systemName: "arrow.up").fontWeight(.semibold) }
                     .buttonStyle(.borderedProminent).buttonBorderShape(.circle)
+                    .help("Send Message").accessibilityLabel("Send Message")
                     .disabled(app.busy || app.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.return, modifiers: .command)
             }
