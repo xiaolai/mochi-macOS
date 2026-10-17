@@ -283,10 +283,11 @@ PRELUDE = "export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH\nset -u\n"
 
 
 def host_environment(host):
+    # Swift is measured as the checks run it: `swift` on the PRELUDE's PATH, which puts Homebrew first.
     code, out = remote(host, PRELUDE + """
 echo "host=$(scutil --get LocalHostName)"
 echo "macos=$(sw_vers -productVersion) $(sw_vers -buildVersion)"
-echo "swift=$(xcrun swift --version 2>&1 | head -1)"
+echo "swift=$(command -v swift) $(swift --version 2>&1 | head -1)"
 echo "codex=$(codex --version 2>/dev/null)"
 """)
     if code != 0:

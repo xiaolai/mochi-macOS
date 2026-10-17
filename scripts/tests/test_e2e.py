@@ -190,6 +190,28 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(commits[-1], f"c{e2e.KEPT_PER_CHECK + 2}")
 
 
+class TestMacTests(unittest.TestCase):
+    def remote(self, outputs):
+        scripts = []
+        def remote(host, script, timeout=120):
+            scripts.append(script)
+            return outputs.pop(0) if outputs else (0, "")
+        return remote, scripts
+
+    def test_the_swift_measured_is_the_swift_the_checks_run(self):
+        # The checks run `swift` with Homebrew first on PATH; `xcrun swift` would name Xcode's even when another
+        # toolchain is the one that builds.
+        remote, scripts = self.remote([(0, "host=x\nmacos=27.0.1 26A434\nswift=/opt/homebrew/bin/swift Swift 6.4\n")])
+        with mock.patch.object(e2e, "remote", remote):
+            env = e2e.host_environment("mac")
+            e2e.run_check("mac", "$HOME/mochi-e2e/x", next(c for c in e2e.CHECKS if c.name == "smoke"))
+        self.assertEqual(env["swift"], "/opt/homebrew/bin/swift Swift 6.4")
+        self.assertNotIn("xcrun swift", scripts[0])
+        self.assertIn('swift=$(command -v swift) $(swift --version 2>&1 | head -1)', scripts[0])
+        for script in scripts:
+            self.assertTrue(script.startswith(e2e.PRELUDE))
+
+
 class VerdictTests(unittest.TestCase):
     def check(self, name):
         return next(c for c in e2e.CHECKS if c.name == name)
