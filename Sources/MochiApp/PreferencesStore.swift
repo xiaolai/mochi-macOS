@@ -139,7 +139,8 @@ import MochiProviders
     var practiceVoiceLabel: String {
         // The learner's own voice replaces the built-in one, so the example is labelled by the speaker it sounds like.
         if practiceTimbreEnabled { return "Your voice" }
-        return "\(RealtimeVoice(rawValue: builtInPracticeVoice)?.name ?? RealtimeService.defaultVoice.capitalized) · Codex voice"
+        return
+            "\(RealtimeVoice(rawValue: builtInPracticeVoice)?.name ?? RealtimeService.defaultVoice.capitalized) · Codex voice"
     }
     /// The conversion to apply to a new practice example, or nil when the feature is off. A voice ID that does not
     /// validate throws here, before any paid request, so a bad setting never costs a sentence.

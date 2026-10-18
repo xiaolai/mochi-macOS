@@ -41,7 +41,8 @@ final class PracticeTimbreTests: XCTestCase {
             request.url?.absoluteString,
             "https://api.elevenlabs.io/v1/speech-to-speech/VOICE123?output_format=mp3_44100_128")
         XCTAssertEqual(request.value(forHTTPHeaderField: "xi-api-key"), "test-key")
-        XCTAssertTrue(request.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("multipart/form-data; boundary=") == true)
+        XCTAssertTrue(
+            request.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("multipart/form-data; boundary=") == true)
 
         let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains("name=\"model_id\"\r\n\r\neleven_multilingual_sts_v2\r\n"))
@@ -49,7 +50,8 @@ final class PracticeTimbreTests: XCTestCase {
         // The values `myvoice` was validated with for the learner's own clone. A change here changes every example.
         XCTAssertTrue(
             body.contains(
-                "name=\"voice_settings\"\r\n\r\n{\"similarity_boost\":0.75,\"stability\":0.5,\"style\":0,\"use_speaker_boost\":true}\r\n"))
+                "name=\"voice_settings\"\r\n\r\n{\"similarity_boost\":0.75,\"stability\":0.5,\"style\":0,\"use_speaker_boost\":true}\r\n"
+            ))
         XCTAssertTrue(body.contains("name=\"audio\"; filename=\"source.wav\""))
         XCTAssertTrue(FileManager.default.fileExists(atPath: converted.path))
     }
@@ -107,18 +109,23 @@ final class PracticeTimbreTests: XCTestCase {
 
     func testEmptyResponseIsRefused() async throws {
         let calls = Calls()
-        await XCTAssertThrowsErrorAsync(
+        await assertThrowsErrorAsync(
             try await converter(calls, reply: { _ in Data() }).convert(
-                source: try writeSource(try fixtureMP3(), name: "example.mp3"), timbre: try PracticeTimbre(voiceID: "VOICE123"), root: root))
+                source: try writeSource(try fixtureMP3(), name: "example.mp3"),
+                timbre: try PracticeTimbre(voiceID: "VOICE123"), root: root))
     }
 
     func testMissingKeyFailsBeforeAnyRequest() async throws {
         let calls = Calls()
-        await XCTAssertThrowsErrorAsync(
-            try await converter(calls, reply: { _ in try self.fixtureMP3() }, key: {
-                throw AppFailure(verbatim: "no key")
-            }).convert(
-                source: try writeSource(try fixtureMP3(), name: "example.mp3"), timbre: try PracticeTimbre(voiceID: "VOICE123"), root: root))
+        await assertThrowsErrorAsync(
+            try await converter(
+                calls, reply: { _ in try self.fixtureMP3() },
+                key: {
+                    throw AppFailure(verbatim: "no key")
+                }
+            ).convert(
+                source: try writeSource(try fixtureMP3(), name: "example.mp3"),
+                timbre: try PracticeTimbre(voiceID: "VOICE123"), root: root))
         XCTAssertTrue(calls.requests.isEmpty)
     }
 
@@ -138,7 +145,8 @@ final class PracticeTimbreTests: XCTestCase {
     // MARK: helpers
 
     private func converter(
-        _ calls: Calls, reply: @escaping (URLRequest) throws -> Data, key: @escaping () throws -> String = { "test-key" }
+        _ calls: Calls, reply: @escaping (URLRequest) throws -> Data,
+        key: @escaping () throws -> String = { "test-key" }
     ) -> PracticeTimbreConverter {
         PracticeTimbreConverter(
             credential: key,
@@ -175,7 +183,7 @@ final class PracticeTimbreTests: XCTestCase {
         return try Data(contentsOf: url)
     }
 
-    private func XCTAssertThrowsErrorAsync<T>(
+    private func assertThrowsErrorAsync<T>(
         _ expression: @autoclosure () async throws -> T, file: StaticString = #filePath, line: UInt = #line
     ) async {
         do {

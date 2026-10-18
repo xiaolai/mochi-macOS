@@ -114,7 +114,8 @@ final class StartAgainAuditionTests: XCTestCase {
         print(
             "start again: (a) \(kept) of 3, (a) names the job too \(titled) of 3, (b) \(changedOK) of 3, control kept the job \(control) of 3"
         )
-        XCTAssertEqual(kept, 3, "(a) The brief names the company or interviewer from the opening, asks, and invents nothing")
+        XCTAssertEqual(
+            kept, 3, "(a) The brief names the company or interviewer from the opening, asks, and invents nothing")
         XCTAssertEqual(changedOK, 3, "(b) The brief follows the later change or asks")
     }
 }

@@ -99,9 +99,10 @@ struct PracticeTimbreControls: View {
             switch VoiceChoice(voices) {
             case .none:
                 ownVoices = []
-                keyMessage = AppFailure(
-                    "No voice of yours is on this ElevenLabs account. Clone your voice in ElevenLabs, then try again."
-                ).message
+                keyMessage =
+                    AppFailure(
+                        "No voice of yours is on this ElevenLabs account. Clone your voice in ElevenLabs, then try again."
+                    ).message
             case .one(let voice):
                 ownVoices = []
                 if !automatic || settings.practiceTimbreVoiceID.isEmpty {

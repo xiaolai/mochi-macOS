@@ -40,7 +40,9 @@ public struct OwnedVoiceList {
 
     public init(
         credential: @escaping () throws -> String = ElevenLabsCredential.read,
-        transport: @escaping (URLRequest) async throws -> Data = { try await ServiceHTTP.data($0, provider: "ElevenLabs") }
+        transport: @escaping (URLRequest) async throws -> Data = {
+            try await ServiceHTTP.data($0, provider: "ElevenLabs")
+        }
     ) {
         self.credential = credential
         self.transport = transport
