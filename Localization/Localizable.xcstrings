@@ -24767,6 +24767,146 @@
           }
         }
       }
+    },
+    "Find My Voice" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找我的声音"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尋找我的聲音"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自分の音声を探す"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내 음성 찾기"
+          }
+        }
+      }
+    },
+    "No voice of yours is on this ElevenLabs account. Clone your voice in ElevenLabs, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个 ElevenLabs 账户里没有你的声音。请先在 ElevenLabs 中克隆你的声音，然后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個 ElevenLabs 帳戶中沒有你的聲音。請先在 ElevenLabs 中複製你的聲音，然後再試一次。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このElevenLabsアカウントにあなたの音声はありません。ElevenLabsで音声をクローンしてから、もう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 ElevenLabs 계정에는 내 음성이 없습니다. ElevenLabs에서 음성을 복제한 뒤 다시 시도하십시오."
+          }
+        }
+      }
+    },
+    "Could not look up your voice." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法查找你的声音。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法查找你的聲音。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声を探せませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음성을 찾을 수 없습니다."
+          }
+        }
+      }
+    },
+    "You have more voices than Mochi can list. Enter your voice ID by hand instead." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的声音数量超过了 Mochi 能列出的范围。请改为手动输入声音 ID。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的聲音數量超過了 Mochi 能列出的範圍。請改為手動輸入聲音 ID。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi が一覧できる数を超える音声があります。代わりに音声 ID を手入力してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 표시할 수 있는 음성 수를 넘었습니다. 대신 음성 ID를 직접 입력하십시오."
+          }
+        }
+      }
+    },
+    "ElevenLabs returned a voice list Mochi could not read." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs 返回的声音列表 Mochi 无法读取。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs 傳回的聲音列表 Mochi 無法讀取。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs が返した音声一覧を Mochi が読み込めませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ElevenLabs가 반환한 음성 목록을 Mochi가 읽을 수 없습니다."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

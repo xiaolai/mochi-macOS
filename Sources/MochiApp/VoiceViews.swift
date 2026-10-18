@@ -36,22 +36,32 @@ struct PracticeTimbreControls: View {
     @State private var keyDraft = ""
     @State private var keySaved = ElevenLabsCredential.isSaved
     @State private var keyMessage: String?
+    /// The learner's own voices when there are several to choose from; empty once one is chosen or none is found.
+    @State private var ownVoices: [OwnedVoice] = []
 
     var body: some View {
+        // The fields stay visible while the switch is off, so the place to paste the key is never hidden. Mochi keeps
+        // the key in the Keychain itself; the learner never has to open Keychain Access.
         Toggle("Speak examples in my voice (ElevenLabs)", isOn: $settings.practiceTimbreEnabled)
-        if settings.practiceTimbreEnabled {
-            TextField("Voice ID", text: $settings.practiceTimbreVoiceID)
-            SecureField(
-                keySaved ? "Key saved; enter a new one to replace it" : "ElevenLabs API key", text: $keyDraft)
-            HStack {
-                Button("Save Key", action: saveKey)
-                    .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                if keySaved { Button("Remove Key", role: .destructive, action: removeKey) }
+        TextField("Voice ID", text: $settings.practiceTimbreVoiceID)
+        SecureField(
+            keySaved ? "Key saved; enter a new one to replace it" : "ElevenLabs API key", text: $keyDraft)
+        HStack {
+            Button("Save Key", action: saveKey)
+                .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if keySaved {
+                Button("Find My Voice", action: findVoice)
+                Button("Remove Key", role: .destructive, action: removeKey)
             }
-            if let keyMessage { Text(keyMessage).font(.callout).foregroundStyle(.red) }
-            Text("Each example is converted by ElevenLabs. Only the example’s audio is sent.")
-                .font(.caption).foregroundStyle(.secondary)
         }
+        if ownVoices.count > 1 {
+            Picker("Your voice", selection: $settings.practiceTimbreVoiceID) {
+                ForEach(ownVoices, id: \.voiceID) { voice in Text(voice.name).tag(voice.voiceID) }
+            }
+        }
+        if let keyMessage { Text(keyMessage).font(.callout).foregroundStyle(.red) }
+        Text("Each example is converted by ElevenLabs. Only the example’s audio is sent.")
+            .font(.caption).foregroundStyle(.secondary)
     }
 
     private func saveKey() {
@@ -60,6 +70,7 @@ struct PracticeTimbreControls: View {
             keyDraft = ""
             keySaved = true
             keyMessage = nil
+            findVoice()
         } catch {
             keyMessage = AppFailure.message(for: error, fallback: "Could not save the ElevenLabs key in Keychain.")
         }
@@ -70,8 +81,34 @@ struct PracticeTimbreControls: View {
             try ElevenLabsCredential.delete()
             keySaved = false
             keyMessage = nil
+            ownVoices = []
         } catch {
             keyMessage = AppFailure.message(for: error, fallback: "Could not remove the ElevenLabs key from Keychain.")
+        }
+    }
+
+    /// Finds the learner's own voice with the saved key. One voice fills the voice ID; several are offered in a picker.
+    private func findVoice() {
+        Task {
+            do {
+                let voices = try await OwnedVoiceList().fetch()
+                switch VoiceChoice(voices) {
+                case .none:
+                    ownVoices = []
+                    keyMessage = AppFailure(
+                        "No voice of yours is on this ElevenLabs account. Clone your voice in ElevenLabs, then try again."
+                    ).message
+                case .one(let voice):
+                    ownVoices = []
+                    settings.practiceTimbreVoiceID = voice.voiceID
+                    keyMessage = nil
+                case .many(let list):
+                    ownVoices = list
+                    keyMessage = nil
+                }
+            } catch {
+                keyMessage = AppFailure.message(for: error, fallback: "Could not look up your voice.")
+            }
         }
     }
 }
