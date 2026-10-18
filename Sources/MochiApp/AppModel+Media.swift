@@ -45,6 +45,8 @@ extension AppModel {
         guard playbackFile == file else { return }
         audio.seek(to: seconds)
     }
+    /// Mochi is speaking a reply or greeting for the first time, rather than playing an existing clip.
+    var speakingReply: Bool { turn.activity == .playing && playbackFile != nil && playbackFile == unheardReply }
     func play(
         _ file: String, mochi: Bool = false, afterPlayback: (() -> Void)? = nil,
         afterPlaybackFailure: (() -> Void)? = nil, settingsTab: SettingsTab? = nil
@@ -52,6 +54,8 @@ extension AppModel {
         guard !busy || turn.activity == .playing else { return }
         if afterPlayback == nil { greetingActive = false }
         if file != unheardReply { unheardReply = nil }
+        // An action scheduled after the playback this replaces belonged to it, as Stop would have cancelled it.
+        deferredToolAction = nil
         audio.stop()
         playbackFile = nil
         let token = turn.begin(.playing)
@@ -63,6 +67,12 @@ extension AppModel {
             self.speaking = false
             _ = self.turn.finish(token)
         }
+        // An external tool action scheduled while this played runs first, so what follows the playback sees it.
+        let scheduled: () -> Void = { [weak self] in
+            let action = self?.deferredToolAction
+            self?.deferredToolAction = nil
+            action?()
+        }
         do {
             try audio.play(
                 url: store.root.appendingPathComponent(file), rate: slow && !mochi ? 0.8 : 1,
@@ -70,6 +80,8 @@ extension AppModel {
                     guard let self, self.turn.epoch == token else { return }
                     finished()
                     self.greetingActive = false
+                    // First, so a panel it opens, which clears the error shown, does not hide why playback ended.
+                    scheduled()
                     self.report(
                         String(localized: "This recording could not be played. Try another recording."), in: settingsTab
                     )
@@ -78,6 +90,7 @@ extension AppModel {
                 completed: { [weak self] in
                     guard let self, self.turn.epoch == token else { return }
                     finished()
+                    scheduled()
                     afterPlayback?()
                 })
             playbackFile = file

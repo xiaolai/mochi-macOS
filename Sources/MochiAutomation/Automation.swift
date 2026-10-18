@@ -197,7 +197,8 @@ public enum MochiTools {
         func nullable(_ type: String) -> [String: Any] { ["type": [type, "null"]] }
         let status = described(
             ["type": "string", "enum": ["completed", "scheduled_after_reply"]],
-            "scheduled_after_reply means the action runs after Mochi's current spoken reply.")
+            "scheduled_after_reply means the action runs after Mochi's current spoken reply, unless Stop or a change of state cancels it first."
+        )
         let nextOffset = described(nullable("integer"), "The offset of the next page, or null after the last.")
         let conversationResult: [String: [String: Any]] = ["conversation_id": string]
         let expressionItem: [String: [String: Any]] = [
@@ -253,12 +254,12 @@ public enum MochiTools {
             Definition(
                 name: .prepareExpression, title: "Prepare Expression",
                 description:
-                    "Prepare an expression, in the conversation's language, for user review in Help Me Say This. Refuses to replace any existing Help draft. During a voice reply, preparation is saved and opened only after speaking completes; Stop cancels it.",
+                    "Prepare an expression, in the conversation's language, for user review in Help Me Say This. Refuses to replace any existing Help draft. Called while Mochi speaks a new reply or greeting, or by the voice model during its reply, the result has status scheduled_after_reply and the draft is saved and opened only after speaking completes; Stop cancels it, and so does a change of conversation, activity or open panel before then. An external call while a reply is still being produced is refused as busy; retry once Mochi is speaking. Read get_session for the new revision before retrying.",
                 properties: expression, required: ["text"], output: ["status": status], deferred: true),
             Definition(
                 name: .startPractice, title: "Start Practice",
                 description:
-                    "Open practice for a saved expression in this conversation. Recording remains user initiated.",
+                    "Open practice for a saved expression in this conversation. Recording remains user initiated. Called while Mochi speaks a new reply or greeting, or by the voice model during its reply, the result has status scheduled_after_reply and practice opens only after speaking completes; Stop cancels it, and so does a change of conversation, activity or open panel before then. An external call while a reply is still being produced is refused as busy; retry once Mochi is speaking. Read get_session for the new revision before retrying.",
                 properties: [
                     "expression_id": described(
                         uuid, "ID of a saved expression in this conversation, from search_expressions or get_session.")
@@ -295,7 +296,7 @@ public enum MochiTools {
             Definition(
                 name: .playAudio, title: "Play Audio",
                 description:
-                    "Play existing audio by message or expression ID. No file paths accepted. During a voice reply playback starts after the reply.",
+                    "Play existing audio by message or expression ID, replacing audio already playing. No file paths accepted. Called while Mochi speaks a new reply or greeting, or by the voice model during its reply, the result has status scheduled_after_reply and playback starts after the reply; Stop cancels it. An external call while a reply is still being produced is refused as busy; retry once Mochi is speaking. Read get_session for the new revision before retrying.",
                 properties: audio, required: [], output: ["status": status], deferred: true),
             Definition(
                 name: .pauseAudio, title: "Pause Audio",

@@ -324,7 +324,9 @@ extension AppModel {
             playReply(filename)
             action?()
         } else if let action {
-            play(filename, mochi: true, afterPlayback: action, afterPlaybackFailure: action)
+            play(filename, mochi: true)
+            // It waits where an external change would, so a reply keeps one change; playback runs it as it ends.
+            if playbackFile == filename { deferredToolAction = action } else { action() }
         } else if settings.talkingMode == .pressToSend && settings.listenAfterReply && !listening.isOn,
             let id = selectedID
         {

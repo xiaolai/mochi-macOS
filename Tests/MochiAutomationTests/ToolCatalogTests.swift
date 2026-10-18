@@ -70,6 +70,19 @@ final class ToolCatalogTests: XCTestCase {
         }
     }
 
+    /// A client told only "completed" would retry a request that is still waiting for Mochi's reply.
+    func testToolsThatWaitForAReplySayHowToTellAndWhatToReadBeforeRetrying() throws {
+        for name in [MochiToolName.prepareExpression, .startPractice, .playAudio] {
+            let tool = try XCTUnwrap(MochiTools.catalog(origin: .external).first { $0.name == name })
+            XCTAssertTrue(tool.description.contains("scheduled_after_reply"), name.rawValue)
+            XCTAssertTrue(tool.description.contains("get_session"), name.rawValue)
+            XCTAssertTrue(tool.description.contains("Stop cancels it"), name.rawValue)
+            // An external call made while a reply is still being produced is refused, not scheduled.
+            XCTAssertFalse(tool.description.contains("about to speak"), name.rawValue)
+            XCTAssertTrue(tool.description.contains("refused as busy"), name.rawValue)
+        }
+    }
+
     /// A model can only correct a call it was told the problem with.
     func testArgumentErrorsNameTheArgument() {
         func message(_ name: String, _ arguments: [String: Any]) -> String {

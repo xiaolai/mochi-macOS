@@ -171,10 +171,18 @@ import MochiKernel
         }
         let scheduledConversationID = app.selectedID
         func schedule(_ action: @escaping () throws -> Void) throws -> [String: Any] {
-            if origin == .voice && app.turn.activity == .generating {
+            let offersWorkspace = origin == .external && [.prepareExpression, .startPractice].contains(tool.name)
+            // The voice model's change waits for the reply it is generating; an external panel or new playback waits
+            // for the reply or greeting Mochi is speaking, which it would otherwise cut off.
+            let afterReply =
+                origin == .voice
+                ? app.turn.activity == .generating
+                : app.speakingReply && [.prepareExpression, .startPractice, .playAudio].contains(tool.name)
+            if afterReply {
                 guard app.deferredToolAction == nil else {
                     throw AppFailure("A view or playback action is already scheduled for this reply.")
                 }
+                // Only a voice call has a key; an external call is remembered by its request ID instead.
                 let key = app.automation.voiceToolKey
                 app.automation.scheduledVoiceToolKey = key
                 app.deferredToolAction = { [weak app] in
@@ -186,6 +194,7 @@ import MochiKernel
                             throw AppFailure(
                                 "The conversation or activity changed; the scheduled action was cancelled.")
                         }
+                        if offersWorkspace { app.offerWorkspace?() }
                         try action()
                         if let key {
                             app.automation.voiceResults.insert(
@@ -193,17 +202,23 @@ import MochiKernel
                                 for: key)
                         }
                     } catch {
-                        MochiLog.failure(MochiLog.automation, "Scheduled voice action", error, level: .info)
+                        MochiLog.failure(
+                            MochiLog.automation,
+                            origin == .voice ? "Scheduled voice action" : "Scheduled external action",
+                            error, level: .info)
                         app?.error = AppFailure.message(
                             for: error, fallback: "The scheduled action could not complete.")
                     }
                 }
                 return success(["status": "scheduled_after_reply"])
             }
-            if origin == .external && [.prepareExpression, .startPractice].contains(tool.name) {
-                app.offerWorkspace?()
+            // A change still waiting for a reply, as after a seek within it, is not dropped by one acting at once.
+            // A seek acts at once regardless; Stop is not scheduled and always may.
+            guard tool.name == .seekAudio || app.deferredToolAction == nil else {
+                throw AppFailure("A view or playback action is already scheduled for this reply.")
             }
-            // Existing playback is allowed for an immediate external seek/replay.
+            if offersWorkspace { app.offerWorkspace?() }
+            // An external seek, and any change while an existing clip plays, acts at once.
             guard app.selectedID == scheduledConversationID, app.writableConversation, !app.automationModal else {
                 throw AppFailure("The conversation changed; the action was cancelled.")
             }
