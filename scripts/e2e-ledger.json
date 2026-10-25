@@ -206,40 +206,6 @@
    }
   },
   {
-   "check": "single-instance",
-   "commit": "49419bb16764e879aa534802be26c895318675f0",
-   "env": {
-    "host": "db9a95d66b1e",
-    "macos": "27.0.1 26A434",
-    "swift": "swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
-   },
-   "evidence": "PASS, 21 checks",
-   "fingerprint": "9de39d8ada98a0e12f1f30ccf56cfbedbf93e31d6ab1c5d9ade27141d2e8daaa",
-   "inputs": "b27495fec89b8afc814713235f8370ccc423d44b1aa1807f04905648094be4b6",
-   "ran_at": "2026-10-17T12:24:10+08:00",
-   "spec": {
-    "app_args": [],
-    "command": "python3 scripts/tests/single_instance_e2e.py --allow-native",
-    "evidence": "build/evidence/single-instance-e2e/report.json",
-    "extra": [
-     "scripts/build-app.sh",
-     "scripts/localization.py",
-     "scripts/release_support.py",
-     "Localization/",
-     "VERSION",
-     "scripts/tests/single_instance_e2e.py",
-     "scripts/tests/fixtures/"
-    ],
-    "live": false,
-    "name": "single-instance",
-    "roots": [
-     "MochiApp",
-     "MochiMCP"
-    ],
-    "timeout": 900
-   }
-  },
-  {
    "check": "audition-CoachingAuditionTests",
    "commit": "49419bb16764e879aa534802be26c895318675f0",
    "env": {
@@ -3236,6 +3202,41 @@
      "MochiProvidersTests"
     ],
     "timeout": 1800
+   }
+  },
+  {
+   "check": "single-instance",
+   "commit": "4ea7cb7826b6036d836582e3d45769b0b496f827",
+   "env": {
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "PASS, 21 checks",
+   "fingerprint": "8ee3439d04e41543b6ebb818b40293aa3e9e3971bf9d90cb144e881daefaefc7",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "94ed783bd1f99f0a8ca1f00e49eb8925e6fea59fd80b0c9e97096a4b475288d1",
+   "ran_at": "2026-10-26T07:46:02+08:00",
+   "spec": {
+    "app_args": [],
+    "command": "python3 scripts/tests/single_instance_e2e.py --allow-native",
+    "evidence": "build/evidence/single-instance-e2e/report.json",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/",
+     "VERSION",
+     "scripts/tests/single_instance_e2e.py",
+     "scripts/tests/fixtures/"
+    ],
+    "live": false,
+    "name": "single-instance",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 900
    }
   }
  ],
