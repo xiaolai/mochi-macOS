@@ -34,178 +34,6 @@
    }
   },
   {
-   "check": "tray",
-   "commit": "49419bb16764e879aa534802be26c895318675f0",
-   "env": {
-    "host": "db9a95d66b1e",
-    "macos": "27.0.1 26A434",
-    "swift": "swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
-   },
-   "evidence": "26 of 26 PASS",
-   "fingerprint": "6d54354adae890711c867205712eb957f3a47e83d6aedaea45896b70591fa175",
-   "inputs": "3ae6a56dc8b32eb4a85c2cc75050ac4133a66122234e045d697baefbb02cb906",
-   "ran_at": "2026-10-17T12:21:35+08:00",
-   "spec": {
-    "app_args": [
-     "--tray-smoke-test"
-    ],
-    "command": "",
-    "evidence": "tray-smoke.txt",
-    "extra": [
-     "scripts/build-app.sh",
-     "scripts/localization.py",
-     "scripts/release_support.py",
-     "Localization/"
-    ],
-    "live": false,
-    "name": "tray",
-    "roots": [
-     "MochiApp",
-     "MochiMCP"
-    ],
-    "timeout": 600
-   }
-  },
-  {
-   "check": "probe",
-   "commit": "49419bb16764e879aa534802be26c895318675f0",
-   "env": {
-    "codex": "codex-cli 0.163.0",
-    "host": "db9a95d66b1e",
-    "macos": "27.0.1 26A434",
-    "swift": "swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
-   },
-   "evidence": "8 of 8 PASS",
-   "fingerprint": "a503961de4af76a0f0e14d68f670d36b57a4a020f866e3e53a73e59af23e0ece",
-   "inputs": "3ae6a56dc8b32eb4a85c2cc75050ac4133a66122234e045d697baefbb02cb906",
-   "ran_at": "2026-10-17T12:21:51+08:00",
-   "spec": {
-    "app_args": [
-     "--probe"
-    ],
-    "command": "",
-    "evidence": "live-probe.txt",
-    "extra": [
-     "scripts/build-app.sh",
-     "scripts/localization.py",
-     "scripts/release_support.py",
-     "Localization/"
-    ],
-    "live": true,
-    "name": "probe",
-    "roots": [
-     "MochiApp",
-     "MochiMCP"
-    ],
-    "timeout": 600
-   }
-  },
-  {
-   "check": "tools-probe",
-   "commit": "49419bb16764e879aa534802be26c895318675f0",
-   "env": {
-    "codex": "codex-cli 0.163.0",
-    "host": "db9a95d66b1e",
-    "macos": "27.0.1 26A434",
-    "swift": "swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
-   },
-   "evidence": "Live Realtime instructions and tools: PASS. Calls: get_session, save_expression. Synthetic spoken response; audio return",
-   "fingerprint": "9860736a2cccf37825f2d71c77f5fc210c4e3cd60733806832d16c3e90d55fac",
-   "inputs": "3ae6a56dc8b32eb4a85c2cc75050ac4133a66122234e045d697baefbb02cb906",
-   "ran_at": "2026-10-17T12:22:32+08:00",
-   "spec": {
-    "app_args": [
-     "--tools-probe"
-    ],
-    "command": "",
-    "evidence": "live-tools-probe.txt",
-    "extra": [
-     "scripts/build-app.sh",
-     "scripts/localization.py",
-     "scripts/release_support.py",
-     "Localization/"
-    ],
-    "live": true,
-    "name": "tools-probe",
-    "roots": [
-     "MochiApp",
-     "MochiMCP"
-    ],
-    "timeout": 900
-   }
-  },
-  {
-   "check": "hands-free",
-   "commit": "49419bb16764e879aa534802be26c895318675f0",
-   "env": {
-    "codex": "codex-cli 0.163.0",
-    "host": "db9a95d66b1e",
-    "macos": "27.0.1 26A434",
-    "swift": "swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
-   },
-   "evidence": "14 of 14 checks passed",
-   "fingerprint": "2d143d0c18585d8e3f2efee5e84140da7df4b6b683214e650ca59a5f8e8addce",
-   "inputs": "3ae6a56dc8b32eb4a85c2cc75050ac4133a66122234e045d697baefbb02cb906",
-   "ran_at": "2026-10-17T12:23:02+08:00",
-   "spec": {
-    "app_args": [
-     "--hands-free-smoke-test",
-     "{learner}"
-    ],
-    "command": "",
-    "evidence": "hands-free-smoke.json",
-    "extra": [
-     "scripts/build-app.sh",
-     "scripts/localization.py",
-     "scripts/release_support.py",
-     "Localization/"
-    ],
-    "live": true,
-    "name": "hands-free",
-    "roots": [
-     "MochiApp",
-     "MochiMCP"
-    ],
-    "timeout": 600
-   }
-  },
-  {
-   "check": "barge-in",
-   "commit": "49419bb16764e879aa534802be26c895318675f0",
-   "env": {
-    "codex": "codex-cli 0.163.0",
-    "host": "db9a95d66b1e",
-    "macos": "27.0.1 26A434",
-    "swift": "swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
-   },
-   "evidence": "13 of 13 checks passed",
-   "fingerprint": "1b2fbd635745168f682528a191997d863768b796cdb2f77357a80c364051b2a0",
-   "inputs": "3ae6a56dc8b32eb4a85c2cc75050ac4133a66122234e045d697baefbb02cb906",
-   "ran_at": "2026-10-17T12:23:32+08:00",
-   "spec": {
-    "app_args": [
-     "--hands-free-smoke-test",
-     "{learner}",
-     "--barge-in"
-    ],
-    "command": "",
-    "evidence": "barge-in-smoke.json",
-    "extra": [
-     "scripts/build-app.sh",
-     "scripts/localization.py",
-     "scripts/release_support.py",
-     "Localization/"
-    ],
-    "live": true,
-    "name": "barge-in",
-    "roots": [
-     "MochiApp",
-     "MochiMCP"
-    ],
-    "timeout": 600
-   }
-  },
-  {
    "check": "audition-CoachingAuditionTests",
    "commit": "49419bb16764e879aa534802be26c895318675f0",
    "env": {
@@ -954,41 +782,6 @@
      "MochiMCP"
     ],
     "timeout": 600
-   }
-  },
-  {
-   "check": "single-instance",
-   "commit": "f60648dc34b79af6fab961033b3231d3927caab9",
-   "env": {
-    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
-    "macos": "27.0.1 26A434",
-    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
-   },
-   "evidence": "PASS, 21 checks",
-   "fingerprint": "af198eee6c80d4a4672e906a460973f76cb17c432600e78a0a02fa66b5140698",
-   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
-   "inputs": "16842a211f0f83e85e79437f094bf34ad43670d557a1794caaaaddd8aea65864",
-   "ran_at": "2026-10-17T17:33:18+08:00",
-   "spec": {
-    "app_args": [],
-    "command": "python3 scripts/tests/single_instance_e2e.py --allow-native",
-    "evidence": "build/evidence/single-instance-e2e/report.json",
-    "extra": [
-     "scripts/build-app.sh",
-     "scripts/localization.py",
-     "scripts/release_support.py",
-     "Localization/",
-     "VERSION",
-     "scripts/tests/single_instance_e2e.py",
-     "scripts/tests/fixtures/"
-    ],
-    "live": false,
-    "name": "single-instance",
-    "roots": [
-     "MochiApp",
-     "MochiMCP"
-    ],
-    "timeout": 900
    }
   },
   {
@@ -3305,6 +3098,305 @@
      "MochiMCP"
     ],
     "timeout": 900
+   }
+  },
+  {
+   "check": "tray",
+   "commit": "4cc8aca957a1f7427e07c0e72fc6538fa6225121",
+   "env": {
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "26 of 26 PASS",
+   "fingerprint": "510e3c4e0279ffa19cab8e0cb3ccc9fdee97c5bfe10e28f3df5fc7ed57046bf6",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "b4bfbfa256f4b17af8ee30cbcdd3c1cec53530aa2fdcc05b78a3d9bf8438ed10",
+   "ran_at": "2026-11-01T11:29:46+08:00",
+   "spec": {
+    "app_args": [
+     "--tray-smoke-test"
+    ],
+    "command": "",
+    "evidence": "tray-smoke.txt",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/"
+    ],
+    "live": false,
+    "name": "tray",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 600
+   }
+  },
+  {
+   "check": "probe",
+   "commit": "4cc8aca957a1f7427e07c0e72fc6538fa6225121",
+   "env": {
+    "codex": "codex-cli 0.164.0",
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "8 of 8 PASS",
+   "fingerprint": "b854094bcf6db187c02acc6170c0721b345e2cbff2cb70bd99cb4884cca2e452",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "b4bfbfa256f4b17af8ee30cbcdd3c1cec53530aa2fdcc05b78a3d9bf8438ed10",
+   "ran_at": "2026-11-01T11:30:13+08:00",
+   "spec": {
+    "app_args": [
+     "--probe"
+    ],
+    "command": "",
+    "evidence": "live-probe.txt",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/"
+    ],
+    "live": true,
+    "name": "probe",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 600
+   }
+  },
+  {
+   "check": "tools-probe",
+   "commit": "4cc8aca957a1f7427e07c0e72fc6538fa6225121",
+   "env": {
+    "codex": "codex-cli 0.164.0",
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "Live Realtime instructions and tools: PASS. Calls: get_session, save_expression. Synthetic spoken response; audio return",
+   "fingerprint": "bd7585f608ac273381880cb61794672efd5dd158cbd8ff82244d04473688a678",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "b4bfbfa256f4b17af8ee30cbcdd3c1cec53530aa2fdcc05b78a3d9bf8438ed10",
+   "ran_at": "2026-11-01T11:30:56+08:00",
+   "spec": {
+    "app_args": [
+     "--tools-probe"
+    ],
+    "command": "",
+    "evidence": "live-tools-probe.txt",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/"
+    ],
+    "live": true,
+    "name": "tools-probe",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 900
+   }
+  },
+  {
+   "check": "hands-free",
+   "commit": "4cc8aca957a1f7427e07c0e72fc6538fa6225121",
+   "env": {
+    "codex": "codex-cli 0.164.0",
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "14 of 14 checks passed",
+   "fingerprint": "f10b357f8ac91ff97fc06b6215342775259eba0befaebe4660447fc719e18182",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "b4bfbfa256f4b17af8ee30cbcdd3c1cec53530aa2fdcc05b78a3d9bf8438ed10",
+   "ran_at": "2026-11-01T11:31:28+08:00",
+   "spec": {
+    "app_args": [
+     "--hands-free-smoke-test",
+     "{learner}"
+    ],
+    "command": "",
+    "evidence": "hands-free-smoke.json",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/"
+    ],
+    "live": true,
+    "name": "hands-free",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 600
+   }
+  },
+  {
+   "check": "barge-in",
+   "commit": "4cc8aca957a1f7427e07c0e72fc6538fa6225121",
+   "env": {
+    "codex": "codex-cli 0.164.0",
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "13 of 13 checks passed",
+   "fingerprint": "fe1e8512a3ff3ed5b18e769380a8b408c9de6bd1846f488e60286e2508076771",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "b4bfbfa256f4b17af8ee30cbcdd3c1cec53530aa2fdcc05b78a3d9bf8438ed10",
+   "ran_at": "2026-11-01T11:32:02+08:00",
+   "spec": {
+    "app_args": [
+     "--hands-free-smoke-test",
+     "{learner}",
+     "--barge-in"
+    ],
+    "command": "",
+    "evidence": "barge-in-smoke.json",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/"
+    ],
+    "live": true,
+    "name": "barge-in",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 600
+   }
+  },
+  {
+   "check": "single-instance",
+   "commit": "4cc8aca957a1f7427e07c0e72fc6538fa6225121",
+   "env": {
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "PASS, 21 checks",
+   "fingerprint": "52860c360764ba5fe0c456b349996eeeff35b055ea98133bbe8f38188615c84d",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "5fd75bb52036ca0115329189629bdb42e7a9f3a03536ec9a3baf3e515df2ad54",
+   "ran_at": "2026-11-01T11:32:42+08:00",
+   "spec": {
+    "app_args": [],
+    "command": "python3 scripts/tests/single_instance_e2e.py --allow-native",
+    "evidence": "build/evidence/single-instance-e2e/report.json",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/",
+     "VERSION",
+     "scripts/tests/single_instance_e2e.py",
+     "scripts/tests/fixtures/"
+    ],
+    "live": false,
+    "name": "single-instance",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 900
+   }
+  },
+  {
+   "check": "audition-CoachingAuditionTests",
+   "commit": "4cc8aca957a1f7427e07c0e72fc6538fa6225121",
+   "env": {
+    "codex": "codex-cli 0.164.0",
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "CoachingAuditionTests passed",
+   "fingerprint": "faba99733b2bdab43539f730101c7979562bff7f5239dc405a4dd42821ce55c4",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "6ff3f1d480e27f1b7f68b42476af445fb3948ac924c4210f1439e315514255b1",
+   "ran_at": "2026-11-01T11:35:48+08:00",
+   "spec": {
+    "app_args": [],
+    "command": "MOCHI_LIVE_AUDITION=1 RUST_LOG=codex_app_server=debug,codex_core=info swift test --filter CoachingAuditionTests",
+    "evidence": "CoachingAuditionTests",
+    "extra": [
+     "Localization/"
+    ],
+    "live": true,
+    "name": "audition-CoachingAuditionTests",
+    "roots": [
+     "MochiProvidersTests"
+    ],
+    "timeout": 1800
+   }
+  },
+  {
+   "check": "audition-StartAgainAuditionTests",
+   "commit": "4cc8aca957a1f7427e07c0e72fc6538fa6225121",
+   "env": {
+    "codex": "codex-cli 0.164.0",
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "StartAgainAuditionTests passed",
+   "fingerprint": "7cebd2a05421678ca5b0b37cd47f085db40a470e1b59b9303c5e8c4db32ca6a3",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "6ff3f1d480e27f1b7f68b42476af445fb3948ac924c4210f1439e315514255b1",
+   "ran_at": "2026-11-01T11:36:15+08:00",
+   "spec": {
+    "app_args": [],
+    "command": "MOCHI_LIVE_AUDITION=1 RUST_LOG=codex_app_server=debug,codex_core=info swift test --filter StartAgainAuditionTests",
+    "evidence": "StartAgainAuditionTests",
+    "extra": [
+     "Localization/"
+    ],
+    "live": true,
+    "name": "audition-StartAgainAuditionTests",
+    "roots": [
+     "MochiProvidersTests"
+    ],
+    "timeout": 1800
+   }
+  },
+  {
+   "check": "audition-TemplateAuditionTests",
+   "commit": "4cc8aca957a1f7427e07c0e72fc6538fa6225121",
+   "env": {
+    "codex": "codex-cli 0.164.0",
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "TemplateAuditionTests passed",
+   "fingerprint": "5fbb9e675155b63e684931f9e692e115ad5f4edae47a074b3bdffb3395422e51",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "6ff3f1d480e27f1b7f68b42476af445fb3948ac924c4210f1439e315514255b1",
+   "ran_at": "2026-11-01T12:16:02+08:00",
+   "spec": {
+    "app_args": [],
+    "command": "MOCHI_LIVE_AUDITION=1 RUST_LOG=codex_app_server=debug,codex_core=info swift test --filter TemplateAuditionTests",
+    "evidence": "TemplateAuditionTests",
+    "extra": [
+     "Localization/"
+    ],
+    "live": true,
+    "name": "audition-TemplateAuditionTests",
+    "roots": [
+     "MochiProvidersTests"
+    ],
+    "timeout": 1800
    }
   }
  ],
