@@ -746,41 +746,6 @@
    }
   },
   {
-   "check": "single-instance",
-   "commit": "693565de8fa793b384c388a12d9bcfbcae5b54f0",
-   "env": {
-    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
-    "macos": "27.0.1 26A434",
-    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
-   },
-   "evidence": "PASS, 21 checks",
-   "fingerprint": "1dfb5b2e4c9bdf46883df7a1a90fd3f3cf439fc2a2c700f806afaf80fdaa32e8",
-   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
-   "inputs": "c3a80e7d594a2c2ba7802d36065f74d8f05659c2dddff6e8ac015e7696769d67",
-   "ran_at": "2026-10-17T16:53:33+08:00",
-   "spec": {
-    "app_args": [],
-    "command": "python3 scripts/tests/single_instance_e2e.py --allow-native",
-    "evidence": "build/evidence/single-instance-e2e/report.json",
-    "extra": [
-     "scripts/build-app.sh",
-     "scripts/localization.py",
-     "scripts/release_support.py",
-     "Localization/",
-     "VERSION",
-     "scripts/tests/single_instance_e2e.py",
-     "scripts/tests/fixtures/"
-    ],
-    "live": false,
-    "name": "single-instance",
-    "roots": [
-     "MochiApp",
-     "MochiMCP"
-    ],
-    "timeout": 900
-   }
-  },
-  {
    "check": "smoke",
    "commit": "44877501825510dc00f7a552b2c0414f13c42027",
    "env": {
@@ -3217,6 +3182,109 @@
    "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
    "inputs": "94ed783bd1f99f0a8ca1f00e49eb8925e6fea59fd80b0c9e97096a4b475288d1",
    "ran_at": "2026-10-26T07:46:02+08:00",
+   "spec": {
+    "app_args": [],
+    "command": "python3 scripts/tests/single_instance_e2e.py --allow-native",
+    "evidence": "build/evidence/single-instance-e2e/report.json",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/",
+     "VERSION",
+     "scripts/tests/single_instance_e2e.py",
+     "scripts/tests/fixtures/"
+    ],
+    "live": false,
+    "name": "single-instance",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 900
+   }
+  },
+  {
+   "check": "smoke",
+   "commit": "36da78b42ecc4a622c7ef01d4ce59ab34c7d3971",
+   "env": {
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "Native smoke: PASS. 83 native window and sheet snapshots (83 AppKit view captures). Capture failures: 0. No network, microphone or speaker output.",
+   "fingerprint": "5d93607761080a389a9d95f68468db08f4a625c0a63a3b5e1ab214f8a68a93dc",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "500d5cb5fea30bb196695640761057b5346a132f6cbbc0bfebabcd1cec944010",
+   "ran_at": "2026-11-01T10:57:01+08:00",
+   "spec": {
+    "app_args": [
+     "--smoke-test"
+    ],
+    "command": "",
+    "evidence": "smoke.txt",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/"
+    ],
+    "live": false,
+    "name": "smoke",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 900
+   }
+  },
+  {
+   "check": "tray",
+   "commit": "36da78b42ecc4a622c7ef01d4ce59ab34c7d3971",
+   "env": {
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "26 of 26 PASS",
+   "fingerprint": "141e50c41c4ca87eb77c90ae8bcda12a371f4a2fc9f6b5b87366ba1516620669",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "500d5cb5fea30bb196695640761057b5346a132f6cbbc0bfebabcd1cec944010",
+   "ran_at": "2026-11-01T10:57:06+08:00",
+   "spec": {
+    "app_args": [
+     "--tray-smoke-test"
+    ],
+    "command": "",
+    "evidence": "tray-smoke.txt",
+    "extra": [
+     "scripts/build-app.sh",
+     "scripts/localization.py",
+     "scripts/release_support.py",
+     "Localization/"
+    ],
+    "live": false,
+    "name": "tray",
+    "roots": [
+     "MochiApp",
+     "MochiMCP"
+    ],
+    "timeout": 600
+   }
+  },
+  {
+   "check": "single-instance",
+   "commit": "36da78b42ecc4a622c7ef01d4ce59ab34c7d3971",
+   "env": {
+    "host": "C0B5F571-D7C0-4CCC-BB7E-CE7B37719C53",
+    "macos": "27.0.1 26A434",
+    "swift": "/usr/bin/swift swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+   },
+   "evidence": "PASS, 21 checks",
+   "fingerprint": "605a178592ecc2477678d23e6cc6b11eb823b95f08ee5db42dcdd7652d73a9ca",
+   "harness": "8c4501a44bb88ac2b46a9d4cc7afb814cd8ef2a3889a5a072462264b0e2760bd",
+   "inputs": "50c2c369960accb00c87bfbf9f4628664e75180d5422dce79690c197bb42c9f4",
+   "ran_at": "2026-11-01T10:57:44+08:00",
    "spec": {
     "app_args": [],
     "command": "python3 scripts/tests/single_instance_e2e.py --allow-native",
