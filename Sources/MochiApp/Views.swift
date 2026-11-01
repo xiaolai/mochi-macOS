@@ -442,10 +442,11 @@ struct WorkspaceView: View {
                     #endif
                     .textFieldStyle(.plain).font(.system(size: 15)).lineLimit(1...5)
                     .focused($composerFocused)
-                    .onSubmit { app.send() }.disabled(app.busy)
+                    .background(ComposerReturnKeys(active: composerFocused && !app.busy, send: app.send))
+                    .disabled(app.busy)
                 Button(action: app.send) { Image(systemName: "arrow.up").fontWeight(.semibold) }
                     .buttonStyle(.borderedProminent).buttonBorderShape(.circle)
-                    .help("Send Message").accessibilityLabel("Send Message")
+                    .help("Send Message (⇧↩ or ⌘↩)").accessibilityLabel("Send Message")
                     .disabled(app.busy || app.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.return, modifiers: .command)
             }

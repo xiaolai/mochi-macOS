@@ -592,6 +592,71 @@
                         captureFailures.append(
                             "Composer did not regain focus after a reply (first responder: \(responder))")
                     }
+                    // Return as the keyboard delivers it: through the event queue, past the key monitors.
+                    @MainActor func pressReturn(_ flags: NSEvent.ModifierFlags = []) {
+                        let event = NSEvent.keyEvent(
+                            with: .keyDown, location: .zero, modifierFlags: flags,
+                            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                            context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false,
+                            keyCode: 36)
+                        if let event { NSApp.postEvent(event, atStart: false) }
+                    }
+                    @MainActor func typeInComposer(_ text: String) {
+                        (window.firstResponder as? NSTextView)?.insertText(
+                            text, replacementRange: NSRange(location: NSNotFound, length: 0))
+                    }
+                    let realReply = model.speech.conversationReply
+                    model.speech.conversationReply = { _, _, callbacks in
+                        var reply = RealtimeAccumulator()
+                        reply.text = "Noted."
+                        try callbacks.response(reply)
+                    }
+                    let messagesBefore = model.conversation?.messages.map(\.id) ?? []
+                    typeInComposer("First line")
+                    pressReturn()
+                    if await !waitFor(2, { model.draft == "First line\n" }) {
+                        captureFailures.append("Return did not start a new line: \(model.draft.debugDescription)")
+                    }
+                    typeInComposer("Second line")
+                    let lines = "First line\nSecond line"
+                    if await !waitFor(2, { model.draft == lines }) {
+                        captureFailures.append("Composer did not keep typing after Return")
+                    }
+                    await capture("composer-two-lines.png")
+                    // Return while an input method is composing is the input method's, not a new line.
+                    (window.firstResponder as? NSTextView)?.setMarkedText(
+                        "ni", selectedRange: NSRange(location: 2, length: 0),
+                        replacementRange: NSRange(location: NSNotFound, length: 0))
+                    pressReturn()
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    if model.draft.filter({ $0 == "\n" }).count != 1 {
+                        captureFailures.append("Return during composition started a new line")
+                    }
+                    (window.firstResponder as? NSTextView)?.unmarkText()
+                    window.makeFirstResponder(field)
+                    model.draft = lines
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    @MainActor func sent(_ text: String) -> Bool {
+                        !model.busy && model.draft.isEmpty
+                            && model.conversation?.messages.contains { $0.text == text } == true
+                    }
+                    pressReturn(.shift)
+                    if await !waitFor(3, { sent(lines) }) {
+                        captureFailures.append("Shift-Return did not send both lines: \(model.draft.debugDescription)")
+                    }
+                    _ = await waitFor(2) { composerHasFocus(window, field) }
+                    // The Send button enables, and so takes its shortcut, only once it has seen the draft.
+                    model.draft = "Command Return"
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    pressReturn(.command)
+                    if await !waitFor(3, { sent("Command Return") }) {
+                        captureFailures.append("Command-Return did not send: \(model.draft.debugDescription)")
+                    }
+                    for message in model.conversation?.messages ?? [] where !messagesBefore.contains(message.id) {
+                        model.deleteMessage(message.id)
+                    }
+                    model.speech.conversationReply = realReply
+                    _ = await waitFor(2) { composerHasFocus(window, field) }
                 } else {
                     captureFailures.append("Could not locate the composer text field for focus verification")
                 }

@@ -16984,6 +16984,34 @@
         }
       }
     },
+    "Send Message (⇧↩ or ⌘↩)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッセージを送信（⇧↩ または ⌘↩）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지 보내기(⇧↩ 또는 ⌘↩)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送消息（⇧↩ 或 ⌘↩）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "傳送訊息（⇧↩ 或 ⌘↩）"
+          }
+        }
+      }
+    },
     "Send Now" : {
       "localizations" : {
         "ja" : {

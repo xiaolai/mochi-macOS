@@ -93,6 +93,27 @@ final class ShortcutTests: XCTestCase {
         XCTAssertEqual(
             center.conflict(Shortcut(keyCode: UInt16(kVK_Return), modifiers: [.command]), for: .sendNow),
             "Mochi already uses this shortcut for Send Message.")
+        XCTAssertEqual(
+            center.conflict(Shortcut(keyCode: UInt16(kVK_Return), modifiers: [.shift]), for: .sendNow),
+            "Use Command, Option or Control in the shortcut.", "So no shortcut can take Shift-Return from the composer")
+    }
+
+    func testReturnInTheComposerStartsALineAndModifiedReturnSends() {
+        func action(_ code: Int, _ modifiers: NSEvent.ModifierFlags = [], composing: Bool = false)
+            -> ComposerReturnKey?
+        {
+            ComposerReturnKey.action(keyCode: UInt16(code), modifiers: modifiers, composing: composing)
+        }
+        XCTAssertEqual(action(kVK_Return), .newline)
+        XCTAssertEqual(action(kVK_ANSI_KeypadEnter, .numericPad), .newline, "The number pad's Enter")
+        XCTAssertEqual(action(kVK_Return, .capsLock), .newline, "Caps Lock is not a modifier here")
+        XCTAssertEqual(action(kVK_Return, .shift), .send)
+        XCTAssertNil(action(kVK_Return, .command), "⌘Return reaches the Send button's shortcut")
+        XCTAssertNil(action(kVK_Return, .option), "Option-Return stays the text field's own")
+        XCTAssertNil(action(kVK_Return, [.shift, .command]))
+        XCTAssertNil(action(kVK_ANSI_A), "Another key")
+        XCTAssertNil(action(kVK_Return, composing: true), "Return confirms an input method's composition")
+        XCTAssertNil(action(kVK_Return, .shift, composing: true))
     }
 
     @MainActor func testASavedNumberPadSendNowShortcutIsReportedAndNotRegistered() {
