@@ -9,6 +9,7 @@ struct CharactersView: View {
     @State private var selection: UUID?
     @FocusState private var listFocused: Bool
     @FocusState private var personalityFocused: Bool
+    @FocusState private var descriptionFocused: Bool
     @State private var error: String?
     @State private var pendingDelete: ConversationCharacter?
     private var mode: CharacterPresentation { app.customization.characterPresentation ?? .manager }
@@ -143,7 +144,9 @@ struct CharactersView: View {
                 TextField("Character name", text: draftBinding.name).textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("character-editor-name")
                 TextField("Description", text: draftBinding.description, axis: .vertical).textFieldStyle(
-                    .roundedBorder)
+                    .roundedBorder
+                )
+                .focused($descriptionFocused).multilineReturnKeys(active: descriptionFocused)
                 Text("Personality").font(.headline)
                 TextEditor(text: draftBinding.personality).font(.body).padding(6).frame(height: 160)
                     .focused($personalityFocused)

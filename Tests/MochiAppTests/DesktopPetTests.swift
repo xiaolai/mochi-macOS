@@ -300,6 +300,14 @@ final class DesktopPetTests: XCTestCase {
         XCTAssertEqual(field.maxX, screen.maxX)
         XCTAssertEqual(field.width, PetBar.fieldWidth)
         XCTAssertEqual(PetBar.frame(below: pet, width: 100, screen: nil).midX, pet.midX)
+        // Taller with more lines: it grows downward from her feet, and rises rather than leaving the screen.
+        let tall = PetBar.frame(below: pet, width: PetBar.fieldWidth, height: 100, screen: screen)
+        XCTAssertEqual(tall.maxY, pet.minY - PetBar.gap)
+        XCTAssertEqual(tall.height, 100)
+        let low = CGRect(origin: CGPoint(x: 600, y: screen.minY + PetBar.reserve), size: DesktopPet.size)
+        let risen = PetBar.frame(below: low, width: PetBar.fieldWidth, height: 100, screen: screen)
+        XCTAssertEqual(risen.minY, screen.minY)
+        XCTAssertEqual(risen.height, 100)
     }
 
     @MainActor func testPlacementLeavesRoomForTheBar() {

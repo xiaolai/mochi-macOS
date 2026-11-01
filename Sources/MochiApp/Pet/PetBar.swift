@@ -6,12 +6,16 @@ import SwiftUI
 @MainActor @Observable final class PetBarState {
     var expanded = false
     var text = ""
+    /// How tall the text is, so the bar grows with the lines typed.
+    var textHeight: CGFloat = 0
 }
 
 /// The message bar under the desktop Mochi: a pill with Type and Talk that opens into a field. It hangs from her
 /// as a child window, so it moves with her, and it takes the keyboard only while its field is open.
 @MainActor final class PetBar: NSObject {
     static let height: CGFloat = 32
+    /// The space above and below the text in the open field.
+    static let textPadding: CGFloat = 7
     static let pillWidth: CGFloat = 72
     static let fieldWidth: CGFloat = 280
     /// The space between her feet and the bar.
@@ -44,7 +48,8 @@ import SwiftUI
         let content = BarHostingView(
             rootView: PetBarView(
                 app: model, bar: state, open: { [weak self] in self?.open() },
-                close: { [weak self] in self?.close() }, send: { [weak self] in self?.send() }))
+                close: { [weak self] in self?.close() }, send: { [weak self] in self?.send() },
+                textResized: { [weak self] in self?.layout() }))
         panel.contentView = Self.glass(around: content)
         // A selector observer is removed with the bar; a block observer would outlive it.
         NotificationCenter.default.addObserver(
@@ -112,15 +117,21 @@ import SwiftUI
         let screen = NSScreen.screens.map(\.visibleFrame).first {
             $0.contains(CGPoint(x: pet.frame.midX, y: pet.frame.midY))
         }
-        panel.setFrame(Self.frame(below: pet.frame, width: width, screen: screen), display: true)
+        let height = state.expanded ? max(Self.height, state.textHeight + 2 * Self.textPadding) : Self.height
+        panel.setFrame(Self.frame(below: pet.frame, width: width, height: height, screen: screen), display: true)
         panel.invalidateShadow()
     }
 
-    /// The bar's frame under a window at `pet`: centred, then moved sideways as needed to stay on `screen`.
-    static func frame(below pet: CGRect, width: CGFloat, screen: CGRect?) -> CGRect {
+    /// The bar's frame under a window at `pet`: centred, then moved as needed to stay on `screen`. Room is reserved
+    /// under her only for one line, so a taller bar near the bottom of the screen rises over her feet.
+    static func frame(below pet: CGRect, width: CGFloat, height: CGFloat = PetBar.height, screen: CGRect?) -> CGRect {
         var x = pet.midX - width / 2
-        if let screen { x = min(max(x, screen.minX), screen.maxX - width) }
-        return CGRect(x: x, y: pet.minY - gap - height, width: width, height: height)
+        var y = pet.minY - gap - height
+        if let screen {
+            x = min(max(x, screen.minX), screen.maxX - width)
+            y = max(y, screen.minY)
+        }
+        return CGRect(x: x, y: y, width: width, height: height)
     }
 
     // MARK: Actions
@@ -198,13 +209,14 @@ struct PetBarView: View {
     let open: () -> Void
     let close: () -> Void
     let send: () -> Void
+    let textResized: () -> Void
 
     var body: some View {
         Group {
             if bar.expanded { field } else { pill }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: PetBar.height / 2).strokeBorder(Color.primary.opacity(0.12)))
     }
 
     private var pill: some View {
@@ -245,9 +257,17 @@ struct PetBarView: View {
             .disabled(!MainMenuState(app: app).newConversation)
             .help(Text("New Conversation"))
             .accessibilityLabel(Text("New Conversation"))
-            TextField("Message \(app.displayCharacterName)", text: $bar.text)
-                .textFieldStyle(.plain).font(.system(size: 13))
-                .onSubmit(send)
+            TextField("Message \(app.displayCharacterName)", text: $bar.text, axis: .vertical)
+                .textFieldStyle(.plain).font(.system(size: 13)).lineLimit(1...5)
+                // Measured at its own height: the bar it would otherwise fill is what this measure resizes.
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) {
+                    $0.size.height
+                } action: { height in
+                    bar.textHeight = height
+                    textResized()
+                }
+                .multilineReturnKeys(active: bar.expanded, submit: send)
                 .accessibilityIdentifier("desktop-pet-message")
             Button(action: send) {
                 Image(systemName: "arrow.up").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
@@ -256,7 +276,7 @@ struct PetBarView: View {
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
-            .help(Text("Send Message"))
+            .help(Text("Send Message (⇧↩ or ⌘↩)"))
             .accessibilityLabel(Text("Send Message"))
         }
         .padding(.leading, 6).padding(.trailing, 5)

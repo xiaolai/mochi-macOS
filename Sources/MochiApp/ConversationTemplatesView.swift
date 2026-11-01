@@ -7,6 +7,7 @@ struct ConversationTemplatesView: View {
     @State private var query = ""
     @State private var selection: UUID?
     @FocusState private var listFocused: Bool
+    @FocusState private var descriptionFocused: Bool
     @State private var error: String?
     @State private var pendingDelete: ConversationTemplate?
     private var mode: TemplatePresentation { app.customization.templatePresentation ?? .picker }
@@ -171,7 +172,9 @@ struct ConversationTemplatesView: View {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("Template title", text: draftBinding.title).textFieldStyle(.roundedBorder)
                 TextField("Description", text: draftBinding.description, axis: .vertical).textFieldStyle(
-                    .roundedBorder)
+                    .roundedBorder
+                )
+                .focused($descriptionFocused).multilineReturnKeys(active: descriptionFocused)
                 ConversationSettingsFields(app: app, settings: draftBinding)
             }
         }

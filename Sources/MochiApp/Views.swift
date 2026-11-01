@@ -442,7 +442,7 @@ struct WorkspaceView: View {
                     #endif
                     .textFieldStyle(.plain).font(.system(size: 15)).lineLimit(1...5)
                     .focused($composerFocused)
-                    .background(ComposerReturnKeys(active: composerFocused && !app.busy, send: app.send))
+                    .multilineReturnKeys(active: composerFocused && !app.busy, submit: app.send)
                     .disabled(app.busy)
                 Button(action: app.send) { Image(systemName: "arrow.up").fontWeight(.semibold) }
                     .buttonStyle(.borderedProminent).buttonBorderShape(.circle)

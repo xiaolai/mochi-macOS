@@ -9,6 +9,7 @@ struct PracticePane: View {
     @State private var pitchOpen = false
     @State private var smoothPitch = true
     @FocusState private var thoughtFocused: Bool
+    @FocusState private var englishFocused: Bool
     @State private var refocusThought = false
     var body: some View {
         VStack(spacing: 0) {
@@ -139,6 +140,7 @@ struct PracticePane: View {
     private func englishEditor(_ placeholder: LocalizedStringKey, lines: ClosedRange<Int>) -> some View {
         TextField(placeholder, text: Binding(get: { app.help.english }, set: app.editEnglish), axis: .vertical)
             .font(.system(size: 18, weight: .medium)).textFieldStyle(.roundedBorder).lineLimit(lines).disabled(app.busy)
+            .focused($englishFocused).multilineReturnKeys(active: englishFocused && !app.busy)
     }
     /// Reference kinds are stored in English; the ones Mochi writes are translated for display.
     static func referenceKindLabel(_ kind: String?) -> String {
@@ -185,6 +187,7 @@ struct PracticePane: View {
             }
             TextField("Your thought", text: Bindable(app.help).meaning, axis: .vertical)
                 .textFieldStyle(.roundedBorder).lineLimit(3...6).disabled(app.busy).focused($thoughtFocused)
+                .multilineReturnKeys(active: thoughtFocused && !app.busy, submit: app.translate)
             HStack {
                 if !app.help.isSavedPractice {
                     Button(action: app.recordMeaning) {

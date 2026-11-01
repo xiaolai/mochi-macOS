@@ -315,6 +315,26 @@
                 finishRun(model, passed: passed)
             }
         }
+        /// The editable text field with this placeholder.
+        func editableField(placeholder: String, in view: NSView) -> NSTextField? {
+            if let field = view as? NSTextField, field.isEditable,
+                (field.placeholderString ?? field.placeholderAttributedString?.string) == placeholder
+            {
+                return field
+            }
+            return view.subviews.lazy.compactMap { self.editableField(placeholder: placeholder, in: $0) }.first
+        }
+
+        /// Return as the keyboard delivers it: through the event queue, past the key monitors.
+        func postReturn(_ flags: NSEvent.ModifierFlags = [], to window: NSWindow) {
+            let event = NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: flags,
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false,
+                keyCode: 36)
+            if let event { NSApp.postEvent(event, atStart: false) }
+        }
+
         func smoke(_ model: AppModel) {
             guard !ran else { return }
             ran = true
@@ -592,14 +612,8 @@
                         captureFailures.append(
                             "Composer did not regain focus after a reply (first responder: \(responder))")
                     }
-                    // Return as the keyboard delivers it: through the event queue, past the key monitors.
                     @MainActor func pressReturn(_ flags: NSEvent.ModifierFlags = []) {
-                        let event = NSEvent.keyEvent(
-                            with: .keyDown, location: .zero, modifierFlags: flags,
-                            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-                            context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false,
-                            keyCode: 36)
-                        if let event { NSApp.postEvent(event, atStart: false) }
+                        postReturn(flags, to: window)
                     }
                     @MainActor func typeInComposer(_ text: String) {
                         (window.firstResponder as? NSTextView)?.insertText(
@@ -1049,10 +1063,43 @@
                 model.startHelp()
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("help.png")
+                // Your thought: Return adds a line rather than ending the edit.
+                if let window = mainWindow, let content = window.contentView,
+                    let thought = editableField(placeholder: String(localized: "Your thought"), in: content)
+                {
+                    window.makeFirstResponder(thought)
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    model.help.meaning = "First thought"
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    postReturn(to: window)
+                    if await !waitFor(2, { model.help.meaning.contains("\n") }) {
+                        captureFailures.append(
+                            "Return did not add a line to Your thought: \(model.help.meaning.debugDescription)")
+                    }
+                } else {
+                    captureFailures.append("Could not locate the Your thought field")
+                }
                 model.help.meaning = "I want to ask for a little more time to think."
                 model.editEnglish("I would like a little more time to think.")
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("help-english.png")
+                let expression = String(localized: "Expression in \(model.languageName)")
+                if let window = mainWindow, let content = window.contentView,
+                    let english = editableField(placeholder: expression, in: content)
+                {
+                    window.makeFirstResponder(english)
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    postReturn(to: window)
+                    if await !waitFor(2, { model.help.english.contains("\n") }) {
+                        captureFailures.append(
+                            "Return did not add a line to the expression: \(model.help.english.debugDescription)")
+                    }
+                    model.editEnglish("I would like a little more time to think.")
+                    window.makeFirstResponder(nil)
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                } else {
+                    captureFailures.append("Could not locate the expression field")
+                }
                 await inDarkAppearance {
                     await capture("help-english-dark.png")
                 }
@@ -1341,6 +1388,34 @@
                         }
                         try? await Task.sleep(nanoseconds: 300_000_000)
                         await capture("desktop-bar-open.png", window: bar.panel)
+                        // Return starts a new line, the bar grows to show it, and Command-Return sends both lines.
+                        let oneLine = bar.panel.frame.height
+                        postReturn(to: bar.panel)
+                        (bar.panel.firstResponder as? NSTextView)?.insertText(
+                            "And yours?", replacementRange: NSRange(location: NSNotFound, length: 0))
+                        let twoLines = typed + "\nAnd yours?"
+                        if await !waitFor(2, { bar.state.text == twoLines && bar.panel.frame.height > oneLine }) {
+                            captureFailures.append(
+                                "Message bar Return did not add a visible line (text: \(bar.state.text.debugDescription), height \(oneLine) -> \(bar.panel.frame.height))"
+                            )
+                        }
+                        await capture("desktop-bar-two-lines.png", window: bar.panel)
+                        let barReply = model.speech.conversationReply
+                        model.speech.conversationReply = { _, _, callbacks in
+                            var reply = RealtimeAccumulator()
+                            reply.text = "Noted."
+                            try callbacks.response(reply)
+                        }
+                        let beforeBar = model.conversation?.messages.map(\.id) ?? []
+                        postReturn(.command, to: bar.panel)
+                        let barSent = await waitFor(3) {
+                            !model.busy && model.conversation?.messages.contains { $0.text == twoLines } == true
+                        }
+                        if !barSent { captureFailures.append("Message bar Command-Return did not send both lines") }
+                        for message in model.conversation?.messages ?? [] where !beforeBar.contains(message.id) {
+                            model.deleteMessage(message.id)
+                        }
+                        model.speech.conversationReply = barReply
                         bar.close()
                         bar.state.text = ""
                         if bar.panel.isKeyWindow || !bar.panel.isVisible || bar.panel.parent !== petPanel {
