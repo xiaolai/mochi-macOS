@@ -48,6 +48,7 @@ def repository_reads(text, top_level):
             yield path
 
 
+UUID4 = "C0000000-0000-4000-8000-000000000000"
 HOST = {"host": "Mini", "macos": "27.0.1 26A434", "swift": "Swift 6.4", "codex": "codex-cli 0.163.0"}
 APP = e2e.Check("ui", ("App",), ("scripts/build-app.sh",), ("--smoke-test",), evidence="smoke.txt")
 LIVE = e2e.Check("live", ("ProvidersTests",), command="swift test", evidence="Suite", live=True)
@@ -169,6 +170,14 @@ class LedgerTests(unittest.TestCase):
 
     def test_codex_counts_only_for_live_checks(self):
         decisions = plan(host=dict(HOST, codex="codex-cli 0.170.0"), ledger=passed_all())
+        self.assertFalse(decisions["ui"].needed)
+        self.assertTrue(decisions["live"].needed)
+
+    def test_a_hung_codex_stops_only_the_live_checks(self):
+        with mock.patch.object(e2e, "remote", return_value=(0, f"host={UUID4}\ncodex=\n")) as remote:
+            env = e2e.host_environment("test-mac")
+        self.assertRegex(remote.call_args.args[1], r"alarm \d+; exec @ARGV' codex --version")
+        decisions = plan(host=dict(HOST, codex=env["codex"]), ledger=passed_all())
         self.assertFalse(decisions["ui"].needed)
         self.assertTrue(decisions["live"].needed)
 

@@ -314,11 +314,13 @@ UUID = r"[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"
 
 def host_environment(host):
     # Swift is measured as the checks run it: `swift` on the PRELUDE's PATH, which puts Homebrew first.
+    # Codex is bounded: a binary macOS holds at launch must not stop checks that never use it. Blank, it makes the live
+    # checks run, and they fail on their own.
     code, out = remote(host, PRELUDE + MACHINE_ID + """
 echo "name=$(scutil --get LocalHostName)"
 echo "macos=$(sw_vers -productVersion) $(sw_vers -buildVersion)"
 echo "swift=$(command -v swift) $(swift --version 2>&1 | head -1)"
-echo "codex=$(codex --version 2>/dev/null)"
+echo "codex=$(perl -e 'alarm 20; exec @ARGV' codex --version 2>/dev/null </dev/null)"
 """)
     if code != 0:
         raise SystemExit(f"Cannot read the test Mac {host}: {out.strip()}")
