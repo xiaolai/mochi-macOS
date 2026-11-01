@@ -1064,7 +1064,7 @@
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("help.png")
                 // Your thought: Return adds a line rather than ending the edit.
-                if let window = mainWindow, let content = window.contentView,
+                if let window = mainWindow?.attachedSheet, let content = window.contentView,
                     let thought = editableField(placeholder: String(localized: "Your thought"), in: content)
                 {
                     window.makeFirstResponder(thought)
@@ -1084,7 +1084,7 @@
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("help-english.png")
                 let expression = String(localized: "Expression in \(model.languageName)")
-                if let window = mainWindow, let content = window.contentView,
+                if let window = mainWindow?.attachedSheet, let content = window.contentView,
                     let english = editableField(placeholder: expression, in: content)
                 {
                     window.makeFirstResponder(english)
@@ -1391,6 +1391,8 @@
                         // Return starts a new line, the bar grows to show it, and Command-Return sends both lines.
                         let oneLine = bar.panel.frame.height
                         postReturn(to: bar.panel)
+                        // The key waits in the event queue; typing before it lands would go ahead of the new line.
+                        _ = await waitFor(2) { bar.state.text == typed + "\n" }
                         (bar.panel.firstResponder as? NSTextView)?.insertText(
                             "And yours?", replacementRange: NSRange(location: NSNotFound, length: 0))
                         let twoLines = typed + "\nAnd yours?"
